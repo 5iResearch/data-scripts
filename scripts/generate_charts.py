@@ -10,7 +10,7 @@ Charts produced:
   - sp500-pmi.html        S&P 500 coloured by ISM PMI
   - sp500-margin.html     S&P 500 coloured by Margin Debt YoY
   - sp500-breadth.html    S&P 500 coloured by Market Breadth
-  - sp500-market-model.html  S&P 500 coloured by composite model score
+  - sp500-market-model.html  S&P 500 coloured by composite model score + score panel
 
 Data sources:
   - Yahoo Finance (S&P 500, VIX) — pulled automatically via yfinance
@@ -25,6 +25,7 @@ import os
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import plotly.subplots as sp
 from plotly.subplots import make_subplots
 import yfinance as yf
 import ta
@@ -42,57 +43,230 @@ MARGIN_CSV = os.path.join(DATA_DIR, "margin_2.csv")
 # ── Config ─────────────────────────────────────────────────────────────────────
 START_DATE = "1997-01-01"
 END_DATE   = datetime.today().strftime("%Y-%m-%d")
-SOURCE     = "Source: 5i Research, Yahoo Finance, Koyfin, Finra.org"
+SOURCE     = "Source: 5i Research · Yahoo Finance · Koyfin · FINRA"
 
-SCORE_COLORS = {
-    1: "#d62728",   # red
-    2: "#ff7f0e",   # orange
-    3: "#aec7e8",   # light blue
-    4: "#1f77b4",   # dark blue
-    5: "#2ca02c",   # green
-    0: "#888888",   # grey fallback
+# ── Corporate Color Palette ────────────────────────────────────────────────────
+CORP = {
+    'orange': '#C67A29',
+    'blue':   '#1F79BE',
+    'dgrey':  '#363636',
+    'green':  '#44A660',
+    'red':    '#A22A2A',
 }
 
-def _source_annotation():
-    return dict(
-        text=SOURCE, showarrow=False,
-        xref="paper", yref="paper",
-        x=1, y=-0.10, xanchor="right", yanchor="bottom",
-        font=dict(size=11, color="gray"),
-    )
+# ── Signal Colors (Market Model) ───────────────────────────────────────────────
+SIGNAL_COLORS = {
+    0: '#A8A8A8',       # N/A
+    1: CORP['red'],     # Trim
+    2: '#8E6AC8',       # Tactical Buy/Hold — purple
+    3: '#D4A820',       # Buy — gold
+    4: CORP['blue'],    # Strong Buy
+    5: CORP['green'],   # Very Strong Buy
+}
+SIGNAL_LABELS = {
+    0: 'N/A',
+    1: 'Trim',
+    2: 'Tactical Buy/Hold',
+    3: 'Buy',
+    4: 'Strong Buy',
+    5: 'Very Strong Buy',
+}
+
+# ── Axis / Layout Helpers ──────────────────────────────────────────────────────
+_AXIS_STYLE = dict(
+    showgrid=True, gridcolor='#EBEBEB', gridwidth=1,
+    zeroline=False, tickfont=dict(size=12), linecolor='#DDDDDD',
+    showspikes=True, spikecolor='#BBBBBB', spikethickness=1, spikedash='dot',
+)
 
 def _save(fig, name):
     path = os.path.join(OUTPUT_DIR, name)
-    fig.write_html(path, include_plotlyjs="cdn")
+    fig.write_html(path, include_plotlyjs="cdn", config={'responsive': True})
     print(f"  ✓  {name}")
 
-def _dual_scatter(x, y_top, y_bot, colors, title, y_top_label, y_bot_label,
-                  colorbar_title="", y_bot_range=None):
-    """Two-panel scatter: S&P 500 price top, indicator bottom, coloured by score."""
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
-                        row_heights=[0.65, 0.35], vertical_spacing=0.06)
-    fig.add_trace(go.Scatter(
-        x=x, y=y_top, mode="markers",
-        marker=dict(size=4, color=colors, colorscale="RdYlGn",
-                    showscale=True, colorbar=dict(title=colorbar_title, len=0.5, y=0.75)),
-        name="S&P 500"), row=1, col=1)
-    fig.add_trace(go.Scatter(
-        x=x, y=y_bot, mode="markers",
-        marker=dict(size=3, color=colors, colorscale="RdYlGn"),
-        name=y_bot_label), row=2, col=1)
-    layout = dict(
-        title=dict(text=title, font=dict(size=15)),
-        yaxis=dict(title=y_top_label),
-        yaxis2=dict(title=y_bot_label),
-        xaxis2=dict(title="Date"),
-        showlegend=False, height=600,
-        margin=dict(b=80, t=70),
-        template="seaborn",
+
+def _get_yrange(series, start_date, end_date=None):
+    """Compute padded y-axis range for a series within a date window."""
+    mask = series.index >= start_date
+    if end_date:
+        mask &= series.index <= end_date
+    vals = series[mask].dropna()
+    if len(vals) == 0:
+        return [None, None]
+    pad = (vals.max() - vals.min()) * 0.06
+    return [float(vals.min() - pad), float(vals.max() + pad)]
+
+
+def _time_buttons(today, all_start, top_series, bot_series,
+                  top_key="yaxis.range", bot_key="yaxis2.range"):
+    """Build YTD / 1Y / 3Y / 5Y / All time-range buttons with axis rescaling."""
+    ytd_start = pd.Timestamp(f"{today.year}-01-01")
+    y1_start  = today - pd.DateOffset(years=1)
+    y3_start  = today - pd.DateOffset(years=3)
+    y5_start  = today - pd.DateOffset(years=5)
+
+    def btn(label, x_args, yr_top, yr_bot):
+        args = dict(x_args)
+        args[top_key] = yr_top
+        args[bot_key] = yr_bot
+        return dict(args=[args], label=label, method="relayout")
+
+    buttons = [
+        btn("YTD", {"xaxis.range": [str(ytd_start), str(today)]},
+            _get_yrange(top_series, ytd_start),
+            _get_yrange(bot_series, ytd_start)),
+        btn("1Y",  {"xaxis.range": [str(y1_start), str(today)]},
+            _get_yrange(top_series, y1_start),
+            _get_yrange(bot_series, y1_start)),
+        btn("3Y",  {"xaxis.range": [str(y3_start), str(today)]},
+            _get_yrange(top_series, y3_start),
+            _get_yrange(bot_series, y3_start)),
+        btn("5Y",  {"xaxis.range": [str(y5_start), str(today)]},
+            _get_yrange(top_series, y5_start),
+            _get_yrange(bot_series, y5_start)),
+        dict(args=[{"xaxis.autorange": True,
+                    top_key: _get_yrange(top_series, all_start),
+                    bot_key: _get_yrange(bot_series, all_start)}],
+             label="All", method="relayout"),
+    ]
+    return dict(
+        buttons=buttons,
+        active=4, direction='left', pad=dict(r=10, t=8),
+        showactive=True, type='buttons',
+        x=0.5, xanchor='center', y=-0.13, yanchor='top',
+        bgcolor='white', bordercolor=CORP['blue'], borderwidth=1,
+        font=dict(color=CORP['dgrey'], size=12, family='Arial'),
     )
+
+
+def _bottom_annotations():
+    return [
+        dict(
+            text="<i>Tip: Click and drag to zoom · Double-click to reset</i>",
+            showarrow=False, xref="paper", yref="paper",
+            x=0, y=-0.27, xanchor="left", yanchor="bottom",
+            font=dict(size=11, color='#999999', family='Arial'),
+        ),
+        dict(
+            text=SOURCE,
+            showarrow=False, xref="paper", yref="paper",
+            x=1, y=-0.27, xanchor="right", yanchor="bottom",
+            font=dict(size=11, color='#999999', family='Arial'),
+        ),
+    ]
+
+
+def _dual_scatter(x_top, y_top, x_bot, y_bot,
+                  colorscale, color_top, color_bot,
+                  title, y_top_label, y_bot_label,
+                  hover_top_fmt=",.0f", hover_bot_fmt=".2f",
+                  y_bot_range=None, ref_line=None):
+    """
+    Two-panel scatter chart in the HTML-file style, with generate_charts sizes.
+
+    Panel heights: [0.65, 0.35] — taller top panel (from generate_charts.py)
+    Dot sizes: top=4, bottom=3                  (from generate_charts.py)
+    Styling: white bg, corporate colors, grey path, time buttons, hover templates
+    """
+    today     = x_top.max()
+    all_start = x_top.min()
+
+    fig = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=True,
+        row_heights=[0.65, 0.35],   # keep taller top panel from generate_charts.py
+        vertical_spacing=0.06,
+    )
+
+    # ── Top panel ─────────────────────────────────────────────────────────────
+    # Grey path line (sits behind dots)
+    fig.add_trace(go.Scatter(
+        x=x_top, y=y_top, mode='lines',
+        line=dict(color='#CCCCCC', width=1),
+        showlegend=False, hoverinfo='skip',
+    ), row=1, col=1)
+    # Coloured dots — size=4 (from generate_charts.py)
+    fig.add_trace(go.Scatter(
+        x=x_top, y=y_top, mode='markers', name='S&P 500',
+        marker=dict(size=4, color=color_top, colorscale=colorscale,
+                    opacity=0.88, showscale=False, line=dict(width=0)),
+        showlegend=False,
+        hovertemplate=f'<b>%{{x|%b %Y}}</b><br>S&P 500: %{{y:{hover_top_fmt}}}<extra></extra>',
+    ), row=1, col=1)
+
+    # ── Bottom panel ──────────────────────────────────────────────────────────
+    # Grey path line
+    fig.add_trace(go.Scatter(
+        x=x_bot, y=y_bot, mode='lines',
+        line=dict(color='#CCCCCC', width=1),
+        showlegend=False, hoverinfo='skip',
+    ), row=2, col=1)
+    # Coloured dots — size=3 (from generate_charts.py)
+    fig.add_trace(go.Scatter(
+        x=x_bot, y=y_bot, mode='markers', name=y_bot_label,
+        marker=dict(size=3, color=color_bot, colorscale=colorscale,
+                    opacity=0.88, showscale=False, line=dict(width=0)),
+        showlegend=False,
+        hovertemplate=f'<b>%{{x|%b %Y}}</b><br>{y_bot_label}: %{{y:{hover_bot_fmt}}}<extra></extra>',
+    ), row=2, col=1)
+
+    # Optional reference line on bottom panel
+    if ref_line is not None:
+        fig.add_hline(y=ref_line, line_dash='dot', line_color='#AAAAAA',
+                      line_width=1, opacity=0.7, row=2, col=1)
+
+    # ── Layout ────────────────────────────────────────────────────────────────
+    top_series = pd.Series(y_top.values if hasattr(y_top, 'values') else y_top,
+                           index=x_top)
+    bot_series = pd.Series(y_bot.values if hasattr(y_bot, 'values') else y_bot,
+                           index=x_bot if x_bot is not None else x_top)
+
+    fig.update_layout(
+        template='plotly_white',
+        autosize=True,
+        height=600,                 # keep taller height from generate_charts.py
+        margin=dict(l=65, r=45, t=90, b=155),
+        showlegend=False,
+
+        title=dict(
+            text=f'<b>{title}</b>',
+            x=0.5, xanchor='center',
+            font=dict(size=20, color=CORP['dgrey'], family='Arial'),
+            pad=dict(b=8),
+        ),
+
+        font=dict(family='Arial', size=13, color=CORP['dgrey']),
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        hovermode='x unified',
+
+        updatemenus=[_time_buttons(today, all_start, top_series, bot_series)],
+    )
+
+    # Axis styles
+    fig.update_xaxes(**_AXIS_STYLE)
+    fig.update_yaxes(title_text=y_top_label, tickformat=hover_top_fmt,
+                     **_AXIS_STYLE, row=1, col=1)
+    yax2 = dict(title_text=y_bot_label, **_AXIS_STYLE)
     if y_bot_range:
-        layout["yaxis2"]["range"] = y_bot_range
-    fig.update_layout(**layout)
-    fig.add_annotation(_source_annotation())
+        yax2['range'] = y_bot_range
+    fig.update_yaxes(**yax2, row=2, col=1)
+
+    # In-panel labels (Bloomberg style)
+    fig.add_annotation(text="<b>S&P 500</b>",
+                       xref="x domain", yref="y domain",
+                       x=0.01, y=0.97, xanchor="left", yanchor="top",
+                       showarrow=False,
+                       font=dict(size=13, color=CORP['dgrey'], family='Arial'))
+    fig.add_annotation(text=f"<b>{y_bot_label}</b>",
+                       xref="x2 domain", yref="y2 domain",
+                       x=0.01, y=0.97, xanchor="left", yanchor="top",
+                       showarrow=False,
+                       font=dict(size=13, color=CORP['dgrey'], family='Arial'))
+
+    for ann in _bottom_annotations():
+        fig.add_annotation(**ann)
+
     return fig
 
 
@@ -163,7 +337,6 @@ merged = pd.merge(sp500.reset_index(), pmi[["NAPMPMI Close"]], how="left",
                   left_on="Month_End", right_index=True)
 merged["Date"] = merged["Date"] if "Date" in merged.columns else merged.index
 merged = merged.set_index("Price") if "Price" in merged.columns else merged
-# keep the original DatetimeIndex
 merged.index = sp500.index[:len(merged)]
 merged["pmi"] = merged["NAPMPMI Close"].ffill()
 merged["rolling_PMI"] = merged["pmi"].rolling(window=126).mean()
@@ -278,82 +451,110 @@ merged["Model_score"]  = merged["Rolling_12MA"].round().clip(1, 5).fillna(3).ast
 # ══════════════════════════════════════════════════════════════════════════════
 print("\nGenerating charts…")
 
-# Helper: map integer score → colour string
-def score_to_color(series):
-    return series.fillna(0).astype(int).map(SCORE_COLORS).fillna("#888888")
-
-
 # ── Chart 1: RSI ──────────────────────────────────────────────────────────────
+RSI_COLORSCALE = [
+    [0.0, CORP['green']],
+    [0.5, '#D4A820'],
+    [1.0, CORP['red']],
+]
 fig = _dual_scatter(
-    x=sp500.index,
-    y_top=sp500["Close"],
-    y_bot=sp500["RSI_1yr"],
-    colors=sp500["RSI_1yr"],
-    title="S&P 500 — 1-Year RSI",
-    y_top_label="S&P 500",
+    x_top=sp500.index,   y_top=sp500["Close"],
+    x_bot=sp500.index,   y_bot=sp500["RSI_1yr"],
+    colorscale=RSI_COLORSCALE,
+    color_top=sp500["RSI_1yr"],
+    color_bot=sp500["RSI_1yr"],
+    title="S&P 500 & 1-Year RSI",
+    y_top_label="S&P 500 Price",
     y_bot_label="1-Year RSI",
-    colorbar_title="RSI",
+    hover_top_fmt=",.0f", hover_bot_fmt=".1f",
     y_bot_range=[40, 65],
 )
 _save(fig, "sp500-rsi.html")
 
 
 # ── Chart 2: VIX ─────────────────────────────────────────────────────────────
+VIX_COLORSCALE = [
+    [0.0, CORP['blue']],
+    [0.5, CORP['orange']],
+    [1.0, CORP['red']],
+]
 fig = _dual_scatter(
-    x=sp500.index,
-    y_top=sp500["Close"],
-    y_bot=sp500["vix"],
-    colors=sp500["vix"],
-    title="S&P 500 — VIX",
-    y_top_label="S&P 500",
+    x_top=sp500.index,   y_top=sp500["Close"],
+    x_bot=sp500.index,   y_bot=sp500["vix"],
+    colorscale=VIX_COLORSCALE,
+    color_top=sp500["vix"],
+    color_bot=sp500["vix"],
+    title="S&P 500 & VIX",
+    y_top_label="S&P 500 Price",
     y_bot_label="VIX",
-    colorbar_title="VIX",
+    hover_top_fmt=",.0f", hover_bot_fmt=".1f",
 )
 _save(fig, "sp500-vix.html")
 
 
 # ── Chart 3: PMI ─────────────────────────────────────────────────────────────
+PMI_COLORSCALE = [
+    [0.0, CORP['red']],
+    [0.5, '#D4A820'],
+    [1.0, CORP['blue']],
+]
 fig = _dual_scatter(
-    x=merged.index,
-    y_top=merged["Close"],
-    y_bot=merged["pmi"],
-    colors=merged["pmi"],
-    title="S&P 500 — ISM PMI",
-    y_top_label="S&P 500",
-    y_bot_label="ISM PMI",
-    colorbar_title="PMI",
+    x_top=merged.index,  y_top=merged["Close"],
+    x_bot=merged.index,  y_bot=merged["rolling_PMI"],
+    colorscale=PMI_COLORSCALE,
+    color_top=merged["rolling_PMI"],
+    color_bot=merged["rolling_PMI"],
+    title="S&P 500 & ISM PMI (6-Mo. Avg.)",
+    y_top_label="S&P 500 Price",
+    y_bot_label="PMI (6-Mo. Avg.)",
+    hover_top_fmt=",.0f", hover_bot_fmt=".1f",
     y_bot_range=[30, 70],
+    ref_line=50,
 )
 _save(fig, "sp500-pmi.html")
 
 
 # ── Chart 4: Margin Debt ──────────────────────────────────────────────────────
+MARGIN_COLORSCALE = [
+    [0.0, CORP['red']],
+    [0.5, '#D4A820'],
+    [1.0, CORP['green']],
+]
 fig = _dual_scatter(
-    x=merged.index,
-    y_top=merged["Close"],
-    y_bot=merged["yoy"],
-    colors=merged["yoy"],
-    title="S&P 500 — Margin Debt YoY %",
-    y_top_label="S&P 500",
+    x_top=merged.index,  y_top=merged["Close"],
+    x_bot=merged.index,  y_bot=merged["yoy"],
+    colorscale=MARGIN_COLORSCALE,
+    color_top=merged["yoy"],
+    color_bot=merged["yoy"],
+    title="S&P 500 & Margin Debt YoY %",
+    y_top_label="S&P 500 Price",
     y_bot_label="Margin Debt YoY",
-    colorbar_title="Margin YoY",
+    hover_top_fmt=",.0f", hover_bot_fmt=".1%",
     y_bot_range=[-1, 1],
+    ref_line=0,
 )
 _save(fig, "sp500-margin.html")
 
 
 # ── Chart 5: Breadth ──────────────────────────────────────────────────────────
 if breadth_ok:
+    BREADTH_COLORSCALE = [
+        [0.0, CORP['red']],
+        [0.5, '#D4A820'],
+        [1.0, CORP['green']],
+    ]
     fig = _dual_scatter(
-        x=merged.index,
-        y_top=merged["Close"],
-        y_bot=merged["net %"],
-        colors=merged["net %"],
-        title="S&P 500 — Market Breadth (% of S&P 500 Above 1-Year Ago)",
-        y_top_label="S&P 500",
+        x_top=merged.index,  y_top=merged["Close"],
+        x_bot=merged.index,  y_bot=merged["net %"],
+        colorscale=BREADTH_COLORSCALE,
+        color_top=merged["net %"],
+        color_bot=merged["net %"],
+        title="S&P 500 & Market Breadth (% Above 1-Year Ago)",
+        y_top_label="S&P 500 Price",
         y_bot_label="% Advancing",
-        colorbar_title="Breadth",
+        hover_top_fmt=",.0f", hover_bot_fmt=".1%",
         y_bot_range=[0, 1],
+        ref_line=0.5,
     )
     _save(fig, "sp500-breadth.html")
 else:
@@ -361,34 +562,194 @@ else:
 
 
 # ── Chart 6: Composite Market Model ───────────────────────────────────────────
-color_map = score_to_color(merged["Model_score"])
+# Two panels:
+#   Top:    S&P 500 price dots coloured by signal (size=4, corporate signal palette)
+#   Bottom: Rolling composite score line with signal-coloured dots (size=3)
+#           Uses the same SIGNAL_COLORS as the top panel
 
-fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
-                    row_heights=[0.65, 0.35], vertical_spacing=0.06)
-fig.add_trace(go.Scatter(
-    x=merged.index, y=merged["Close"], mode="markers",
-    marker=dict(size=4, color=color_map),
-    name="S&P 500"), row=1, col=1)
-fig.add_trace(go.Scatter(
-    x=merged.index, y=merged["Rolling_12MA"], mode="lines",
-    line=dict(color="#1f77b4", width=1.5),
-    name="Composite Score (21-day MA)"), row=2, col=1)
+merged["Weighted_Average"] = merged["Weighted_Average"].fillna(0).astype(int)
+latest_signal = int(merged["Weighted_Average"].iloc[-1])
+current_color = SIGNAL_COLORS[latest_signal]
+current_label = SIGNAL_LABELS[latest_signal]
 
-# Score threshold lines
-for lvl, col in [(2, "#ff7f0e"), (3, "#aec7e8"), (4, "#1f77b4")]:
-    fig.add_hline(y=lvl, line_dash="dot", line_color=col, opacity=0.5, row=2, col=1)
+today     = merged.index.max()
+all_start = merged.index.min()
 
-fig.update_layout(
-    title=dict(text="S&P 500 — Composite Market Model Score (1=Bearish → 5=Bullish)",
-               font=dict(size=15)),
-    yaxis=dict(title="S&P 500"),
-    yaxis2=dict(title="Model Score", range=[1, 5]),
-    xaxis2=dict(title="Date"),
-    height=600, showlegend=True, template="seaborn",
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, x=1, xanchor="right"),
-    margin=dict(b=80, t=70),
+ytd_start = pd.Timestamp(f"{today.year}-01-01")
+y1_start  = today - pd.DateOffset(years=1)
+y3_start  = today - pd.DateOffset(years=3)
+y5_start  = today - pd.DateOffset(years=5)
+
+close_series = merged["Close"]
+score_series = merged["Rolling_12MA"].dropna()
+
+def _mm_yranges(start):
+    return (
+        _get_yrange(close_series, start),
+        _get_yrange(score_series, start),
+    )
+
+fig = make_subplots(
+    rows=2, cols=1,
+    shared_xaxes=True,
+    row_heights=[0.65, 0.35],   # taller top panel (generate_charts.py)
+    vertical_spacing=0.06,
 )
-fig.add_annotation(_source_annotation())
+
+# ── Top panel: S&P 500 coloured by signal ─────────────────────────────────────
+# Grey path line
+fig.add_trace(go.Scatter(
+    x=merged.index, y=merged["Close"], mode='lines',
+    line=dict(color='#CCCCCC', width=1),
+    showlegend=False, hoverinfo='skip',
+), row=1, col=1)
+
+# Signal-coloured dots, size=4 (generate_charts.py)
+for i in range(6):
+    mask   = merged["Weighted_Average"] == i
+    subset = merged[mask]
+    fig.add_trace(go.Scatter(
+        x=subset.index,
+        y=subset["Close"],
+        mode='markers',
+        marker=dict(size=4, color=SIGNAL_COLORS[i], opacity=0.88, line=dict(width=0)),
+        name=SIGNAL_LABELS[i],
+        legendgroup=str(i),
+        hovertemplate=(
+            '<b>%{x|%b %Y}</b><br>'
+            f'S&P 500: %{{y:,.0f}}<br>'
+            f'Signal: {SIGNAL_LABELS[i]}'
+            '<extra></extra>'
+        ),
+    ), row=1, col=1)
+
+# ── Bottom panel: Rolling score line + signal-coloured dots ───────────────────
+# Grey path line
+fig.add_trace(go.Scatter(
+    x=merged.index, y=merged["Rolling_12MA"], mode='lines',
+    line=dict(color='#CCCCCC', width=1),
+    showlegend=False, hoverinfo='skip',
+), row=2, col=1)
+
+# Signal-coloured dots, size=3 (generate_charts.py), same colours as top panel
+for i in range(6):
+    mask   = merged["Weighted_Average"] == i
+    subset = merged[mask]
+    fig.add_trace(go.Scatter(
+        x=subset.index,
+        y=subset["Rolling_12MA"],
+        mode='markers',
+        marker=dict(size=3, color=SIGNAL_COLORS[i], opacity=0.88, line=dict(width=0)),
+        name=SIGNAL_LABELS[i],
+        legendgroup=str(i),
+        showlegend=False,
+        hovertemplate=(
+            '<b>%{x|%b %Y}</b><br>'
+            f'Score: %{{y:.2f}}<br>'
+            f'Signal: {SIGNAL_LABELS[i]}'
+            '<extra></extra>'
+        ),
+    ), row=2, col=1)
+
+# Score threshold reference lines
+for lvl, col in [(2, SIGNAL_COLORS[2]), (3, SIGNAL_COLORS[3]), (4, SIGNAL_COLORS[4])]:
+    fig.add_hline(y=lvl, line_dash='dot', line_color=col, opacity=0.4, row=2, col=1)
+
+# ── Time-range buttons (both panels) ──────────────────────────────────────────
+yr_ytd_top, yr_ytd_bot = _mm_yranges(ytd_start)
+yr_1y_top,  yr_1y_bot  = _mm_yranges(y1_start)
+yr_3y_top,  yr_3y_bot  = _mm_yranges(y3_start)
+yr_5y_top,  yr_5y_bot  = _mm_yranges(y5_start)
+yr_all_top, yr_all_bot = _mm_yranges(all_start)
+
+mm_buttons = dict(
+    buttons=[
+        dict(args=[{"xaxis.range": [str(ytd_start), str(today)],
+                    "yaxis.range": yr_ytd_top, "yaxis2.range": yr_ytd_bot}],
+             label="YTD", method="relayout"),
+        dict(args=[{"xaxis.range": [str(y1_start), str(today)],
+                    "yaxis.range": yr_1y_top, "yaxis2.range": yr_1y_bot}],
+             label="1Y", method="relayout"),
+        dict(args=[{"xaxis.range": [str(y3_start), str(today)],
+                    "yaxis.range": yr_3y_top, "yaxis2.range": yr_3y_bot}],
+             label="3Y", method="relayout"),
+        dict(args=[{"xaxis.range": [str(y5_start), str(today)],
+                    "yaxis.range": yr_5y_top, "yaxis2.range": yr_5y_bot}],
+             label="5Y", method="relayout"),
+        dict(args=[{"xaxis.autorange": True,
+                    "yaxis.range": yr_all_top, "yaxis2.range": yr_all_bot}],
+             label="All", method="relayout"),
+    ],
+    active=4, direction='left', pad=dict(r=10, t=8),
+    showactive=True, type='buttons',
+    x=0.5, xanchor='center', y=-0.13, yanchor='top',
+    bgcolor='white', bordercolor=CORP['blue'], borderwidth=1,
+    font=dict(color=CORP['dgrey'], size=12, family='Arial'),
+)
+
+# ── Layout ────────────────────────────────────────────────────────────────────
+fig.update_layout(
+    template='plotly_white',
+    autosize=True,
+    height=600,             # taller height (generate_charts.py)
+    margin=dict(l=65, r=45, t=90, b=155),
+
+    title=dict(
+        text='<b>S&P 500 — Macro Market Model</b>',
+        x=0.5, xanchor='center',
+        font=dict(size=20, color=CORP['dgrey'], family='Arial'),
+        pad=dict(b=8),
+    ),
+
+    font=dict(family='Arial', size=13, color=CORP['dgrey']),
+    plot_bgcolor='white',
+    paper_bgcolor='white',
+    hovermode='x unified',
+
+    legend=dict(
+        orientation='h',
+        yanchor='bottom', y=1.01,
+        xanchor='center', x=0.5,
+        font=dict(size=12),
+        bgcolor='rgba(255,255,255,0.85)',
+        bordercolor='#E0E0E0', borderwidth=1,
+        itemsizing='constant',
+        tracegroupgap=0,
+    ),
+
+    updatemenus=[mm_buttons],
+)
+
+fig.update_xaxes(**_AXIS_STYLE)
+fig.update_yaxes(title_text='S&P 500 Price', tickformat=',.0f', **_AXIS_STYLE, row=1, col=1)
+fig.update_yaxes(title_text='Model Score (21-day MA)', tickformat='.2f',
+                 range=[1, 5], **_AXIS_STYLE, row=2, col=1)
+
+# In-panel labels
+fig.add_annotation(text="<b>S&P 500</b>",
+                   xref="x domain", yref="y domain",
+                   x=0.01, y=0.97, xanchor="left", yanchor="top",
+                   showarrow=False,
+                   font=dict(size=13, color=CORP['dgrey'], family='Arial'))
+fig.add_annotation(text="<b>Model Score</b>",
+                   xref="x2 domain", yref="y2 domain",
+                   x=0.01, y=0.97, xanchor="left", yanchor="top",
+                   showarrow=False,
+                   font=dict(size=13, color=CORP['dgrey'], family='Arial'))
+
+# Current signal badge
+fig.add_annotation(
+    text=f"<b>Current Signal: {current_label}</b>",
+    showarrow=False, xref="paper", yref="paper",
+    x=0.07, y=0.91, xanchor="left", yanchor="top",
+    font=dict(size=13, color='white', family='Arial Black'),
+    bgcolor=current_color, bordercolor=current_color,
+    borderwidth=2, borderpad=6,
+)
+
+for ann in _bottom_annotations():
+    fig.add_annotation(**ann)
+
 _save(fig, "sp500-market-model.html")
 
 print("\nAll charts saved to outputs/")
