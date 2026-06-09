@@ -392,16 +392,52 @@ merged["Margin_Range"] = pd.cut(merged["rolling_yoy"], [-2, -0.15, 0, 0.15, 0.30
 # ══════════════════════════════════════════════════════════════════════════════
 print("Fetching S&P 500 breadth (this takes ~1–2 min on first run)…")
 try:
-    import requests
-    tables = pd.read_html(
-        requests.get("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
-                     headers={"User-Agent": "Mozilla/5.0"}).text)
+    import requests, traceback
+
+    # ── Fetch constituent list ─────────────────────────────────────────────────
+    resp = requests.get(
+        "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
+        headers={"User-Agent": "Mozilla/5.0"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    tables  = pd.read_html(resp.text)
     symbols = [t for t in tables[0]["Symbol"].tolist()
                if t not in ["SEDG", "OTIS", "NTAP"]]
     symbols = [s.replace(".", "-") for s in symbols]
+    print(f"  → {len(symbols)} symbols loaded from Wikipedia")
 
-    stock_data = yf.download(symbols, start=START_DATE, end=END_DATE,
-                              auto_adjust=True, progress=False)["Close"]
+    # ── Download with retry ───────────────────────────────────────────────────
+    raw = None
+    for attempt in range(1, 4):
+        try:
+            print(f"  → yfinance download attempt {attempt}/3…")
+            raw = yf.download(
+                symbols, start=START_DATE, end=END_DATE,
+                auto_adjust=True, progress=False,
+                timeout=120,
+            )
+            if raw is not None and not raw.empty:
+                break
+        except Exception as dl_err:
+            print(f"  ⚠ Attempt {attempt} failed: {dl_err}")
+            raw = None
+
+    if raw is None or raw.empty:
+        raise ValueError("yfinance returned empty data after 3 attempts")
+
+    # ── Handle both single-level and multi-level column structures ────────────
+    # yfinance ≥0.2.x returns MultiIndex columns (metric, ticker);
+    # older versions return single-level (ticker only) when one metric requested.
+    if isinstance(raw.columns, pd.MultiIndex):
+        stock_data = raw["Close"].copy()
+    else:
+        stock_data = raw.copy()
+
+    # Drop any all-NaN columns (tickers that returned no data)
+    stock_data = stock_data.dropna(axis=1, how="all")
+    print(f"  → {stock_data.shape[1]} tickers with data")
+
     stock_data["advance"] = (stock_data > stock_data.shift(252)).sum(axis=1)
     stock_data["decline"] = (stock_data < stock_data.shift(252)).sum(axis=1)
     stock_data["net %"]   = stock_data["advance"] / (stock_data["advance"] + stock_data["decline"])
@@ -421,8 +457,11 @@ try:
     merged["Breadth_score"] = np.select(conditions_breadth, scores_breadth, default=3)
     merged["Breadth_Range"] = pd.cut(merged["net %"], [0, 0.40, 0.45, 0.55, 0.60, 1])
     breadth_ok = True
+    print("  ✓ Breadth computed successfully")
+
 except Exception as e:
-    print(f"  ⚠ Breadth download failed: {e}. Skipping breadth chart.")
+    print(f"  ⚠ Breadth failed: {e}")
+    traceback.print_exc()
     merged["Breadth_score"] = 3
     merged["net %"] = np.nan
     breadth_ok = False
