@@ -393,6 +393,8 @@ merged["Margin_Range"] = pd.cut(merged["rolling_yoy"], [-2, -0.15, 0, 0.15, 0.30
 print("Fetching S&P 500 breadth (this takes ~1–2 min on first run)…")
 try:
     import requests
+    from io import StringIO
+    resp = requests.get("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies", headers={"User-Agent": "Mozilla/5.0"})
     tables = pd.read_html(
         requests.get("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
                      headers={"User-Agent": "Mozilla/5.0"}).text)
