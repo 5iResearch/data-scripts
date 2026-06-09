@@ -395,9 +395,7 @@ try:
     import requests
     from io import StringIO
     resp = requests.get("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies", headers={"User-Agent": "Mozilla/5.0"})
-    tables = pd.read_html(
-        requests.get("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
-                     headers={"User-Agent": "Mozilla/5.0"}).text)
+    tables = pd.read_html(StringIO(resp.text))
     symbols = [t for t in tables[0]["Symbol"].tolist()
                if t not in ["SEDG", "OTIS", "NTAP"]]
     symbols = [s.replace(".", "-") for s in symbols]
