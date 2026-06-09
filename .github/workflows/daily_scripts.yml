@@ -11,6 +11,7 @@ permissions:
 jobs:
   run-scripts:
     runs-on: ubuntu-latest
+    timeout-minutes: 30       # breadth downloads ~500 tickers — needs room to breathe
 
     steps:
       - name: Checkout repo
@@ -27,6 +28,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run scripts
+        timeout-minutes: 25   # fail loudly before the job-level timeout swallows the error
         run: |
           python scripts/generate_charts.py
 
