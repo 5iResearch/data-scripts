@@ -1,0 +1,55 @@
+name: Daily Benchmark Beaters
+
+on:
+  schedule:
+    - cron: "0 11 * * 1-5"   # 11:00 AM UTC, weekdays — after Koyfin CSVs are updated for the day
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-benchmark-beaters:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install LibreOffice (for xlsx -> PDF conversion)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libreoffice-calc
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Check Koyfin CSVs are present
+        run: |
+          for f in data/koyfin_cdn.csv data/koyfin_us.csv; do
+            lines=$(wc -l < "$f")
+            if [ "$lines" -le 1 ]; then
+              echo "::warning::$f has no data rows — did you forget to export/commit today's Koyfin screener?"
+            fi
+          done
+
+      - name: Run Benchmark Beaters
+        timeout-minutes: 50
+        run: |
+          python scripts/generate_benchmark_beaters.py
+
+      - name: Commit outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add outputs/benchmark-beaters/
+          git diff --cached --quiet || git commit -m "chore: update benchmark beaters output [skip ci]"
+          git push
