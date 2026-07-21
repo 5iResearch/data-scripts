@@ -15,6 +15,7 @@ The only manual step left is exporting the two Koyfin screener CSVs
 
 import io
 import os
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timedelta
@@ -35,7 +36,10 @@ OUTPUT_DIR = os.path.join(REPO_ROOT, "outputs", "benchmark-beaters")
 INITIAL_WINDOW_DAYS = 180
 RELATIVE_WINDOW_DAYS = 180
 LAST_DAYS = 5
-MAX_TEMPLATE_ROWS = 42  # rows 8-49 in the "* Hardcoded" tabs
+MIN_TRADING_DAYS = 100  # ~80% of the ~126 trading days in a 180-day window;
+                        # filters out halted/thinly-traded/recently-listed tickers
+                        # whose sparse price history can make start≈end look "flat" by coincidence
+MAX_TEMPLATE_ROWS = 53  # rows 8-60 in the "* Hardcoded" tabs (formatting/CF extended to row 60)
 NAME_SUFFIXES = ["Ltd.", "Inc.", "Corp."]
 
 
@@ -61,7 +65,10 @@ def close_series(ticker, start, end):
         data.columns = data.columns.get_level_values(0)
     if data.empty:
         return None
-    return data["Close"]
+    close = data["Close"].dropna()
+    if len(close) < MIN_TRADING_DAYS:
+        return None
+    return close
 
 
 def find_relative_new_highs(symbols, bench_ticker, end_date):
@@ -243,6 +250,20 @@ def write_hardcoded_sheet(ws, table_df):
         )
 
 
+PRINT_SHEETS = ["Cdn Hardcoded", "US Hardcoded"]
+
+
+def make_print_ready_copy(source_xlsx_path, dest_xlsx_path):
+    """PDF export should only contain the two print-ready tabs, not the
+    Instructions/Date/legacy manual-workflow tabs. LibreOffice's --convert-to
+    exports every sheet in the workbook, so build a stripped-down copy first."""
+    wb = load_workbook(source_xlsx_path)
+    for sheet_name in list(wb.sheetnames):
+        if sheet_name not in PRINT_SHEETS:
+            del wb[sheet_name]
+    wb.save(dest_xlsx_path)
+
+
 def convert_to_pdf(xlsx_path, out_dir):
     subprocess.run(
         [
@@ -289,15 +310,17 @@ def main():
     wb.save(xlsx_out)
     print(f"Saved workbook: {xlsx_out}")
 
-    pdf_out = convert_to_pdf(xlsx_out, OUTPUT_DIR)
+    print_ready_path = os.path.join(OUTPUT_DIR, f"_print_ready_{date_str}.xlsx")
+    make_print_ready_copy(xlsx_out, print_ready_path)
+    pdf_out = convert_to_pdf(print_ready_path, OUTPUT_DIR)
     final_pdf = os.path.join(OUTPUT_DIR, f"Benchmark_Beaters_{date_str}.pdf")
-    if pdf_out != final_pdf:
-        os.replace(pdf_out, final_pdf)
+    os.replace(pdf_out, final_pdf)
+    os.remove(print_ready_path)
     print(f"Saved PDF: {final_pdf}")
 
     latest_xlsx = os.path.join(OUTPUT_DIR, "Benchmark_Beaters_latest.xlsx")
     wb.save(latest_xlsx)
-    convert_to_pdf(latest_xlsx, OUTPUT_DIR)
+    shutil.copyfile(final_pdf, os.path.join(OUTPUT_DIR, "Benchmark_Beaters_latest.pdf"))
 
 
 if __name__ == "__main__":
