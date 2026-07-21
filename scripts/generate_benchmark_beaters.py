@@ -59,9 +59,33 @@ ORANGE = "FFC67A29"
 ORANGE_FILL = "FFFCEFE0"
 LIGHT_GRAY_FILL = "FFF2F2F2"
 
-SIGNAL_ICON = {"New": "\U0001F195", "Repeat": "\U0001F501", "Streak": "\U0001F525"}  # 🆕 🔁 🔥
-DATA_ROW_HEIGHT = 45  # generous fixed height so wrapped Business Description text
-                       # never overflows into neighboring rows regardless of length
+SIGNAL_BADGE = {
+    # (label, ARGB fill) - plain cell formatting, not emoji: emoji fall back to
+    # mismatched monochrome glyphs (e.g. a flat blue box) under LibreOffice's
+    # headless PDF renderer, which has no color-emoji font installed.
+    "New": ("NEW", "FF2E86DE"),
+    "Repeat": ("RPT", "FF8E44AD"),
+    "Streak": ("STRK", "FFC0392B"),
+}
+
+# A fixed row height was too short for the longest wrapped Business
+# Description / Company text -> LibreOffice rendered the overflow bleeding
+# past the row's colored fill into the row below, which showed up as the
+# left/right edge columns looking mismatched. Size each row to what its
+# actual (longest) wrapped cell needs instead.
+MIN_ROW_HEIGHT = 26
+LINE_HEIGHT = 17     # deliberately generous - erring tall is a cosmetic
+PADDING = 16          # nit, erring short reproduces the color-bleed bug
+DESC_CHARS_PER_LINE = 75    # column J, width 56
+COMPANY_CHARS_PER_LINE = 20  # column D, width 26, bold
+
+
+def _row_height_for(company, description):
+    import math
+    desc_lines = math.ceil(len(description or "") / DESC_CHARS_PER_LINE) or 1
+    company_lines = math.ceil(len(company or "") / COMPANY_CHARS_PER_LINE) or 1
+    lines = max(desc_lines, company_lines, 1)
+    return max(MIN_ROW_HEIGHT, lines * LINE_HEIGHT + PADDING)
 
 
 def load_tsx_symbols():
@@ -290,9 +314,14 @@ def write_hardcoded_sheet(ws, table_df):
         src_row = DATA_START_ROW if offset % 2 == 0 else DATA_START_ROW + 1
         if row != src_row:
             _copy_row_style(ws, row, src_row)
-        ws.row_dimensions[row].height = DATA_ROW_HEIGHT
         record = table_df.iloc[offset]
-        ws.cell(row=row, column=2, value=SIGNAL_ICON.get(record["Signal"], ""))  # B: signal icon
+        ws.row_dimensions[row].height = _row_height_for(record["Company"], record["Business Description"])
+        label, badge_fill = SIGNAL_BADGE.get(record["Signal"], ("", None))
+        badge_cell = ws.cell(row=row, column=2, value=label)  # B: signal badge
+        if badge_fill:
+            badge_cell.fill = PatternFill(fill_type="solid", fgColor=badge_fill)
+            badge_cell.font = Font(bold=True, color="FFFFFFFF", size=7)
+            badge_cell.alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=row, column=3, value=record["Ticker"])
         ws.cell(row=row, column=4, value=record["Company"])
         ws.cell(row=row, column=5, value=record["Sector"])
