@@ -13,6 +13,7 @@ The only manual step left is exporting the two Koyfin screener CSVs
 (data/koyfin_cdn.csv, data/koyfin_us.csv) before the workflow runs.
 """
 
+import io
 import os
 import subprocess
 import sys
@@ -50,7 +51,7 @@ def load_sp500_symbols():
     headers = {"User-Agent": "Mozilla/5.0"}
     response = requests.get(url, headers=headers, timeout=30)
     response.raise_for_status()
-    table = pd.read_html(response.text)[0]
+    table = pd.read_html(io.StringIO(response.text))[0]
     return table["Symbol"].tolist()
 
 
