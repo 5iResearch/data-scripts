@@ -59,6 +59,10 @@ ORANGE = "FFC67A29"
 ORANGE_FILL = "FFFCEFE0"
 LIGHT_GRAY_FILL = "FFF2F2F2"
 
+SIGNAL_ICON = {"New": "\U0001F195", "Repeat": "\U0001F501", "Streak": "\U0001F525"}  # 🆕 🔁 🔥
+DATA_ROW_HEIGHT = 45  # generous fixed height so wrapped Business Description text
+                       # never overflows into neighboring rows regardless of length
+
 
 def load_tsx_symbols():
     tsx_list = pd.read_csv(TSX_UNIVERSE_PATH)
@@ -193,7 +197,11 @@ def screen_market(symbols, bench_ticker, market_label):
 
     df = pd.DataFrame(rows)
     if not df.empty:
-        df = df.sort_values("6M_Perf_%", ascending=False).reset_index(drop=True)
+        signal_order = {"New": 0, "Repeat": 1, "Streak": 2}
+        df["_signal_rank"] = df["Signal"].map(signal_order)
+        df = df.sort_values(
+            ["_signal_rank", "6M_Perf_%"], ascending=[True, False]
+        ).drop(columns="_signal_rank").reset_index(drop=True)
     return df
 
 
@@ -282,8 +290,9 @@ def write_hardcoded_sheet(ws, table_df):
         src_row = DATA_START_ROW if offset % 2 == 0 else DATA_START_ROW + 1
         if row != src_row:
             _copy_row_style(ws, row, src_row)
+        ws.row_dimensions[row].height = DATA_ROW_HEIGHT
         record = table_df.iloc[offset]
-        ws.cell(row=row, column=2, value=offset + 1)  # B: #
+        ws.cell(row=row, column=2, value=SIGNAL_ICON.get(record["Signal"], ""))  # B: signal icon
         ws.cell(row=row, column=3, value=record["Ticker"])
         ws.cell(row=row, column=4, value=record["Company"])
         ws.cell(row=row, column=5, value=record["Sector"])
@@ -305,6 +314,19 @@ def write_hardcoded_sheet(ws, table_df):
             c.border = Border(left=b.left, right=b.right, top=b.top, bottom=Side(style="medium"))
 
     _set_conditional_formatting_range(ws, max(last_data_row, DATA_START_ROW))
+
+    # The template has pre-baked banding/fill for a wide fixed row range (a
+    # leftover of the original hand-built file). Neutralize the spacer row
+    # between the table and the CTA banner so no stray colored cell (e.g. the
+    # Return column's base green fill) shows through from that inherited style.
+    spacer_row = last_data_row + 1
+    for col in TABLE_COLS:
+        c = ws.cell(row=spacer_row, column=col)
+        c.value = None
+        c.fill = PatternFill(fill_type=None)
+        c.border = Border()
+        c.number_format = "General"
+    ws.row_dimensions[spacer_row].height = 8
 
     cta_row = last_data_row + 2
     _write_banner(
@@ -373,8 +395,8 @@ def main():
 
     wb = load_workbook(TEMPLATE_PATH)
     wb["Date"]["B2"] = today
-    wb["Cdn Hardcoded"]["H2"] = today
-    wb["US Hardcoded"]["H2"] = today
+    wb["Cdn Hardcoded"]["I2"] = today
+    wb["US Hardcoded"]["I2"] = today
     write_hardcoded_sheet(wb["Cdn Hardcoded"], cdn_table)
     write_hardcoded_sheet(wb["US Hardcoded"], us_table)
 
