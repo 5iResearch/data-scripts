@@ -44,8 +44,8 @@ MIN_TRADING_DAYS = 100  # ~80% of the ~126 trading days in a 180-day window;
 NAME_SUFFIXES = ["Ltd.", "Inc.", "Corp."]
 
 DATA_START_ROW = 8
-DATA_END_COL = 10  # column J (Business Description) - last real data column
-TABLE_COLS = list(range(2, DATA_END_COL + 1))  # B..J
+DATA_END_COL = 9  # column I (Business Description) - last real data column
+TABLE_COLS = list(range(2, DATA_END_COL + 1))  # B..I
 
 CTA_TEXT = (
     "\U0001F513 Want to know which of these we would actually buy? "
@@ -76,7 +76,7 @@ SIGNAL_BADGE = {
 MIN_ROW_HEIGHT = 26
 LINE_HEIGHT = 17     # deliberately generous - erring tall is a cosmetic
 PADDING = 16          # nit, erring short reproduces the color-bleed bug
-DESC_CHARS_PER_LINE = 75    # column J, width 56
+DESC_CHARS_PER_LINE = 68    # column I, width 56, 9.5pt font
 COMPANY_CHARS_PER_LINE = 20  # column D, width 26, bold
 
 
@@ -327,9 +327,8 @@ def write_hardcoded_sheet(ws, table_df):
         ws.cell(row=row, column=5, value=record["Sector"])
         ws.cell(row=row, column=6, value=record["Industry"])
         ws.cell(row=row, column=7, value=record["6-Mo Return"])
-        ws.cell(row=row, column=8, value=record["Signal"])
-        ws.cell(row=row, column=9, value=record["Mkt Cap ($M)"])
-        ws.cell(row=row, column=10, value=record["Business Description"])
+        ws.cell(row=row, column=8, value=record["Mkt Cap ($M)"])
+        ws.cell(row=row, column=9, value=record["Business Description"])
 
     if n == 0:
         last_data_row = DATA_START_ROW - 1
@@ -368,7 +367,7 @@ def write_hardcoded_sheet(ws, table_df):
         fill_hex=LIGHT_GRAY_FILL, font_color="FF666666", bold=False, italic=True,
     )
 
-    ws.print_area = f"A1:K{disclosure_row}"
+    ws.print_area = f"A1:J{disclosure_row}"
 
 
 PRINT_SHEETS = ["Cdn Hardcoded", "US Hardcoded"]
@@ -424,8 +423,8 @@ def main():
 
     wb = load_workbook(TEMPLATE_PATH)
     wb["Date"]["B2"] = today
-    wb["Cdn Hardcoded"]["I2"] = today
-    wb["US Hardcoded"]["I2"] = today
+    wb["Cdn Hardcoded"]["H2"] = today
+    wb["US Hardcoded"]["H2"] = today
     write_hardcoded_sheet(wb["Cdn Hardcoded"], cdn_table)
     write_hardcoded_sheet(wb["US Hardcoded"], us_table)
 
