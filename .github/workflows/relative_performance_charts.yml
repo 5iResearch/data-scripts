@@ -1,0 +1,41 @@
+name: Daily Relative Performance Charts
+
+on:
+  schedule:
+    - cron: "0 12 * * 1-5"   # 12:00 PM UTC, weekdays — no Koyfin dependency, offset from Benchmark Beaters
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-relative-performance-charts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run relative performance charts
+        timeout-minutes: 50
+        run: |
+          python scripts/generate_relative_performance_charts.py
+
+      - name: Commit outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add outputs/relative-performance-charts/
+          git diff --cached --quiet || git commit -m "chore: update relative performance charts [skip ci]"
+          git push
