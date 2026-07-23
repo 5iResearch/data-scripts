@@ -113,6 +113,17 @@ def draw_chart(pdf, ticker, company_name, rel, bench_label, period_label, as_of_
         fontsize=8, color=SUBTEXT, va="top",
     )
 
+    # Return badge lives in the dark header band (figure coordinates), not
+    # inside the axes — anchoring it to ax.transAxes put it directly on top
+    # of the most recent price data whenever the line ran high on the right
+    # edge of the chart.
+    fig.text(
+        0.97, 0.935, f"{sign}{ret:.1f}% vs {bench_label}",
+        fontsize=12, fontweight="bold", color=line_color,
+        ha="right", va="center",
+        bbox=dict(boxstyle="round,pad=0.35", fc=badge_bg, ec=line_color, lw=1.0, alpha=0.95),
+    )
+
     ax.axhline(100, color=SUBTEXT, lw=1.0, linestyle="--", alpha=0.5, zorder=1)
     rv = rel.values.astype(float)
     ax.fill_between(rel.index, rv, 100, where=(rv >= 100), color=GREEN_FILL, alpha=0.45, zorder=1)
@@ -126,13 +137,6 @@ def draw_chart(pdf, ticker, company_name, rel, bench_label, period_label, as_of_
         xy=(idx_max, float(rel[idx_max])), xytext=(0, 12), textcoords="offset points",
         ha="center", va="bottom", fontsize=7, color=TEXT,
         bbox=dict(boxstyle="round,pad=0.3", fc=GRID, ec=ORANGE, lw=0.7, alpha=0.9),
-    )
-
-    ax.text(
-        0.985, 0.90, f"{sign}{ret:.1f}% vs {bench_label}",
-        transform=ax.transAxes, fontsize=12, fontweight="bold", color=line_color,
-        ha="right", va="top",
-        bbox=dict(boxstyle="round,pad=0.35", fc=badge_bg, ec=line_color, lw=1.0, alpha=0.95),
     )
 
     ax.yaxis.grid(True, color=GRID, linewidth=0.5)
