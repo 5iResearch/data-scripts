@@ -67,10 +67,10 @@ SIGNAL_BADGE = {
 # left/right edge columns looking mismatched. Size each row to what its
 # actual (longest) wrapped cell needs instead.
 MIN_ROW_HEIGHT = 26
-LINE_HEIGHT = 17     # deliberately generous - erring tall is a cosmetic
+LINE_HEIGHT = 18     # deliberately generous - erring tall is a cosmetic
 PADDING = 16          # nit, erring short reproduces the color-bleed bug
-DESC_CHARS_PER_LINE = 68    # column I, width 56, 9.5pt font
-COMPANY_CHARS_PER_LINE = 20  # column D, width 26, bold
+DESC_CHARS_PER_LINE = 62    # column I, width 56, 10.5pt font (was 9.5pt)
+COMPANY_CHARS_PER_LINE = 18  # column D, width 26, bold, 10pt (was 9pt)
 
 
 def _row_height_for(company, description):
@@ -172,7 +172,7 @@ def write_hardcoded_sheet(ws, table_df):
         badge_cell = ws.cell(row=row, column=2, value=label)  # B: signal badge
         if badge_fill:
             badge_cell.fill = PatternFill(fill_type="solid", fgColor=badge_fill)
-            badge_cell.font = Font(bold=True, color="FFFFFFFF", size=7)
+            badge_cell.font = Font(bold=True, color="FFFFFFFF", size=8)
             badge_cell.alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=row, column=3, value=record["Ticker"])
         ws.cell(row=row, column=4, value=record["Company"])
