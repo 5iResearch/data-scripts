@@ -292,8 +292,11 @@ def main():
     os.remove(print_ready_path)
     print(f"Saved PDF: {final_pdf}")
 
+    # Copy rather than re-save from the in-memory workbook: openpyxl closes
+    # the underlying image stream after the first wb.save(), so a second
+    # wb.save() call on the same object crashes on the embedded logo images.
     latest_xlsx = os.path.join(OUTPUT_DIR, "Benchmark_Beaters_latest.xlsx")
-    wb.save(latest_xlsx)
+    shutil.copyfile(xlsx_out, latest_xlsx)
     shutil.copyfile(final_pdf, os.path.join(OUTPUT_DIR, "Benchmark_Beaters_latest.pdf"))
 
 
