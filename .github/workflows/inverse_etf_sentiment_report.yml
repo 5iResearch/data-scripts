@@ -1,0 +1,41 @@
+name: Daily Inverse ETF Sentiment Report
+
+on:
+  schedule:
+    - cron: "15 7 * * 1-5"   # 7:15 AM UTC, weekdays — offset from VIX Structure Report (7:00)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-inverse-etf-sentiment-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Inverse ETF Sentiment report
+        timeout-minutes: 50
+        run: |
+          python scripts/generate_inverse_etf_sentiment_report.py
+
+      - name: Commit outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add outputs/inverse-etf-sentiment/
+          git diff --cached --quiet || git commit -m "chore: update inverse ETF sentiment report [skip ci]"
+          git push
