@@ -1,0 +1,41 @@
+name: Daily Industry RSI Report
+
+on:
+  schedule:
+    - cron: "30 6 * * 1-5"   # 6:30 AM UTC, weekdays — offset from Daily Python Scripts (6:00)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-industry-rsi-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Industry RSI report
+        timeout-minutes: 50
+        run: |
+          python scripts/generate_industry_rsi_report.py
+
+      - name: Commit outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add outputs/industry-rsi/
+          git diff --cached --quiet || git commit -m "chore: update industry RSI report [skip ci]"
+          git push
