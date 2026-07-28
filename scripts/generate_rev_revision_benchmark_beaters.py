@@ -20,6 +20,7 @@ same pattern as the Koyfin CSVs used by generate_benchmark_beaters.py):
 import os
 import warnings
 from datetime import datetime, timedelta
+from io import StringIO
 
 import numpy as np
 import pandas as pd
@@ -382,7 +383,7 @@ def main():
     url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
     resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
     resp.raise_for_status()
-    us_symbols = pd.read_html(resp.text)[0]["Symbol"].str.replace(".", "-", regex=False).tolist()
+    us_symbols = pd.read_html(StringIO(resp.text))[0]["Symbol"].str.replace(".", "-", regex=False).tolist()
 
     spy_all = yf.download(BENCH, start=START.strftime("%Y-%m-%d"), end=END.strftime("%Y-%m-%d"),
                            auto_adjust=True, progress=False)["Close"].squeeze().dropna()
