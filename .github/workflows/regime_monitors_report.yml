@@ -1,0 +1,41 @@
+name: Daily Regime Monitors Report
+
+on:
+  schedule:
+    - cron: "45 6 * * 1-5"   # 6:45 AM UTC, weekdays — offset from Industry RSI Report (6:30)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-regime-monitors-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Regime Monitors report
+        timeout-minutes: 50
+        run: |
+          python scripts/generate_regime_monitors_report.py
+
+      - name: Commit outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add outputs/regime-monitors/
+          git diff --cached --quiet || git commit -m "chore: update regime monitors report [skip ci]"
+          git push
