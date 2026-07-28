@@ -212,8 +212,8 @@ def compute_froth_series():
     defensive_index = _normalized_index(DEFENSIVE_TICKERS, FROTH_START, end_date)
 
     window = 252
-    growth_roll = growth_index / growth_index.rolling(window).apply(lambda x: x[0])
-    defensive_roll = defensive_index / defensive_index.rolling(window).apply(lambda x: x[0])
+    growth_roll = growth_index / growth_index.rolling(window).apply(lambda x: x[0], raw=True)
+    defensive_roll = defensive_index / defensive_index.rolling(window).apply(lambda x: x[0], raw=True)
     rs_ratio = np.log(growth_roll / defensive_roll)
     return growth_index, defensive_index, rs_ratio
 
