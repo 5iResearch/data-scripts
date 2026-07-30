@@ -1,0 +1,49 @@
+name: Daily Revenue Revision Screener
+
+on:
+  schedule:
+    - cron: "35 7 * * 1-5"   # 7:35 AM UTC, weekdays — offset from Rev Revision Benchmark Beaters (7:30)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-rev-revision-screener:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Check revenue revision CSVs are present
+        run: |
+          for f in data/us_1w_rev_est_screener.csv data/cdn_1w_rev_est_screener.csv; do
+            lines=$(wc -l < "$f")
+            if [ "$lines" -le 1 ]; then
+              echo "::warning::$f has no data rows — did you forget to export/commit today's revision screener?"
+            fi
+          done
+
+      - name: Run Revenue Revision Screener report
+        run: |
+          python scripts/generate_rev_revision_screener.py
+
+      - name: Commit outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add outputs/rev-revision-screener/
+          git diff --cached --quiet || git commit -m "chore: update revenue revision screener report [skip ci]"
+          git push
