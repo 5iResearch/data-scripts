@@ -32,6 +32,61 @@ def load_tsx_symbols():
     return symbols
 
 
+def cap_tier(mktcap_millions):
+    """Large/Mid/Small bucket from a Market Cap value in millions of dollars
+    (the unit used by the Koyfin-style CSV exports these scripts read).
+    Large >= $10B, Mid $2B-$10B, Small < $2B. NaN/missing -> "Unknown"."""
+    if pd.isna(mktcap_millions):
+        return "Unknown"
+    if mktcap_millions >= 10_000:
+        return "Large"
+    if mktcap_millions >= 2_000:
+        return "Mid"
+    return "Small"
+
+
+CAP_FILTER_CSS = """
+  .cap-filter { margin-top: 10px; font-size: 13px; }
+  .cap-filter label { color: #8b90a4; margin-right: 6px; }
+  .cap-filter select { background: #1a1d27; color: #e2e5f0; border: 1px solid #2d3148;
+    border-radius: 4px; padding: 4px 10px; font-size: 13px; }
+"""
+
+CAP_FILTER_CONTROL_HTML = """
+<div class="cap-filter">
+  <label for="capSelect">Market Cap:</label>
+  <select id="capSelect" onchange="filterByCap(this.value)">
+    <option value="All">All</option>
+    <option value="Large">Large (&ge;$10B)</option>
+    <option value="Mid">Mid ($2B&ndash;$10B)</option>
+    <option value="Small">Small (&lt;$2B)</option>
+    <option value="Unknown">Unknown</option>
+  </select>
+</div>
+"""
+
+CAP_FILTER_JS = """
+<script>
+function filterByCap(tier) {
+  document.querySelectorAll('table').forEach(function (table) {
+    var ths = table.querySelectorAll('thead th');
+    var capIdx = -1;
+    ths.forEach(function (th, i) { if (th.textContent.trim() === 'Cap') capIdx = i; });
+    if (capIdx === -1) return;
+    table.querySelectorAll('tbody tr').forEach(function (tr) {
+      var cell = tr.children[capIdx];
+      var val = cell ? cell.textContent.trim() : '';
+      tr.style.display = (tier === 'All' || val === tier) ? '' : 'none';
+    });
+  });
+  document.querySelectorAll('[data-cap]').forEach(function (el) {
+    el.style.display = (tier === 'All' || el.dataset.cap === tier) ? '' : 'none';
+  });
+}
+</script>
+"""
+
+
 def load_sp500_symbols():
     url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
     headers = {"User-Agent": "Mozilla/5.0"}

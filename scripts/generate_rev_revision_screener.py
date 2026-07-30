@@ -18,6 +18,7 @@ Depends on the same two manually-refreshed CSVs:
 """
 
 import os
+import sys
 import warnings
 from datetime import datetime, timedelta
 from io import StringIO
@@ -32,6 +33,9 @@ from plotly.subplots import make_subplots
 from scipy import stats as sp_stats
 
 warnings.filterwarnings("ignore")
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from common_screening import CAP_FILTER_CONTROL_HTML, CAP_FILTER_CSS, CAP_FILTER_JS, cap_tier
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT_DIR = os.path.join(REPO_ROOT, "outputs", "rev-revision-screener")
@@ -80,7 +84,7 @@ ALL_WIN_LABELS = ["1W", "1M", "3M", "6M", "1Y"]
 FY_COLORS_P = [BLUE, DBLUE, ORANGE]
 
 DISPLAY_COLS = [
-    ("rank", "Rank"), ("ticker", "Ticker"), ("name", "Name"), ("tier", "Tier"),
+    ("rank", "Rank"), ("ticker", "Ticker"), ("name", "Name"), ("cap_bucket", "Cap"), ("tier", "Tier"),
     ("cascade_score", "Cascade (0-9)"), ("avg_1w", "Avg 1W Rev%"),
     ("fy1_1w", "FY1E 1W"), ("fy2_1w", "FY2E 1W"), ("fy3_1w", "FY3E 1W"),
     ("avg_magnitude_1y", "Avg 1Y Rev%"), ("all_fy_pos_1w", "All FY 1W+"),
@@ -219,6 +223,7 @@ def rank_by_revisions(rev_df, extra_gate=None):
     # 1W revision momentum, cascade confirmation, and 1Y revision magnitude.
     s["combined"] = s["z_1w"] * 0.45 + s["z_cascade"] * 0.35 + s["z_mag1y"] * 0.20
     s["tier"] = s.apply(assign_tier, axis=1)
+    s["cap_bucket"] = s["mktcap"].apply(cap_tier)
     ranked = s.sort_values("combined", ascending=False).reset_index(drop=True)
     ranked["rank"] = ranked.index + 1
     return ranked
@@ -372,7 +377,7 @@ def build_section(ranked, table_caption, section_title, section_sub, yf_ticker_f
     for _, row in spotlight.iterrows():
         pser = price_data.get(yf_ticker_fn(row["ticker"]))
         fig = make_spotlight(row, pser, vs_bench=row["vs_bench_10y"], bench_label=bench_label)
-        parts.append(fig_to_div(fig))
+        parts.append(f'<div data-cap="{row["cap_bucket"]}">{fig_to_div(fig)}</div>')
     return parts
 
 
@@ -425,7 +430,8 @@ def main():
                             "Gated on FY1E+FY2E 1W AND 1M revisions positive, no price/trend filter",
                             yf_ticker_fn=cdn_to_yf, bench_series=xic_series, bench_label="XIC.TO")
 
-    html = PAGE_TEMPLATE.format(date_str=datetime.now().strftime("%B %d, %Y"), body="\n".join(parts))
+    html = PAGE_TEMPLATE.format(date_str=datetime.now().strftime("%B %d, %Y"), body="\n".join(parts),
+                                 cap_css=CAP_FILTER_CSS, cap_js=CAP_FILTER_JS, cap_control=CAP_FILTER_CONTROL_HTML)
     out_path = os.path.join(OUTPUT_DIR, "Rev_Revision_Screener.html")
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(html)
@@ -449,12 +455,15 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .table-wrap {{ padding: 12px 32px 8px; overflow-x: auto; }}
   table {{ border-collapse: collapse; font-size: 12px; }}
   caption {{ color: #e2e5f0; text-align: left; padding-bottom: 8px; font-size: 13px; }}
+{cap_css}
 </style>
+{cap_js}
 </head>
 <body>
 <header>
   <h1>Revenue Revision Screener</h1>
   <div class="meta">Generated {date_str} &middot; Stocks with confirming analyst revenue estimate revisions, no price/relative-high filter &middot; Top 40 per section</div>
+  {cap_control}
 </header>
 {body}
 </body>

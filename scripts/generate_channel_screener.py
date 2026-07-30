@@ -37,7 +37,14 @@ from scipy.stats import linregress
 warnings.filterwarnings("ignore")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common_screening import load_nasdaq100_symbols, load_sp500_symbols
+from common_screening import (
+    CAP_FILTER_CONTROL_HTML,
+    CAP_FILTER_CSS,
+    CAP_FILTER_JS,
+    cap_tier,
+    load_nasdaq100_symbols,
+    load_sp500_symbols,
+)
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT_DIR = os.path.join(REPO_ROOT, "outputs", "channel-screener")
@@ -108,6 +115,16 @@ def load_revision_map():
             df[c] = pd.to_numeric(df[c], errors="coerce")
     df["ticker"] = df["ticker"].astype(str).str.strip().str.upper().str.replace(".", "-", regex=False)
     return df.set_index("ticker").to_dict("index")
+
+
+def load_cap_map():
+    """Ticker -> Market Cap ($M), for the cap-tier filter. Only covers tickers
+    present in the rev-screener CSV; S&P 500 / Nasdaq-100 names outside that
+    CSV fall back to "Unknown" in cap_tier()."""
+    raw = pd.read_csv(REV_SCREENER_PATH)
+    tickers = raw["Ticker"].astype(str).str.strip().str.upper().str.replace(".", "-", regex=False)
+    mktcap = pd.to_numeric(raw["Market Cap"], errors="coerce")
+    return dict(zip(tickers, mktcap))
 
 
 def close_series_single(ticker, raw):
@@ -277,7 +294,7 @@ def fig_to_div(fig):
 def build_summary_table(rows):
     df = pd.DataFrame(rows).drop(columns=[c for c in rows[0] if c.startswith("_")])
     df = df.sort_values("R2", ascending=False).reset_index(drop=True)
-    cols = ["Ticker", "R2", "Z_Score", "10Y_Return_%", f"10Y_{BENCH_TICKER}_Return_%", "Outperformance_%", "Annual_Trend_Return_%"]
+    cols = ["Ticker", "Cap", "R2", "Z_Score", "10Y_Return_%", f"10Y_{BENCH_TICKER}_Return_%", "Outperformance_%", "Annual_Trend_Return_%"]
     df = df[cols]
     html = ['<table class="summary"><thead><tr>']
     html.append("".join(f"<th>{c.replace('_', ' ')}</th>" for c in cols))
@@ -286,6 +303,7 @@ def build_summary_table(rows):
         html.append(
             "<tr>"
             f"<td>{r['Ticker']}</td>"
+            f"<td>{r['Cap']}</td>"
             f"<td>{r['R2']:.2f}</td>"
             f"<td>{r['Z_Score']:.2f}</td>"
             f"<td>{r['10Y_Return_%']:.0f}%</td>"
@@ -319,7 +337,7 @@ def build_section(rows, title, name_map, revision_map):
         revision_row = revision_map.get(row["Ticker"])
         try:
             fig = build_channel_chart(row, company_name, revision_row)
-            parts.append(f'<div class="chart-wrap">{fig_to_div(fig)}</div>')
+            parts.append(f'<div class="chart-wrap" data-cap="{row["Cap"]}">{fig_to_div(fig)}</div>')
         except Exception as exc:
             print(f"  chart error {row['Ticker']}: {exc}")
 
@@ -332,6 +350,7 @@ def main():
 
     universe, name_map = load_universe()
     revision_map = load_revision_map()
+    cap_map = load_cap_map()
     print(f"Universe: {len(universe)} unique tickers")
 
     print(f"Downloading {BENCH_TICKER} ({LOOKBACK_PERIOD})...")
@@ -350,6 +369,7 @@ def main():
             close = close.rename(ticker)
             row = score_ticker(close, bench_close)
             if row is not None:
+                row["Cap"] = cap_tier(cap_map.get(ticker))
                 rows.append(row)
         except Exception as exc:
             print(f"  error scoring {ticker}: {exc}")
@@ -363,7 +383,8 @@ def main():
     parts.append(build_section(bottom_rows, "Bottom of Channel", name_map, revision_map))
     parts.append(build_section(top_rows, "Top of Channel", name_map, revision_map))
 
-    html = PAGE_TEMPLATE.format(date_str=today.strftime("%B %d, %Y"), body="\n".join(parts))
+    html = PAGE_TEMPLATE.format(date_str=today.strftime("%B %d, %Y"), body="\n".join(parts),
+                                 cap_css=CAP_FILTER_CSS, cap_js=CAP_FILTER_JS, cap_control=CAP_FILTER_CONTROL_HTML)
     out_path = os.path.join(OUTPUT_DIR, "Channel_Screener_latest.html")
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(html)
@@ -389,12 +410,15 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   table.summary th, table.summary td {{ padding: 6px 12px; text-align: right; border-bottom: 1px solid #3A3A3C; }}
   table.summary th:first-child, table.summary td:first-child {{ text-align: left; }}
   table.summary th {{ color: #C67A29; font-weight: 600; }}
+{cap_css}
 </style>
+{cap_js}
 </head>
 <body>
 <header>
   <h1>10-Year Regression Channel Screener</h1>
   <div class="meta">Generated {date_str} &middot; Long-term uptrend, historical outperformer vs QQQ, currently at a channel extreme &middot; Universe: S&amp;P 500 + Nasdaq-100 + revenue-revision screener</div>
+  {cap_control}
 </header>
 {body}
 </body>
