@@ -41,6 +41,19 @@ def load_sp500_symbols():
     return table["Symbol"].tolist()
 
 
+def load_nasdaq100_symbols():
+    url = "https://en.wikipedia.org/wiki/List_of_NASDAQ-100_companies"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(url, headers=headers, timeout=30)
+    response.raise_for_status()
+    tables = pd.read_html(io.StringIO(response.text))
+    for table in tables:
+        for col in ("Ticker", "Symbol"):
+            if col in table.columns:
+                return table[col].dropna().astype(str).tolist()
+    raise ValueError("Could not find a Ticker/Symbol column in the Nasdaq-100 tables")
+
+
 def close_series(ticker, start, end):
     data = yf.download(ticker, start=start, end=end, progress=False)
     if isinstance(data.columns, pd.MultiIndex):
