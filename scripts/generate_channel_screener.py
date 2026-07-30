@@ -2,14 +2,18 @@
 10-Year Regression Channel Screener.
 
 Idea: find stocks that have been in a clean long-term uptrend (like the
-QQQ/SPY "regression channel" Chart of Interest) but are currently sitting
-near the bottom of that channel — i.e. a normal pullback within an
-established trend, not a trend break. Two extra filters keep the list
-honest:
+QQQ/SPY "regression channel" Chart of Interest) and are currently sitting
+near one extreme of that channel. Two sections:
+
+  - Bottom of Channel: a normal pullback within an established trend,
+    not a trend break — potential buy-the-dip candidates.
+  - Top of Channel: stretched to the upper edge of an established trend
+    — potential trim/watch candidates.
+
+Two extra filters keep both lists honest:
 
   1. R^2 of the 10y log-price regression must be high (a clean channel,
-     not a noisy one) — candidates are ranked by R^2 and only the top
-     half survive.
+     not a noisy one) — candidates are ranked by R^2.
   2. The stock must have actually outperformed QQQ cumulatively over the
      same 10-year window (ratio of stock/QQQ higher today than 10y ago).
 
@@ -44,7 +48,8 @@ LOOKBACK_PERIOD = "10y"
 MIN_TRADING_DAYS = 2400  # ~95% of the ~2520 trading days in 10y; excludes recent IPOs
 CHANNEL_SIGMA = 2.0  # width of the plotted upper/lower channel bands
 BOTTOM_Z_THRESHOLD = -1.5  # current residual must be at/below this to count as "at the bottom"
-TOP_R2_FRACTION = 0.5  # keep only the top half of survivors, ranked by R^2
+TOP_Z_THRESHOLD = 1.5  # current residual must be at/above this to count as "at the top"
+TOP_R2_FRACTION = 1.0  # fraction of R^2-ranked survivors to keep (1.0 = keep all)
 CHUNK_SIZE = 250  # yfinance batch download size
 
 ORANGE = "#C67A29"
@@ -124,7 +129,11 @@ def score_ticker(close, bench_close):
     if std == 0:
         return None
     z_last = resid[-1] / std
-    if z_last > BOTTOM_Z_THRESHOLD:
+    if z_last <= BOTTOM_Z_THRESHOLD:
+        position = "Bottom"
+    elif z_last >= TOP_Z_THRESHOLD:
+        position = "Top"
+    else:
         return None
 
     aligned = pd.DataFrame({"stock": close, "bench": bench_close}).dropna()
@@ -141,6 +150,7 @@ def score_ticker(close, bench_close):
 
     return {
         "Ticker": close.name,
+        "Position": position,
         "R2": r_value**2,
         "Z_Score": z_last,
         "Annual_Trend_Return_%": annual_return_pct,
@@ -232,6 +242,33 @@ def build_summary_table(rows):
     return "".join(html)
 
 
+def build_section(rows, title, name_map):
+    rows = sorted(rows, key=lambda r: r["R2"], reverse=True)
+    keep_n = max(1, int(np.ceil(len(rows) * TOP_R2_FRACTION))) if rows else 0
+    survivors = rows[:keep_n]
+    print(f"[{title}] {len(rows)} candidates, keeping top {len(survivors)} by R^2 (top {TOP_R2_FRACTION:.0%})")
+
+    parts = [f'<div class="section"><h2>{title}</h2>']
+    if survivors:
+        parts.append(
+            f'<div class="section-sub">{len(survivors)} of {len(rows)} filtered names, '
+            f"ranked by R² (10y log-price regression fit), highest first</div>{build_summary_table(survivors)}"
+        )
+    else:
+        parts.append('<div class="section-sub">No tickers passed all filters today.</div>')
+    parts.append("</div>")
+
+    for row in survivors:
+        company_name = name_map.get(row["Ticker"], row["Ticker"])
+        try:
+            fig = build_channel_chart(row, company_name)
+            parts.append(f'<div class="chart-wrap">{fig_to_div(fig)}</div>')
+        except Exception as exc:
+            print(f"  chart error {row['Ticker']}: {exc}")
+
+    return "\n".join(parts)
+
+
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     today = datetime.now()
@@ -259,25 +296,14 @@ def main():
         except Exception as exc:
             print(f"  error scoring {ticker}: {exc}")
 
-    print(f"{len(rows)} tickers pass the uptrend + bottom-of-channel + outperformance filters")
+    print(f"{len(rows)} tickers pass the uptrend + outperformance filters and sit at a channel extreme")
 
-    rows.sort(key=lambda r: r["R2"], reverse=True)
-    keep_n = max(1, int(np.ceil(len(rows) * TOP_R2_FRACTION))) if rows else 0
-    survivors = rows[:keep_n]
-    print(f"Keeping top {len(survivors)} by R^2 (top {TOP_R2_FRACTION:.0%})")
+    bottom_rows = [r for r in rows if r["Position"] == "Bottom"]
+    top_rows = [r for r in rows if r["Position"] == "Top"]
 
     parts = []
-    if survivors:
-        parts.append(f'<div class="section"><h2>Candidates</h2><div class="section-sub">{len(survivors)} of {len(rows)} filtered names, ranked by R² (10y log-price regression fit), highest first</div>{build_summary_table(survivors)}</div>')
-        for row in survivors:
-            company_name = name_map.get(row["Ticker"], row["Ticker"])
-            try:
-                fig = build_channel_chart(row, company_name)
-                parts.append(f'<div class="chart-wrap">{fig_to_div(fig)}</div>')
-            except Exception as exc:
-                print(f"  chart error {row['Ticker']}: {exc}")
-    else:
-        parts.append('<div class="section"><h2>Candidates</h2><div class="section-sub">No tickers passed all filters today.</div></div>')
+    parts.append(build_section(bottom_rows, "Bottom of Channel", name_map))
+    parts.append(build_section(top_rows, "Top of Channel", name_map))
 
     html = PAGE_TEMPLATE.format(date_str=today.strftime("%B %d, %Y"), body="\n".join(parts))
     out_path = os.path.join(OUTPUT_DIR, "Channel_Screener_latest.html")
@@ -310,7 +336,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <body>
 <header>
   <h1>10-Year Regression Channel Screener</h1>
-  <div class="meta">Generated {date_str} &middot; Long-term uptrend, currently at the bottom of the channel, historical outperformer vs QQQ &middot; Universe: S&amp;P 500 + Nasdaq-100 + revenue-revision screener</div>
+  <div class="meta">Generated {date_str} &middot; Long-term uptrend, historical outperformer vs QQQ, currently at a channel extreme &middot; Universe: S&amp;P 500 + Nasdaq-100 + revenue-revision screener</div>
 </header>
 {body}
 </body>

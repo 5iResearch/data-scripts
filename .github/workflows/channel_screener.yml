@@ -1,0 +1,41 @@
+name: Daily 10-Year Regression Channel Screener
+
+on:
+  schedule:
+    - cron: "50 7 * * 1-5"   # 7:50 AM UTC, weekdays — offset from Rev Revision Screener (7:35)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-channel-screener:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Channel Screener report
+        timeout-minutes: 50
+        run: |
+          python scripts/generate_channel_screener.py
+
+      - name: Commit outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add outputs/channel-screener/
+          git diff --cached --quiet || git commit -m "chore: update channel screener report [skip ci]"
+          git push
