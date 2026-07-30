@@ -1,8 +1,11 @@
 """
 Daily "Revenue Revision Screener" report — the pure analyst-estimate-revision
 half of generate_rev_revision_benchmark_beaters.py, with the 6-month
-relative-high-vs-benchmark price gate removed entirely. No price data is
-downloaded; ranking is driven only by the revenue estimate revision CSVs.
+relative-high-vs-benchmark price *gate* removed entirely. Ranking is driven
+only by the revenue estimate revision CSVs — price data is not used for
+screening or scoring, only pulled afterward (for the spotlighted top-40
+names per section) to render a plain 3-year price chart alongside the
+revision cascade chart.
 
 Three sections, same universes as the benchmark-beaters report:
   1. US S&P 500 (revision CSV filtered to current S&P 500 constituents)
@@ -16,7 +19,7 @@ Depends on the same two manually-refreshed CSVs:
 
 import os
 import warnings
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import StringIO
 
 import numpy as np
@@ -24,6 +27,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 import requests
+import yfinance as yf
+from plotly.subplots import make_subplots
 from scipy import stats as sp_stats
 
 warnings.filterwarnings("ignore")
@@ -42,6 +47,9 @@ TIER_COLORS = {
 }
 
 TODAY = datetime.today().strftime("%Y-%m-%d")
+END = datetime.today()
+PRICE_YEARS = 3
+PRICE_START = END - timedelta(days=365 * PRICE_YEARS + 10)
 
 SPOTLIGHT_TOP_N = 40
 
@@ -140,6 +148,28 @@ def assign_tier(row):
     return "Weak"
 
 
+def download_spotlight_prices(tickers, label=""):
+    """3-year close price series for the (already-ranked) spotlighted names.
+    Called after ranking, on a small list (<=40), not on the full universe."""
+    price_data = {}
+    if not tickers:
+        return price_data
+    try:
+        raw = yf.download(tickers, start=PRICE_START.strftime("%Y-%m-%d"), end=END.strftime("%Y-%m-%d"),
+                           auto_adjust=True, progress=False, threads=True)
+        if isinstance(raw.columns, pd.MultiIndex):
+            close = raw["Close"]
+        else:
+            close = raw[["Close"]].rename(columns={"Close": tickers[0]})
+        for tkr in close.columns:
+            s = close[tkr].dropna()
+            if len(s) >= 20:
+                price_data[tkr] = s
+    except Exception as e:
+        print(f"  {label} price download error: {e}")
+    return price_data
+
+
 def rank_by_revisions(rev_df, extra_gate=None):
     joined = rev_df.dropna(subset=["fy1_1w"]).reset_index(drop=True)
     joined = joined[(joined["fy1_1w"] > 0) & (joined["fy2_1w"] > 0)]
@@ -194,18 +224,40 @@ def build_table_html(ranked, caption_label):
     return styler.to_html()
 
 
-def make_spotlight(row):
+def make_spotlight(row, price_series=None):
     ticker, name, tier = row["ticker"], row["name"], row["tier"]
     tc = TIER_COLORS.get(tier, SUBTEXT)
     rank, cs = int(row["rank"]), int(row["cascade_score"])
     avg1w = row["avg_1w"]
     w1_str = f"{avg1w * 100:+.2f}%" if pd.notna(avg1w) else "—"
 
-    fig = go.Figure()
+    fig = make_subplots(rows=1, cols=2, column_widths=[0.55, 0.45],
+                         subplot_titles=[f"{PRICE_YEARS}Y Price", "Revenue Revision Cascade"],
+                         horizontal_spacing=0.10)
+
+    if price_series is not None and len(price_series) > 5:
+        pv = price_series.values.astype(float)
+        net_ret = (pv[-1] / pv[0] - 1) * 100
+        line_c = GREEN if net_ret >= 0 else RED
+        h = line_c.lstrip("#")
+        fill_c = f"rgba({int(h[0:2],16)},{int(h[2:4],16)},{int(h[4:6],16)},0.10)"
+
+        fig.add_trace(go.Scatter(x=list(price_series.index), y=[pv[0]] * len(price_series), mode="lines",
+            line=dict(color="rgba(0,0,0,0)", width=0), showlegend=False, hoverinfo="skip"), row=1, col=1)
+        fig.add_trace(go.Scatter(x=list(price_series.index), y=pv.tolist(), mode="lines",
+            line=dict(color=line_c, width=2.0), fill="tonexty", fillcolor=fill_c, showlegend=False,
+            hovertemplate="%{x|%b %d %Y}<br>$%{y:.2f}<extra></extra>"), row=1, col=1)
+        fig.add_annotation(x=0.02, y=0.96, xref="x domain", yref="y domain",
+            text=f"{PRICE_YEARS}Y: <b>{net_ret:+.1f}%</b>", showarrow=False,
+            font=dict(size=13, color=line_c), bgcolor=BG, bordercolor=line_c, borderwidth=1, row=1, col=1)
+    else:
+        fig.add_annotation(x=0.27, y=0.5, xref="paper", yref="paper", text="No price data",
+                            showarrow=False, font=dict(size=12, color=SUBTEXT))
+
     for fy_idx, fy in enumerate(["fy1", "fy2", "fy3"]):
         vals = [row.get(f"{fy}_{w}", np.nan) * 100 for w in ALL_WIN_KEYS]
         fig.add_trace(go.Bar(x=ALL_WIN_LABELS, y=vals, name=f"FY{fy_idx + 1}E", marker_color=FY_COLORS_P[fy_idx],
-            opacity=0.85, hovertemplate="%{x}: %{y:+.2f}%<extra>FY" + str(fy_idx + 1) + "E</extra>"))
+            opacity=0.85, hovertemplate="%{x}: %{y:+.2f}%<extra>FY" + str(fy_idx + 1) + "E</extra>"), row=1, col=2)
 
     subtitle = f"Rank #{rank} | {tier} | Cascade {cs}/9 | Avg 1W rev: {w1_str}"
 
@@ -213,13 +265,19 @@ def make_spotlight(row):
         title=dict(text=(f'<b><span style="font-size:26px;color:{tc}">{ticker}</span>'
                          f'<span style="font-size:18px;color:#e2e5f0">  {name}</span></b><br>'
                          f'<span style="font-size:12px;color:#8b90a4">{subtitle}</span>'),
-                   x=0.0, xanchor="left", y=0.93, yanchor="top", pad=dict(l=10, t=10)),
+                   x=0.0, xanchor="left", y=0.97, yanchor="top", pad=dict(l=10, t=10)),
         paper_bgcolor=BG, plot_bgcolor=PANEL, font=dict(color=TEXT, family="DejaVu Sans, Arial"),
-        height=340, margin=dict(l=60, r=40, t=100, b=50), barmode="group", showlegend=True,
-        legend=dict(bgcolor=BG, bordercolor=GRID, borderwidth=1, x=1.0, y=1.0, xanchor="right", font=dict(size=11)),
+        height=400, margin=dict(l=60, r=60, t=110, b=50), barmode="group", showlegend=True,
+        legend=dict(bgcolor=BG, bordercolor=GRID, borderwidth=1, x=0.57, y=0.25, font=dict(size=11)),
     )
     fig.update_xaxes(gridcolor=GRID, zeroline=False)
-    fig.update_yaxes(gridcolor=GRID, zeroline=True, zerolinecolor=GRID, title_text="Revenue Revision %", ticksuffix="%")
+    fig.update_yaxes(gridcolor=GRID, zeroline=True, zerolinecolor=GRID)
+    fig.update_yaxes(title_text="Price ($)", row=1, col=1)
+    fig.update_yaxes(title_text="Revenue Revision %", ticksuffix="%", row=1, col=2)
+    for ann in fig["layout"]["annotations"]:
+        if ann.text in (f"{PRICE_YEARS}Y Price", "Revenue Revision Cascade"):
+            ann.font.size = 12
+            ann.font.color = "#e2e5f0"
     return fig
 
 
@@ -232,15 +290,22 @@ def section_header(title: str, subtitle: str = "") -> str:
     return f'<div class="section"><h2>{title}</h2>{sub}</div>'
 
 
-def build_section(ranked, table_caption, section_title, section_sub):
+def build_section(ranked, table_caption, section_title, section_sub, yf_ticker_fn=None):
     parts = [section_header(section_title, section_sub)]
     if ranked.empty:
         parts.append('<div class="section" style="color:#8b90a4;">No names passed the screen today.</div>')
         return parts
     parts.append(f'<div class="table-wrap">{build_table_html(ranked, table_caption)}</div>')
 
-    for _, row in ranked.head(SPOTLIGHT_TOP_N).iterrows():
-        fig = make_spotlight(row)
+    spotlight = ranked.head(SPOTLIGHT_TOP_N)
+    yf_ticker_fn = yf_ticker_fn or (lambda t: t)
+    yf_tickers = [yf_ticker_fn(t) for t in spotlight["ticker"]]
+    print(f"  downloading {PRICE_YEARS}Y prices for {len(yf_tickers)} spotlighted names...")
+    price_data = download_spotlight_prices(yf_tickers, label=section_title)
+
+    for _, row in spotlight.iterrows():
+        pser = price_data.get(yf_ticker_fn(row["ticker"]))
+        fig = make_spotlight(row, pser)
         parts.append(fig_to_div(fig))
     return parts
 
@@ -282,9 +347,11 @@ def main():
         return (df["fy1_1m"] > 0) & (df["fy2_1m"] > 0)
 
     cdn_ranked = rank_by_revisions(cdn_rev_df, extra_gate=cdn_gate)
+    cdn_to_yf = lambda t: t.replace(".TO", "").replace(".to", "") + ".TO"
     parts += build_section(cdn_ranked, "CDN Revenue Revision Screener",
                             "Section 3 - Canada",
-                            "Gated on FY1E+FY2E 1W AND 1M revisions positive, no price/trend filter")
+                            "Gated on FY1E+FY2E 1W AND 1M revisions positive, no price/trend filter",
+                            yf_ticker_fn=cdn_to_yf)
 
     html = PAGE_TEMPLATE.format(date_str=datetime.now().strftime("%B %d, %Y"), body="\n".join(parts))
     out_path = os.path.join(OUTPUT_DIR, "Rev_Revision_Screener.html")
