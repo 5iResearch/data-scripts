@@ -49,7 +49,10 @@ TIER_COLORS = {
 TODAY = datetime.today().strftime("%Y-%m-%d")
 END = datetime.today()
 PRICE_YEARS = 3
-PRICE_START = END - timedelta(days=365 * PRICE_YEARS + 10)
+OUTPERF_YEARS = 10
+PRICE_START = END - timedelta(days=365 * OUTPERF_YEARS + 15)  # fetch 10Y; chart panel slices the tail 3Y
+CHART_CUTOFF = END - timedelta(days=365 * PRICE_YEARS + 10)
+MIN_OUTPERF_DAYS = 500  # ~2 trading years; below this, mark 10Y vs bench as N/A rather than misleading
 
 SPOTLIGHT_TOP_N = 40
 
@@ -81,6 +84,7 @@ DISPLAY_COLS = [
     ("cascade_score", "Cascade (0-9)"), ("avg_1w", "Avg 1W Rev%"),
     ("fy1_1w", "FY1E 1W"), ("fy2_1w", "FY2E 1W"), ("fy3_1w", "FY3E 1W"),
     ("avg_magnitude_1y", "Avg 1Y Rev%"), ("all_fy_pos_1w", "All FY 1W+"),
+    ("vs_bench_10y", "10Y vs Bench"),
 ]
 
 
@@ -149,7 +153,8 @@ def assign_tier(row):
 
 
 def download_spotlight_prices(tickers, label=""):
-    """3-year close price series for the (already-ranked) spotlighted names.
+    """10-year close price series for the (already-ranked) spotlighted names
+    (used both for the 3Y chart panel and the 10Y-vs-benchmark check).
     Called after ranking, on a small list (<=40), not on the full universe."""
     price_data = {}
     if not tickers:
@@ -168,6 +173,32 @@ def download_spotlight_prices(tickers, label=""):
     except Exception as e:
         print(f"  {label} price download error: {e}")
     return price_data
+
+
+def download_bench_series(ticker):
+    """Full OUTPERF_YEARS close series for a single benchmark, fetched once per run."""
+    try:
+        raw = yf.download(ticker, start=PRICE_START.strftime("%Y-%m-%d"), end=END.strftime("%Y-%m-%d"),
+                           auto_adjust=True, progress=False)
+        s = raw["Close"].squeeze().dropna()
+        return s if len(s) >= MIN_OUTPERF_DAYS else None
+    except Exception as e:
+        print(f"  benchmark download error ({ticker}): {e}")
+        return None
+
+
+def compute_vs_bench_10y(price_series, bench_series):
+    """Total-return outperformance (pct points) of price_series vs bench_series
+    over whatever history they have in common, up to OUTPERF_YEARS. None if
+    there isn't enough overlapping history to be meaningful."""
+    if price_series is None or bench_series is None:
+        return None
+    combined = pd.DataFrame({"stock": price_series, "bench": bench_series}).dropna()
+    if len(combined) < MIN_OUTPERF_DAYS:
+        return None
+    stock_ret = combined["stock"].iloc[-1] / combined["stock"].iloc[0] - 1
+    bench_ret = combined["bench"].iloc[-1] / combined["bench"].iloc[0] - 1
+    return (stock_ret - bench_ret) * 100
 
 
 def rank_by_revisions(rev_df, extra_gate=None):
@@ -201,41 +232,63 @@ def style_tier(val):
     return f"color: {TIER_COLORS.get(val, TEXT)}; font-weight: bold"
 
 
-def build_table_html(ranked, caption_label):
-    cols = DISPLAY_COLS
-    top40 = ranked.head(40)[[c for c, _ in cols]].rename(columns=dict(cols)).copy()
+def vs_bench_label(val):
+    if pd.isna(val):
+        return "—"
+    arrow = "✓" if val >= 0 else "✗"
+    return f"{arrow} {val:+.0f}%"
+
+
+def style_vs_bench(val):
+    if val.startswith("✓"):
+        return f"color: {GREEN}; font-weight: bold"
+    if val.startswith("✗"):
+        return f"color: {RED}; font-weight: bold"
+    return f"color: {SUBTEXT}"
+
+
+def build_table_html(spotlight, caption_label, bench_label="Bench"):
+    cols = [(k, v.replace("Bench", bench_label)) for k, v in DISPLAY_COLS]
+    vs_bench_col = f"10Y vs {bench_label}"
+    top40 = spotlight[[c for c, _ in cols]].rename(columns=dict(cols)).copy()
 
     for col in ["Avg 1W Rev%", "FY1E 1W", "FY2E 1W", "FY3E 1W", "Avg 1Y Rev%"]:
         top40[col] = top40[col].apply(pct)
     top40["Cascade (0-9)"] = top40["Cascade (0-9)"].apply(lambda v: f"{int(v)}/9" if pd.notna(v) else "—")
     top40["All FY 1W+"] = top40["All FY 1W+"].map({True: "✓", False: ""})
+    top40[vs_bench_col] = top40[vs_bench_col].apply(vs_bench_label)
 
     styler = (
         top40.style
         .map(style_tier, subset=["Tier"])
+        .map(style_vs_bench, subset=[vs_bench_col])
         .set_properties(**{"background-color": PANEL, "color": TEXT, "border": f"1px solid {GRID}"})
         .set_table_styles([{"selector": "th", "props": [
             ("background-color", "#252840"), ("color", "#e2e5f0"),
             ("font-weight", "bold"), ("border", f"1px solid {GRID}")]}])
         .set_caption(f"Top 40 — {caption_label} | {TODAY} | "
-                     "1W rev (45%) + cascade (35%) + avg 1Y rev magnitude (20%)")
+                     "1W rev (45%) + cascade (35%) + avg 1Y rev magnitude (20%) | "
+                     f"10Y vs {bench_label}: ✓ outperform / ✗ underperform / — insufficient history")
         .hide(axis="index")
     )
     return styler.to_html()
 
 
-def make_spotlight(row, price_series=None):
+def make_spotlight(row, price_series=None, vs_bench=None, bench_label="Bench"):
     ticker, name, tier = row["ticker"], row["name"], row["tier"]
     tc = TIER_COLORS.get(tier, SUBTEXT)
     rank, cs = int(row["rank"]), int(row["cascade_score"])
     avg1w = row["avg_1w"]
     w1_str = f"{avg1w * 100:+.2f}%" if pd.notna(avg1w) else "—"
 
+    chart_series = price_series[price_series.index >= CHART_CUTOFF] if price_series is not None else None
+
     fig = make_subplots(rows=1, cols=2, column_widths=[0.55, 0.45],
                          subplot_titles=[f"{PRICE_YEARS}Y Price", "Revenue Revision Cascade"],
                          horizontal_spacing=0.10)
 
-    if price_series is not None and len(price_series) > 5:
+    if chart_series is not None and len(chart_series) > 5:
+        price_series = chart_series
         pv = price_series.values.astype(float)
         net_ret = (pv[-1] / pv[0] - 1) * 100
         line_c = GREEN if net_ret >= 0 else RED
@@ -259,7 +312,14 @@ def make_spotlight(row, price_series=None):
         fig.add_trace(go.Bar(x=ALL_WIN_LABELS, y=vals, name=f"FY{fy_idx + 1}E", marker_color=FY_COLORS_P[fy_idx],
             opacity=0.85, hovertemplate="%{x}: %{y:+.2f}%<extra>FY" + str(fy_idx + 1) + "E</extra>"), row=1, col=2)
 
-    subtitle = f"Rank #{rank} | {tier} | Cascade {cs}/9 | Avg 1W rev: {w1_str}"
+    if pd.isna(vs_bench):
+        vs_bench_html = f'<span style="color:{SUBTEXT}">10Y vs {bench_label}: —</span>'
+    elif vs_bench >= 0:
+        vs_bench_html = f'<span style="color:{GREEN}">10Y vs {bench_label}: ✓ {vs_bench:+.0f}%</span>'
+    else:
+        vs_bench_html = f'<span style="color:{RED}">10Y vs {bench_label}: ✗ {vs_bench:+.0f}%</span>'
+
+    subtitle = f"Rank #{rank} | {tier} | Cascade {cs}/9 | Avg 1W rev: {w1_str} | {vs_bench_html}"
 
     fig.update_layout(
         title=dict(text=(f'<b><span style="font-size:26px;color:{tc}">{ticker}</span>'
@@ -290,22 +350,28 @@ def section_header(title: str, subtitle: str = "") -> str:
     return f'<div class="section"><h2>{title}</h2>{sub}</div>'
 
 
-def build_section(ranked, table_caption, section_title, section_sub, yf_ticker_fn=None):
+def build_section(ranked, table_caption, section_title, section_sub, yf_ticker_fn=None,
+                   bench_series=None, bench_label="Bench"):
     parts = [section_header(section_title, section_sub)]
     if ranked.empty:
         parts.append('<div class="section" style="color:#8b90a4;">No names passed the screen today.</div>')
         return parts
-    parts.append(f'<div class="table-wrap">{build_table_html(ranked, table_caption)}</div>')
 
-    spotlight = ranked.head(SPOTLIGHT_TOP_N)
+    spotlight = ranked.head(SPOTLIGHT_TOP_N).copy()
     yf_ticker_fn = yf_ticker_fn or (lambda t: t)
     yf_tickers = [yf_ticker_fn(t) for t in spotlight["ticker"]]
-    print(f"  downloading {PRICE_YEARS}Y prices for {len(yf_tickers)} spotlighted names...")
+    print(f"  downloading {OUTPERF_YEARS}Y prices for {len(yf_tickers)} spotlighted names...")
     price_data = download_spotlight_prices(yf_tickers, label=section_title)
+
+    spotlight["vs_bench_10y"] = [
+        compute_vs_bench_10y(price_data.get(yf_ticker_fn(t)), bench_series) for t in spotlight["ticker"]
+    ]
+
+    parts.append(f'<div class="table-wrap">{build_table_html(spotlight, table_caption, bench_label)}</div>')
 
     for _, row in spotlight.iterrows():
         pser = price_data.get(yf_ticker_fn(row["ticker"]))
-        fig = make_spotlight(row, pser)
+        fig = make_spotlight(row, pser, vs_bench=row["vs_bench_10y"], bench_label=bench_label)
         parts.append(fig_to_div(fig))
     return parts
 
@@ -313,6 +379,10 @@ def build_section(ranked, table_caption, section_title, section_sub, yf_ticker_f
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     parts = []
+
+    print("=== Benchmarks ===")
+    qqq_series = download_bench_series("QQQ")
+    xic_series = download_bench_series("XIC.TO")
 
     # ── Section 1: US S&P 500 ────────────────────────────────────────────────
     print("=== US S&P 500 ===")
@@ -328,14 +398,16 @@ def main():
     sp500_rev_df = us_rev_df[us_rev_df["ticker"].isin(us_symbols)].reset_index(drop=True)
     sp500_ranked = rank_by_revisions(sp500_rev_df)
     parts += build_section(sp500_ranked, "US S&P 500 Revenue Revision Screener",
-                            "Section 1 - US S&P 500", "Gated on FY1E+FY2E 1W revisions positive, no price/trend filter")
+                            "Section 1 - US S&P 500", "Gated on FY1E+FY2E 1W revisions positive, no price/trend filter",
+                            bench_series=qqq_series, bench_label="QQQ")
 
     # ── Section 2: All-US ~2,000 names ───────────────────────────────────────
     print("=== All-US ~2,000 names ===")
     all_us_ranked = rank_by_revisions(us_rev_df)
     parts += build_section(all_us_ranked, "All-US Revenue Revision Screener (Full CSV ~2k)",
                             "Section 2 - All-US (~2,000-Name CSV Universe)",
-                            "Same screen, full revision-CSV universe rather than just S&P 500")
+                            "Same screen, full revision-CSV universe rather than just S&P 500",
+                            bench_series=qqq_series, bench_label="QQQ")
 
     # ── Section 3: Canada ────────────────────────────────────────────────────
     print("=== Canada ===")
@@ -351,7 +423,7 @@ def main():
     parts += build_section(cdn_ranked, "CDN Revenue Revision Screener",
                             "Section 3 - Canada",
                             "Gated on FY1E+FY2E 1W AND 1M revisions positive, no price/trend filter",
-                            yf_ticker_fn=cdn_to_yf)
+                            yf_ticker_fn=cdn_to_yf, bench_series=xic_series, bench_label="XIC.TO")
 
     html = PAGE_TEMPLATE.format(date_str=datetime.now().strftime("%B %d, %Y"), body="\n".join(parts))
     out_path = os.path.join(OUTPUT_DIR, "Rev_Revision_Screener.html")
