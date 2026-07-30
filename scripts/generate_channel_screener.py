@@ -31,6 +31,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 import yfinance as yf
+from plotly.subplots import make_subplots
 from scipy.stats import linregress
 
 warnings.filterwarnings("ignore")
@@ -54,11 +55,29 @@ CHUNK_SIZE = 250  # yfinance batch download size
 
 ORANGE = "#C67A29"
 BLUE = "#1F79BE"
+DBLUE = "#4B8EA9"
 DGREY = "#363636"
 LGREY = "#4A4A4A"
 GREEN = "#44A660"
 RED = "#A22A2A"
 TEXTCLR = "#E8E8E8"
+GREY_LINE = "#8E8E93"
+
+REV_COL_MAP = {
+    "Ticker": "ticker",
+    "Revenues Est Avg Rev % (FY1E - 1W)": "fy1_1w", "Revenues Est Avg Rev % (FY1E - 1M)": "fy1_1m",
+    "Revenues Est Avg Rev % (FY1E - 3M)": "fy1_3m", "Revenues Est Avg Rev % (FY1E - 6M)": "fy1_6m",
+    "Revenues Est Avg Rev % (FY1E - 1Y)": "fy1_1y",
+    "Revenues Est Avg Rev % (FY2E - 1W)": "fy2_1w", "Revenues Est Avg Rev % (FY2E - 1M)": "fy2_1m",
+    "Revenues Est Avg Rev % (FY2E - 3M)": "fy2_3m", "Revenues Est Avg Rev % (FY2E - 6M)": "fy2_6m",
+    "Revenues Est Avg Rev % (FY2E - 1Y)": "fy2_1y",
+    "Revenues Est Avg Rev % (FY3E - 1W)": "fy3_1w", "Revenues Est Avg Rev % (FY3E - 1M)": "fy3_1m",
+    "Revenues Est Avg Rev % (FY3E - 3M)": "fy3_3m", "Revenues Est Avg Rev % (FY3E - 6M)": "fy3_6m",
+    "Revenues Est Avg Rev % (FY3E - 1Y)": "fy3_1y",
+}
+REV_WIN_KEYS = ["1w", "1m", "3m", "6m", "1y"]
+REV_WIN_LABELS = ["1W", "1M", "3M", "6M", "1Y"]
+FY_COLORS = [BLUE, DBLUE, ORANGE]
 
 with open(LOGO_PATH, "rb") as f:
     LOGO_B64 = "data:image/png;base64," + base64.b64encode(f.read()).decode()
@@ -74,6 +93,21 @@ def load_universe():
     combined = set(sp500) | set(nasdaq100) | set(rev_tickers)
     normalized = sorted({t.strip().upper().replace(".", "-") for t in combined if t and t.strip()})
     return normalized, name_map
+
+
+def load_revision_map():
+    """Ticker -> dict of FY1E/FY2E/FY3E revenue-estimate revision %s (1W/1M/3M/6M/1Y),
+    for the analyst revision cascade panel. Only covers tickers present in the
+    rev-screener CSV; other universe names simply won't get this panel."""
+    raw = pd.read_csv(REV_SCREENER_PATH)
+    df = raw.rename(columns=REV_COL_MAP)
+    keep = [c for c in REV_COL_MAP.values() if c in df.columns]
+    df = df[keep].copy()
+    for c in keep:
+        if c != "ticker":
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+    df["ticker"] = df["ticker"].astype(str).str.strip().str.upper().str.replace(".", "-", regex=False)
+    return df.set_index("ticker").to_dict("index")
 
 
 def close_series_single(ticker, raw):
@@ -166,26 +200,45 @@ def score_ticker(close, bench_close):
     }
 
 
-def build_channel_chart(row, company_name):
+def build_channel_chart(row, company_name, revision_row=None):
     close = row["_close"]
     x, slope, intercept, std = row["_x"], row["_slope"], row["_intercept"], row["_std"]
     center = np.exp(intercept + slope * x)
     upper = np.exp(intercept + slope * x + CHANNEL_SIGMA * std)
     lower = np.exp(intercept + slope * x - CHANNEL_SIGMA * std)
 
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=close.index, y=upper, mode="lines", line=dict(color=GREY_LINE, width=1, dash="dot"), name=f"+{CHANNEL_SIGMA:.0f}σ"))
-    fig.add_trace(go.Scatter(x=close.index, y=lower, mode="lines", line=dict(color=GREY_LINE, width=1, dash="dot"), name=f"-{CHANNEL_SIGMA:.0f}σ", fill="tonexty", fillcolor="rgba(255,255,255,0.05)"))
-    fig.add_trace(go.Scatter(x=close.index, y=center, mode="lines", line=dict(color=ORANGE, width=1.5, dash="dash"), name="Regression"))
-    fig.add_trace(go.Scatter(x=close.index, y=close.values, mode="lines", line=dict(color=BLUE, width=1.8), name="Close"))
+    fig = make_subplots(
+        rows=1, cols=2, column_widths=[0.62, 0.38],
+        subplot_titles=["10Y Regression Channel", "Analyst Revenue Revision Trend"],
+        horizontal_spacing=0.09,
+    )
+
+    fig.add_trace(go.Scatter(x=close.index, y=upper, mode="lines", line=dict(color=GREY_LINE, width=1, dash="dot"), name=f"+{CHANNEL_SIGMA:.0f}σ", showlegend=False), row=1, col=1)
+    fig.add_trace(go.Scatter(x=close.index, y=lower, mode="lines", line=dict(color=GREY_LINE, width=1, dash="dot"), name=f"-{CHANNEL_SIGMA:.0f}σ", fill="tonexty", fillcolor="rgba(255,255,255,0.05)", showlegend=False), row=1, col=1)
+    fig.add_trace(go.Scatter(x=close.index, y=center, mode="lines", line=dict(color=ORANGE, width=1.5, dash="dash"), name="Regression", showlegend=False), row=1, col=1)
+    fig.add_trace(go.Scatter(x=close.index, y=close.values, mode="lines", line=dict(color=BLUE, width=1.8), name="Close", showlegend=False), row=1, col=1)
     fig.add_trace(go.Scatter(
         x=[close.index[-1]], y=[close.values[-1]], mode="markers",
         marker=dict(color=RED, size=9, line=dict(color=TEXTCLR, width=1)),
-        name="Last", hovertemplate=f"Z={row['Z_Score']:.2f}σ<extra></extra>",
-    ))
+        name="Last", showlegend=False, hovertemplate=f"Z={row['Z_Score']:.2f}σ<extra></extra>",
+    ), row=1, col=1)
+
+    if revision_row:
+        for fy_idx, fy in enumerate(["fy1", "fy2", "fy3"]):
+            vals = [revision_row.get(f"{fy}_{w}", np.nan) for w in REV_WIN_KEYS]
+            vals = [v * 100 if pd.notna(v) else None for v in vals]
+            fig.add_trace(go.Bar(
+                x=REV_WIN_LABELS, y=vals, name=f"FY{fy_idx + 1}E", marker_color=FY_COLORS[fy_idx],
+                opacity=0.85, hovertemplate="%{x}: %{y:+.2f}%<extra>FY" + str(fy_idx + 1) + "E</extra>",
+            ), row=1, col=2)
+    else:
+        fig.add_annotation(
+            x=0.81, y=0.5, xref="paper", yref="paper", text="No revision data",
+            showarrow=False, font=dict(size=12, color=GREY_LINE),
+        )
 
     fig.update_layout(
-        height=480, width=1100,
+        height=520, width=1600,
         paper_bgcolor=DGREY, plot_bgcolor=LGREY,
         font=dict(family="Arial, sans-serif", color=TEXTCLR, size=12),
         title=dict(
@@ -194,24 +247,27 @@ def build_channel_chart(row, company_name):
                 f"R²={row['R2']:.2f}  ·  Z={row['Z_Score']:.2f}σ  ·  "
                 f"10Y Outperformance vs {BENCH_TICKER}: {row['Outperformance_%']:+.0f}%"
             ),
-            font=dict(size=15, color=TEXTCLR), x=0.03, y=0.96,
+            font=dict(size=15, color=TEXTCLR), x=0.03, y=0.97,
         ),
-        margin=dict(t=60, b=40, l=60, r=160),
+        margin=dict(t=90, b=40, l=60, r=40),
         hovermode="x unified",
-        legend=dict(orientation="h", y=1.1, x=0.0, font=dict(size=10)),
+        barmode="group",
+        legend=dict(orientation="h", y=1.13, x=0.64, font=dict(size=10)),
     )
-    fig.update_yaxes(title_text="Price (log)", type="log", gridcolor="#555", gridwidth=0.5, zeroline=False)
+    fig.update_yaxes(title_text="Price (log)", type="log", gridcolor="#555", gridwidth=0.5, zeroline=False, row=1, col=1)
+    fig.update_yaxes(title_text="Revenue Revision %", ticksuffix="%", gridcolor="#555", gridwidth=0.5, zeroline=True, zerolinecolor="#555", row=1, col=2)
     fig.update_xaxes(gridcolor="#555", gridwidth=0.4)
+    for ann in fig["layout"]["annotations"]:
+        if ann.text in ("10Y Regression Channel", "Analyst Revenue Revision Trend"):
+            ann.font.size = 12
+            ann.font.color = TEXTCLR
 
     fig.add_layout_image(dict(
-        source=LOGO_B64, xref="paper", yref="paper", x=1.0, y=1.12,
-        sizex=0.14, sizey=0.14, xanchor="right", yanchor="bottom",
+        source=LOGO_B64, xref="paper", yref="paper", x=1.0, y=1.16,
+        sizex=0.10, sizey=0.10, xanchor="right", yanchor="bottom",
         opacity=0.90, layer="above",
     ))
     return fig
-
-
-GREY_LINE = "#8E8E93"
 
 
 def fig_to_div(fig):
@@ -242,7 +298,7 @@ def build_summary_table(rows):
     return "".join(html)
 
 
-def build_section(rows, title, name_map):
+def build_section(rows, title, name_map, revision_map):
     rows = sorted(rows, key=lambda r: r["R2"], reverse=True)
     keep_n = max(1, int(np.ceil(len(rows) * TOP_R2_FRACTION))) if rows else 0
     survivors = rows[:keep_n]
@@ -260,8 +316,9 @@ def build_section(rows, title, name_map):
 
     for row in survivors:
         company_name = name_map.get(row["Ticker"], row["Ticker"])
+        revision_row = revision_map.get(row["Ticker"])
         try:
-            fig = build_channel_chart(row, company_name)
+            fig = build_channel_chart(row, company_name, revision_row)
             parts.append(f'<div class="chart-wrap">{fig_to_div(fig)}</div>')
         except Exception as exc:
             print(f"  chart error {row['Ticker']}: {exc}")
@@ -274,6 +331,7 @@ def main():
     today = datetime.now()
 
     universe, name_map = load_universe()
+    revision_map = load_revision_map()
     print(f"Universe: {len(universe)} unique tickers")
 
     print(f"Downloading {BENCH_TICKER} ({LOOKBACK_PERIOD})...")
@@ -302,8 +360,8 @@ def main():
     top_rows = [r for r in rows if r["Position"] == "Top"]
 
     parts = []
-    parts.append(build_section(bottom_rows, "Bottom of Channel", name_map))
-    parts.append(build_section(top_rows, "Top of Channel", name_map))
+    parts.append(build_section(bottom_rows, "Bottom of Channel", name_map, revision_map))
+    parts.append(build_section(top_rows, "Top of Channel", name_map, revision_map))
 
     html = PAGE_TEMPLATE.format(date_str=today.strftime("%B %d, %Y"), body="\n".join(parts))
     out_path = os.path.join(OUTPUT_DIR, "Channel_Screener_latest.html")
@@ -326,7 +384,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .section {{ padding: 28px 32px 4px; }}
   .section h2 {{ margin: 0; font-size: 20px; color: #E8E8E8; border-bottom: 2px solid #C67A29; display: inline-block; padding-bottom: 4px; }}
   .section-sub {{ color: #8E8E93; font-size: 13px; margin: 6px 0 16px; }}
-  .chart-wrap {{ padding: 8px 24px; }}
+  .chart-wrap {{ padding: 8px 12px; }}
   table.summary {{ border-collapse: collapse; width: 100%; font-size: 13px; }}
   table.summary th, table.summary td {{ padding: 6px 12px; text-align: right; border-bottom: 1px solid #3A3A3C; }}
   table.summary th:first-child, table.summary td:first-child {{ text-align: left; }}
