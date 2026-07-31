@@ -142,6 +142,21 @@ def load_cap_map():
     return cap_map
 
 
+def load_sector_map():
+    """Ticker -> (Sector, Industry) lookup from the Koyfin CSV export. Empty
+    for tickers not present there, since sector/industry labels are a
+    nice-to-have annotation, not a screening input."""
+    if not os.path.exists(KOYFIN_US_PATH):
+        print(f"  no Koyfin export at {KOYFIN_US_PATH}, sector/industry labels will be blank")
+        return {}
+    df = pd.read_csv(KOYFIN_US_PATH)
+    df["Ticker"] = df["Ticker"].astype(str).str.strip().str.upper().str.replace(".", "-", regex=False)
+    return {
+        row["Ticker"]: (row.get("Sector", "") or "", row.get("Industry", "") or "")
+        for _, row in df.iterrows()
+    }
+
+
 def close_series_single(ticker, raw):
     if isinstance(raw.columns, pd.MultiIndex):
         raw = raw.copy()
@@ -242,7 +257,7 @@ def add_composite_scores(rows):
     return rows
 
 
-def build_channel_chart(row, company_name, revision_row=None):
+def build_channel_chart(row, company_name, revision_row=None, sector_industry=None):
     close = row["_close"]
     x, slope, intercept, std = row["_x"], row["_slope"], row["_intercept"], row["_std"]
     center = np.exp(intercept + slope * x)
@@ -279,6 +294,7 @@ def build_channel_chart(row, company_name, revision_row=None):
             showarrow=False, font=dict(size=12, color=GREY_LINE),
         )
 
+    sector_line = f"<br><span style=\"font-size:12px;color:{GREY_LINE}\">{sector_industry}</span>" if sector_industry else ""
     fig.update_layout(
         height=520, width=1600,
         paper_bgcolor=DGREY, plot_bgcolor=LGREY,
@@ -287,11 +303,11 @@ def build_channel_chart(row, company_name, revision_row=None):
             text=(
                 f"<b>{row['Ticker']}</b>  ·  {company_name}  ·  "
                 f"Score={row['Composite_Score']:.0f}  ·  R²={row['R2']:.2f}  ·  "
-                f"1Y Return: {row['1Y_Return_%']:+.0f}%  ·  Z={row['Z_Score']:.2f}σ"
+                f"1Y Return: {row['1Y_Return_%']:+.0f}%  ·  Z={row['Z_Score']:.2f}σ{sector_line}"
             ),
             font=dict(size=15, color=TEXTCLR), x=0.03, y=0.97,
         ),
-        margin=dict(t=90, b=40, l=60, r=40),
+        margin=dict(t=105 if sector_industry else 90, b=40, l=60, r=40),
         hovermode="x unified",
         barmode="group",
         legend=dict(orientation="h", y=1.13, x=0.64, font=dict(size=10)),
@@ -342,7 +358,7 @@ def build_summary_table(rows):
     return "".join(html)
 
 
-def build_section(rows, name_map, revision_map):
+def build_section(rows, name_map, revision_map, sector_map=None):
     rows = sorted(rows, key=lambda r: r["Composite_Score"], reverse=True)
     survivors = rows[:TOP_N]
     print(f"{len(rows)} candidates pass all filters, keeping top {len(survivors)} by composite score")
@@ -361,8 +377,10 @@ def build_section(rows, name_map, revision_map):
     for row in survivors:
         company_name = name_map.get(row["Ticker"], row["Ticker"])
         revision_row = revision_map.get(row["Ticker"])
+        sector, industry = (sector_map or {}).get(row["Ticker"], ("", ""))
+        sector_industry = " | ".join(s for s in (sector, industry) if s)
         try:
-            fig = build_channel_chart(row, company_name, revision_row)
+            fig = build_channel_chart(row, company_name, revision_row, sector_industry)
             parts.append(f'<div class="chart-wrap" data-cap="{row["Cap"]}">{fig_to_div(fig)}</div>')
         except Exception as exc:
             print(f"  chart error {row['Ticker']}: {exc}")
@@ -377,6 +395,7 @@ def main():
     universe, name_map = load_universe()
     revision_map = load_revision_map()
     cap_map = load_cap_map()
+    sector_map = load_sector_map()
     print(f"Universe: {len(universe)} unique tickers")
 
     print(f"Downloading {BENCH_TICKER} ({LOOKBACK_PERIOD})...")
@@ -403,7 +422,7 @@ def main():
     print(f"{len(rows)} tickers pass the uptrend + R^2 + return filters")
     rows = add_composite_scores(rows)
 
-    body = build_section(rows, name_map, revision_map)
+    body = build_section(rows, name_map, revision_map, sector_map)
 
     html = PAGE_TEMPLATE.format(date_str=today.strftime("%B %d, %Y"), body=body,
                                  cap_css=CAP_FILTER_CSS, cap_js=CAP_FILTER_JS, cap_control=CAP_FILTER_CONTROL_HTML)

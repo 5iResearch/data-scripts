@@ -49,6 +49,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT_DIR = os.path.join(REPO_ROOT, "outputs", "channel-screener-cdn")
 LOGO_PATH = os.path.join(REPO_ROOT, "assets", "Logo_Transparent_1200px.png")
 REV_SCREENER_PATH = os.path.join(REPO_ROOT, "data", "cdn_1w_rev_est_screener.csv")
+KOYFIN_CDN_PATH = os.path.join(REPO_ROOT, "data", "koyfin_cdn.csv")
 
 BENCH_TICKER = "XIC.TO"
 BENCH_LABEL = "XIC"
@@ -96,8 +97,8 @@ def to_yf_ticker(raw_ticker):
 
 def load_universe():
     tsx_symbols = load_tsx_symbols()  # already ".TO"-suffixed
-    rev_df = pd.read_csv(REV_SCREENER_PATH)
-    rev_tickers_raw = rev_df["Ticker"].dropna().astype(str).tolist()
+    rev_df = pd.read_csv(REV_SCREENER_PATH).dropna(subset=["Ticker"])
+    rev_tickers_raw = rev_df["Ticker"].astype(str).tolist()
     rev_tickers = [to_yf_ticker(t) for t in rev_tickers_raw]
     name_map = {to_yf_ticker(t): n for t, n in zip(rev_df["Ticker"].astype(str), rev_df["Name"].astype(str))}
 
@@ -110,7 +111,7 @@ def load_revision_map():
     """Ticker (.TO-suffixed) -> dict of FY1E/FY2E/FY3E revenue-estimate revision %s
     (1W/1M/3M/6M/1Y), for the analyst revision cascade panel. Only covers tickers
     present in the rev-screener CSV; other universe names simply won't get this panel."""
-    raw = pd.read_csv(REV_SCREENER_PATH)
+    raw = pd.read_csv(REV_SCREENER_PATH).dropna(subset=["Ticker"])
     df = raw.rename(columns=REV_COL_MAP)
     keep = [c for c in REV_COL_MAP.values() if c in df.columns]
     df = df[keep].copy()
@@ -125,10 +126,25 @@ def load_cap_map():
     """Ticker (.TO-suffixed) -> Market Cap ($M), for the cap-tier filter. Only covers
     tickers present in the rev-screener CSV; TSX-universe names outside that CSV
     fall back to "Unknown" in cap_tier()."""
-    raw = pd.read_csv(REV_SCREENER_PATH)
+    raw = pd.read_csv(REV_SCREENER_PATH).dropna(subset=["Ticker"])
     tickers = raw["Ticker"].astype(str).map(to_yf_ticker)
     mktcap = pd.to_numeric(raw["Market Cap"], errors="coerce")
     return dict(zip(tickers, mktcap))
+
+
+def load_sector_map():
+    """Ticker (no .TO suffix) -> (Sector, Industry) from the Koyfin CDN CSV
+    export. Empty for tickers not present there, since sector/industry
+    labels are a nice-to-have annotation, not a screening input."""
+    if not os.path.exists(KOYFIN_CDN_PATH):
+        print(f"  no Koyfin export at {KOYFIN_CDN_PATH}, sector/industry labels will be blank")
+        return {}
+    df = pd.read_csv(KOYFIN_CDN_PATH)
+    df["Ticker"] = df["Ticker"].astype(str).str.strip().str.upper()
+    return {
+        row["Ticker"]: (row.get("Sector", "") or "", row.get("Industry", "") or "")
+        for _, row in df.iterrows()
+    }
 
 
 def close_series_single(ticker, raw):
@@ -221,7 +237,7 @@ def score_ticker(close, bench_close):
     }
 
 
-def build_channel_chart(row, company_name, revision_row=None):
+def build_channel_chart(row, company_name, revision_row=None, sector_industry=None):
     close = row["_close"]
     x, slope, intercept, std = row["_x"], row["_slope"], row["_intercept"], row["_std"]
     center = np.exp(intercept + slope * x)
@@ -259,6 +275,7 @@ def build_channel_chart(row, company_name, revision_row=None):
         )
 
     ticker_display = row["Ticker"][:-3] if row["Ticker"].endswith(".TO") else row["Ticker"]
+    sector_line = f"<br><span style=\"font-size:12px;color:{GREY_LINE}\">{sector_industry}</span>" if sector_industry else ""
     fig.update_layout(
         height=520, width=1600,
         paper_bgcolor=DGREY, plot_bgcolor=LGREY,
@@ -267,11 +284,11 @@ def build_channel_chart(row, company_name, revision_row=None):
             text=(
                 f"<b>{ticker_display}</b>  ·  {company_name}  ·  "
                 f"R²={row['R2']:.2f}  ·  Z={row['Z_Score']:.2f}σ  ·  "
-                f"10Y Outperformance vs {BENCH_LABEL}: {row['Outperformance_%']:+.0f}%"
+                f"10Y Outperformance vs {BENCH_LABEL}: {row['Outperformance_%']:+.0f}%{sector_line}"
             ),
             font=dict(size=15, color=TEXTCLR), x=0.03, y=0.97,
         ),
-        margin=dict(t=90, b=40, l=60, r=40),
+        margin=dict(t=105 if sector_industry else 90, b=40, l=60, r=40),
         hovermode="x unified",
         barmode="group",
         legend=dict(orientation="h", y=1.13, x=0.64, font=dict(size=10)),
@@ -322,7 +339,7 @@ def build_summary_table(rows):
     return "".join(html)
 
 
-def build_section(rows, title, name_map, revision_map):
+def build_section(rows, title, name_map, revision_map, sector_map=None):
     rows = sorted(rows, key=lambda r: r["R2"], reverse=True)
     keep_n = max(1, int(np.ceil(len(rows) * TOP_R2_FRACTION))) if rows else 0
     survivors = rows[:keep_n]
@@ -341,8 +358,11 @@ def build_section(rows, title, name_map, revision_map):
     for row in survivors:
         company_name = name_map.get(row["Ticker"], row["Ticker"][:-3] if row["Ticker"].endswith(".TO") else row["Ticker"])
         revision_row = revision_map.get(row["Ticker"])
+        bare_ticker = row["Ticker"][:-3] if row["Ticker"].endswith(".TO") else row["Ticker"]
+        sector, industry = (sector_map or {}).get(bare_ticker, ("", ""))
+        sector_industry = " | ".join(s for s in (sector, industry) if s)
         try:
-            fig = build_channel_chart(row, company_name, revision_row)
+            fig = build_channel_chart(row, company_name, revision_row, sector_industry)
             parts.append(f'<div class="chart-wrap" data-cap="{row["Cap"]}">{fig_to_div(fig)}</div>')
         except Exception as exc:
             print(f"  chart error {row['Ticker']}: {exc}")
@@ -357,6 +377,7 @@ def main():
     universe, name_map = load_universe()
     revision_map = load_revision_map()
     cap_map = load_cap_map()
+    sector_map = load_sector_map()
     print(f"Universe: {len(universe)} unique tickers")
 
     print(f"Downloading {BENCH_TICKER} ({LOOKBACK_PERIOD})...")
@@ -386,8 +407,8 @@ def main():
     top_rows = [r for r in rows if r["Position"] == "Top"]
 
     parts = []
-    parts.append(build_section(bottom_rows, "Bottom of Channel", name_map, revision_map))
-    parts.append(build_section(top_rows, "Top of Channel", name_map, revision_map))
+    parts.append(build_section(bottom_rows, "Bottom of Channel", name_map, revision_map, sector_map))
+    parts.append(build_section(top_rows, "Top of Channel", name_map, revision_map, sector_map))
 
     html = PAGE_TEMPLATE.format(date_str=today.strftime("%B %d, %Y"), body="\n".join(parts),
                                  cap_css=CAP_FILTER_CSS, cap_js=CAP_FILTER_JS, cap_control=CAP_FILTER_CONTROL_HTML)
