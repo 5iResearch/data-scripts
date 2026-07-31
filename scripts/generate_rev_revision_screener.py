@@ -41,6 +41,8 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT_DIR = os.path.join(REPO_ROOT, "outputs", "rev-revision-screener")
 US_CSV_PATH = os.path.join(REPO_ROOT, "data", "us_1w_rev_est_screener.csv")
 CDN_CSV_PATH = os.path.join(REPO_ROOT, "data", "cdn_1w_rev_est_screener.csv")
+KOYFIN_US_PATH = os.path.join(REPO_ROOT, "data", "koyfin_us.csv")
+KOYFIN_CDN_PATH = os.path.join(REPO_ROOT, "data", "koyfin_cdn.csv")
 
 ORANGE, BLUE, DBLUE, GREEN, RED = "#C67A29", "#1F79BE", "#4B8EA9", "#44A660", "#A22A2A"
 BG, PANEL, GRID, TEXT, SUBTEXT = "#0f1117", "#1a1d27", "#2d3148", "#e2e5f0", "#8b90a4"
@@ -90,6 +92,21 @@ DISPLAY_COLS = [
     ("avg_magnitude_1y", "Avg 1Y Rev%"), ("all_fy_pos_1w", "All FY 1W+"),
     ("vs_bench_10y", "10Y vs Bench"),
 ]
+
+
+def load_koyfin_sector_map(path):
+    """Ticker -> (Sector, Industry) lookup from a Koyfin CSV export. Empty
+    dict (rather than raising) if the export isn't present, since sector/
+    industry labels are a nice-to-have annotation, not a screening input."""
+    if not os.path.exists(path):
+        print(f"  no Koyfin export at {path}, sector/industry labels will be blank")
+        return {}
+    df = pd.read_csv(path)
+    df["Ticker"] = df["Ticker"].astype(str).str.strip().str.upper()
+    return {
+        row["Ticker"]: (row.get("Sector", "") or "", row.get("Industry", "") or "")
+        for _, row in df.iterrows()
+    }
 
 
 def load_rev_csv(path):
@@ -279,8 +296,9 @@ def build_table_html(spotlight, caption_label, bench_label="Bench"):
     return styler.to_html()
 
 
-def make_spotlight(row, price_series=None, vs_bench=None, bench_label="Bench"):
+def make_spotlight(row, price_series=None, vs_bench=None, bench_label="Bench", sector_map=None):
     ticker, name, tier = row["ticker"], row["name"], row["tier"]
+    sector, industry = (sector_map or {}).get(ticker.upper(), ("", ""))
     tc = TIER_COLORS.get(tier, SUBTEXT)
     rank, cs = int(row["rank"]), int(row["cascade_score"])
     avg1w = row["avg_1w"]
@@ -324,7 +342,10 @@ def make_spotlight(row, price_series=None, vs_bench=None, bench_label="Bench"):
     else:
         vs_bench_html = f'<span style="color:{RED}">10Y vs {bench_label}: ✗ {vs_bench:+.0f}%</span>'
 
-    subtitle = f"Rank #{rank} | {tier} | Cascade {cs}/9 | Avg 1W rev: {w1_str} | {vs_bench_html}"
+    sector_industry = " | ".join(s for s in (sector, industry) if s)
+    sector_html = f'<span style="color:{SUBTEXT}">{sector_industry}</span><br>' if sector_industry else ""
+
+    subtitle = f"{sector_html}Rank #{rank} | {tier} | Cascade {cs}/9 | Avg 1W rev: {w1_str} | {vs_bench_html}"
 
     fig.update_layout(
         title=dict(text=(f'<b><span style="font-size:26px;color:{tc}">{ticker}</span>'
@@ -332,7 +353,7 @@ def make_spotlight(row, price_series=None, vs_bench=None, bench_label="Bench"):
                          f'<span style="font-size:12px;color:#8b90a4">{subtitle}</span>'),
                    x=0.0, xanchor="left", y=0.97, yanchor="top", pad=dict(l=10, t=10)),
         paper_bgcolor=BG, plot_bgcolor=PANEL, font=dict(color=TEXT, family="DejaVu Sans, Arial"),
-        height=400, margin=dict(l=60, r=60, t=110, b=50), barmode="group", showlegend=True,
+        height=420, margin=dict(l=60, r=60, t=125, b=50), barmode="group", showlegend=True,
         legend=dict(bgcolor=BG, bordercolor=GRID, borderwidth=1, x=0.57, y=0.25, font=dict(size=11)),
     )
     fig.update_xaxes(gridcolor=GRID, zeroline=False)
@@ -356,7 +377,7 @@ def section_header(title: str, subtitle: str = "") -> str:
 
 
 def build_section(ranked, table_caption, section_title, section_sub, yf_ticker_fn=None,
-                   bench_series=None, bench_label="Bench"):
+                   bench_series=None, bench_label="Bench", sector_map=None):
     parts = [section_header(section_title, section_sub)]
     if ranked.empty:
         parts.append('<div class="section" style="color:#8b90a4;">No names passed the screen today.</div>')
@@ -376,7 +397,7 @@ def build_section(ranked, table_caption, section_title, section_sub, yf_ticker_f
 
     for _, row in spotlight.iterrows():
         pser = price_data.get(yf_ticker_fn(row["ticker"]))
-        fig = make_spotlight(row, pser, vs_bench=row["vs_bench_10y"], bench_label=bench_label)
+        fig = make_spotlight(row, pser, vs_bench=row["vs_bench_10y"], bench_label=bench_label, sector_map=sector_map)
         parts.append(f'<div data-cap="{row["cap_bucket"]}">{fig_to_div(fig)}</div>')
     return parts
 
@@ -388,6 +409,10 @@ def main():
     print("=== Benchmarks ===")
     qqq_series = download_bench_series("QQQ")
     xic_series = download_bench_series("XIC.TO")
+
+    print("=== Sector/Industry lookups ===")
+    us_sector_map = load_koyfin_sector_map(KOYFIN_US_PATH)
+    cdn_sector_map = load_koyfin_sector_map(KOYFIN_CDN_PATH)
 
     # ── Section 1: US S&P 500 ────────────────────────────────────────────────
     print("=== US S&P 500 ===")
@@ -404,7 +429,7 @@ def main():
     sp500_ranked = rank_by_revisions(sp500_rev_df)
     parts += build_section(sp500_ranked, "US S&P 500 Revenue Revision Screener",
                             "Section 1 - US S&P 500", "Gated on FY1E+FY2E 1W revisions positive, no price/trend filter",
-                            bench_series=qqq_series, bench_label="QQQ")
+                            bench_series=qqq_series, bench_label="QQQ", sector_map=us_sector_map)
 
     # ── Section 2: All-US ~2,000 names ───────────────────────────────────────
     print("=== All-US ~2,000 names ===")
@@ -412,7 +437,7 @@ def main():
     parts += build_section(all_us_ranked, "All-US Revenue Revision Screener (Full CSV ~2k)",
                             "Section 2 - All-US (~2,000-Name CSV Universe)",
                             "Same screen, full revision-CSV universe rather than just S&P 500",
-                            bench_series=qqq_series, bench_label="QQQ")
+                            bench_series=qqq_series, bench_label="QQQ", sector_map=us_sector_map)
 
     # ── Section 3: Canada ────────────────────────────────────────────────────
     print("=== Canada ===")
@@ -428,7 +453,8 @@ def main():
     parts += build_section(cdn_ranked, "CDN Revenue Revision Screener",
                             "Section 3 - Canada",
                             "Gated on FY1E+FY2E 1W AND 1M revisions positive, no price/trend filter",
-                            yf_ticker_fn=cdn_to_yf, bench_series=xic_series, bench_label="XIC.TO")
+                            yf_ticker_fn=cdn_to_yf, bench_series=xic_series, bench_label="XIC.TO",
+                            sector_map=cdn_sector_map)
 
     html = PAGE_TEMPLATE.format(date_str=datetime.now().strftime("%B %d, %Y"), body="\n".join(parts),
                                  cap_css=CAP_FILTER_CSS, cap_js=CAP_FILTER_JS, cap_control=CAP_FILTER_CONTROL_HTML)
