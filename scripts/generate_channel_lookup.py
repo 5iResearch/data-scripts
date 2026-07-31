@@ -264,6 +264,16 @@ def main():
     print(f"Got price history for {len(cdn_close_map)} CDN tickers")
 
     records = {}
+
+    if qqq_close is not None:
+        rec = build_ticker_record(US_BENCH, qqq_close.rename(US_BENCH), "Invesco QQQ Trust", "", "ETF", None, US_BENCH, None)
+        if rec:
+            records[US_BENCH] = rec
+    if xic_close is not None:
+        rec = build_ticker_record(CDN_BENCH, xic_close.rename(CDN_BENCH), "iShares S&P/TSX Capped Composite ETF", "", "ETF", None, CDN_BENCH, None)
+        if rec:
+            records[CDN_BENCH] = rec
+
     for ticker, close in us_close_map.items():
         sector, industry = us_sectors.get(ticker, ("", ""))
         si = " | ".join(s for s in (sector, industry) if s)
