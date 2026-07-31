@@ -22,6 +22,7 @@ browser only for tickers actually looked up, so the page stays light no
 matter how big the underlying universe gets.
 """
 
+import base64
 import json
 import os
 import sys
@@ -45,6 +46,7 @@ from common_screening import (
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT_DIR = os.path.join(REPO_ROOT, "outputs", "channel-lookup")
+LOGO_PATH = os.path.join(REPO_ROOT, "assets", "Logo_Transparent_1200px.png")
 US_REV_PATH = os.path.join(REPO_ROOT, "data", "us_1w_rev_est_screener.csv")
 CDN_REV_PATH = os.path.join(REPO_ROOT, "data", "cdn_1w_rev_est_screener.csv")
 KOYFIN_US_PATH = os.path.join(REPO_ROOT, "data", "koyfin_us.csv")
@@ -304,8 +306,12 @@ def main():
 
     print(f"Built {len(records)} ticker records")
 
+    with open(LOGO_PATH, "rb") as f:
+        logo_b64 = "data:image/png;base64," + base64.b64encode(f.read()).decode()
+
     data_json = json.dumps(records, separators=(",", ":"), allow_nan=False)
-    html = PAGE_TEMPLATE.format(date_str=today.strftime("%B %d, %Y"), data_json=data_json, count=len(records))
+    html = PAGE_TEMPLATE.format(date_str=today.strftime("%B %d, %Y"), data_json=data_json, count=len(records),
+                                 logo_b64=logo_b64)
     out_path = os.path.join(OUTPUT_DIR, "Channel_Lookup.html")
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(html)
@@ -333,14 +339,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .controls button:hover {{ background: #d98b36; }}
   .not-found {{ padding: 0 32px; color: #A22A2A; font-size: 13px; min-height: 18px; }}
   .placeholder {{ padding: 40px 32px; color: #8E8E93; font-size: 14px; }}
-  .card {{ margin: 20px 32px; border: 1px solid #3A3A3C; border-radius: 6px; overflow: hidden; }}
-  .card-header {{ padding: 12px 16px; background: #2A2A2C; font-size: 13px; line-height: 1.5; }}
-  .card-header b {{ font-size: 17px; color: #C67A29; }}
-  .card-header .sector {{ color: #8E8E93; }}
-  .charts-row {{ display: flex; flex-wrap: wrap; }}
-  .chart-half {{ flex: 1 1 480px; min-width: 320px; }}
-  .no-data {{ flex: 1 1 380px; min-width: 320px; display: flex; align-items: center; justify-content: center;
-    color: #8E8E93; font-size: 13px; height: 420px; }}
+  .chart-wrap {{ padding: 8px 12px; overflow-x: auto; }}
 </style>
 </head>
 <body>
@@ -364,6 +363,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 
 <script>
 const DATA = {data_json};
+const LOGO_B64 = "{logo_b64}";
 
 document.getElementById('tickerInput').addEventListener('keydown', function (e) {{
   if (e.key === 'Enter') {{ e.preventDefault(); renderTickers(); }}
@@ -410,67 +410,64 @@ function renderTickers() {{
 
 function renderCard(rec, i, container) {{
   var wrap = document.createElement('div');
-  wrap.className = 'card';
-
-  var posLabel = rec.z <= -1.5 ? 'near bottom of channel' : (rec.z >= 1.5 ? 'near top of channel' : 'mid-channel');
-  var outpStr = (rec.outp === null || rec.outp === undefined) ? '\\u2014' : ((rec.outp >= 0 ? '+' : '') + rec.outp.toFixed(0) + '%');
-  var header = document.createElement('div');
-  header.className = 'card-header';
-  header.innerHTML = '<b>' + rec.t + '</b> &middot; ' + rec.n + ' &middot; R&sup2;=' + rec.r2.toFixed(2) +
-    ' &middot; Z=' + rec.z.toFixed(2) + '&sigma; (' + posLabel + ') &middot; ' + rec.yrs + 'Y Return: ' + rec.ret.toFixed(0) +
-    '% &middot; vs ' + rec.bench + ': ' + outpStr +
-    (rec.si ? ('<br><span class="sector">' + rec.si + '</span>') : '');
-  wrap.appendChild(header);
-
-  var chartsRow = document.createElement('div');
-  chartsRow.className = 'charts-row';
-  var priceDiv = document.createElement('div');
-  priceDiv.className = 'chart-half';
-  priceDiv.id = 'price-' + i;
-  chartsRow.appendChild(priceDiv);
-
-  var revDiv = document.createElement('div');
-  revDiv.id = 'rev-' + i;
-  if (rec.rev) {{ revDiv.className = 'chart-half'; }} else {{ revDiv.className = 'no-data'; revDiv.textContent = 'No revision data'; }}
-  chartsRow.appendChild(revDiv);
-
-  wrap.appendChild(chartsRow);
+  wrap.className = 'chart-wrap';
+  wrap.id = 'chart-' + i;
   container.appendChild(wrap);
 
   var center = rec.x.map(function (x) {{ return Math.exp(rec.ic + rec.sl * x); }});
   var upper = rec.x.map(function (x) {{ return Math.exp(rec.ic + rec.sl * x + 2 * rec.sd); }});
   var lower = rec.x.map(function (x) {{ return Math.exp(rec.ic + rec.sl * x - 2 * rec.sd); }});
 
-  Plotly.newPlot(priceDiv.id, [
-    {{ x: rec.d, y: upper, mode: 'lines', line: {{ color: '#8E8E93', width: 1, dash: 'dot' }}, showlegend: false, hoverinfo: 'skip' }},
-    {{ x: rec.d, y: lower, mode: 'lines', line: {{ color: '#8E8E93', width: 1, dash: 'dot' }}, fill: 'tonexty', fillcolor: 'rgba(255,255,255,0.05)', showlegend: false, hoverinfo: 'skip' }},
-    {{ x: rec.d, y: center, mode: 'lines', line: {{ color: '#C67A29', width: 1.5, dash: 'dash' }}, showlegend: false, hoverinfo: 'skip' }},
-    {{ x: rec.d, y: rec.p, mode: 'lines', line: {{ color: '#1F79BE', width: 1.8 }}, showlegend: false, name: 'Close' }}
-  ], {{
-    height: 420, paper_bgcolor: '#363636', plot_bgcolor: '#4A4A4A',
-    font: {{ color: '#E8E8E8', family: 'Arial, sans-serif', size: 11 }},
-    margin: {{ t: 34, b: 40, l: 55, r: 20 }},
-    yaxis: {{ title: 'Price (log)', type: 'log', gridcolor: '#555', zeroline: false }},
-    xaxis: {{ gridcolor: '#555' }},
-    title: {{ text: rec.yrs + 'Y Regression Channel', font: {{ size: 12, color: '#e2e5f0' }} }}
-  }}, {{ responsive: true, displayModeBar: false }});
+  var traces = [
+    {{ x: rec.d, y: upper, mode: 'lines', line: {{ color: '#8E8E93', width: 1, dash: 'dot' }}, name: '+2σ', showlegend: false, xaxis: 'x', yaxis: 'y' }},
+    {{ x: rec.d, y: lower, mode: 'lines', line: {{ color: '#8E8E93', width: 1, dash: 'dot' }}, name: '-2σ', fill: 'tonexty', fillcolor: 'rgba(255,255,255,0.05)', showlegend: false, xaxis: 'x', yaxis: 'y' }},
+    {{ x: rec.d, y: center, mode: 'lines', line: {{ color: '#C67A29', width: 1.5, dash: 'dash' }}, name: 'Regression', showlegend: false, xaxis: 'x', yaxis: 'y' }},
+    {{ x: rec.d, y: rec.p, mode: 'lines', line: {{ color: '#1F79BE', width: 1.8 }}, name: 'Close', showlegend: false, xaxis: 'x', yaxis: 'y' }},
+    {{ x: [rec.d[rec.d.length - 1]], y: [rec.p[rec.p.length - 1]], mode: 'markers',
+      marker: {{ color: '#A22A2A', size: 9, line: {{ color: '#E8E8E8', width: 1 }} }},
+      name: 'Last', showlegend: false, xaxis: 'x', yaxis: 'y',
+      hovertemplate: 'Z=' + rec.z.toFixed(2) + 'σ<extra></extra>' }}
+  ];
+
+  var annotations = [
+    {{ font: {{ size: 12, color: '#E8E8E8' }}, showarrow: false, text: rec.yrs + 'Y Regression Channel', x: 0.2821, xanchor: 'center', xref: 'paper', y: 1.0, yanchor: 'bottom', yref: 'paper' }},
+    {{ font: {{ size: 12, color: '#E8E8E8' }}, showarrow: false, text: 'Analyst Revenue Revision Trend', x: 0.8271, xanchor: 'center', xref: 'paper', y: 1.0, yanchor: 'bottom', yref: 'paper' }}
+  ];
 
   if (rec.rev) {{
     var winLabels = ['1W', '1M', '3M', '6M', '1Y'];
     var fyColors = ['#1F79BE', '#4B8EA9', '#C67A29'];
-    var traces = [1, 2, 3].map(function (fy) {{
-      return {{ x: winLabels, y: rec.rev['fy' + fy], type: 'bar', name: 'FY' + fy + 'E', marker: {{ color: fyColors[fy - 1], opacity: 0.85 }} }};
+    [1, 2, 3].forEach(function (fy) {{
+      traces.push({{ x: winLabels, y: rec.rev['fy' + fy], type: 'bar', name: 'FY' + fy + 'E',
+        marker: {{ color: fyColors[fy - 1], opacity: 0.85 }}, xaxis: 'x2', yaxis: 'y2',
+        hovertemplate: '%{{x}}: %{{y:+.2f}}%<extra>FY' + fy + 'E</extra>' }});
     }});
-    Plotly.newPlot(revDiv.id, traces, {{
-      height: 420, paper_bgcolor: '#363636', plot_bgcolor: '#4A4A4A',
-      font: {{ color: '#E8E8E8', family: 'Arial, sans-serif', size: 11 }},
-      margin: {{ t: 34, b: 40, l: 55, r: 20 }}, barmode: 'group',
-      yaxis: {{ title: 'Revenue Revision %', ticksuffix: '%', gridcolor: '#555', zeroline: true, zerolinecolor: '#555' }},
-      xaxis: {{ gridcolor: '#555' }},
-      legend: {{ orientation: 'h', y: 1.18, font: {{ size: 10 }} }},
-      title: {{ text: 'Analyst Revenue Revision Trend', font: {{ size: 12, color: '#e2e5f0' }} }}
-    }}, {{ responsive: true, displayModeBar: false }});
+  }} else {{
+    annotations.push({{ x: 0.81, y: 0.5, xref: 'paper', yref: 'paper', text: 'No revision data', showarrow: false, font: {{ size: 12, color: '#8E8E93' }} }});
   }}
+
+  var posLabel = rec.z <= -1.5 ? 'near bottom of channel' : (rec.z >= 1.5 ? 'near top of channel' : 'mid-channel');
+  var outpStr = (rec.outp === null || rec.outp === undefined) ? '\\u2014' : ((rec.outp >= 0 ? '+' : '') + rec.outp.toFixed(0) + '%');
+  var titleText = '<b>' + rec.t + '</b>  ·  ' + rec.n + '  ·  R²=' + rec.r2.toFixed(2) +
+    '  ·  Z=' + rec.z.toFixed(2) + 'σ (' + posLabel + ')  ·  ' + rec.yrs + 'Y Return: ' + rec.ret.toFixed(0) +
+    '%  ·  vs ' + rec.bench + ': ' + outpStr +
+    (rec.si ? ('<br><span style="font-size:12px;color:#8E8E93">' + rec.si + '</span>') : '');
+
+  Plotly.newPlot(wrap.id, traces, {{
+    height: 520, width: 1600,
+    paper_bgcolor: '#363636', plot_bgcolor: '#4A4A4A',
+    font: {{ family: 'Arial, sans-serif', color: '#E8E8E8', size: 12 }},
+    title: {{ text: titleText, font: {{ size: 15, color: '#E8E8E8' }}, x: 0.03, y: 0.97 }},
+    margin: {{ t: rec.si ? 105 : 90, b: 40, l: 60, r: 40 }},
+    hovermode: 'x unified', barmode: 'group',
+    legend: {{ orientation: 'h', y: 1.13, x: 0.64, font: {{ size: 10 }} }},
+    xaxis: {{ domain: [0.0, 0.5642], gridcolor: '#555', gridwidth: 0.4 }},
+    yaxis: {{ domain: [0.0, 1.0], title: {{ text: 'Price (log)' }}, type: 'log', gridcolor: '#555', gridwidth: 0.5, zeroline: false }},
+    xaxis2: {{ domain: [0.6542, 1.0], anchor: 'y2', gridcolor: '#555', gridwidth: 0.4 }},
+    yaxis2: {{ domain: [0.0, 1.0], anchor: 'x2', title: {{ text: 'Revenue Revision %' }}, ticksuffix: '%', gridcolor: '#555', gridwidth: 0.5, zeroline: true, zerolinecolor: '#555' }},
+    annotations: annotations,
+    images: [{{ source: LOGO_B64, xref: 'paper', yref: 'paper', x: 1.0, y: 1.16, sizex: 0.10, sizey: 0.10, xanchor: 'right', yanchor: 'bottom', opacity: 0.90, layer: 'above' }}]
+  }}, {{ responsive: false, displayModeBar: false }});
 }}
 </script>
 </body>
