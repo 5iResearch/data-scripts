@@ -1,0 +1,41 @@
+name: Daily 10-Year Regression Channel Screener (CDN)
+
+on:
+  schedule:
+    - cron: "0 8 * * 1-5"   # 8:00 AM UTC, weekdays — offset from US Channel Screener (7:50)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-channel-screener-cdn:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Channel Screener (CDN) report
+        timeout-minutes: 50
+        run: |
+          python scripts/generate_channel_screener_cdn.py
+
+      - name: Commit outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add outputs/channel-screener-cdn/
+          git diff --cached --quiet || git commit -m "chore: update CDN channel screener report [skip ci]"
+          git push
