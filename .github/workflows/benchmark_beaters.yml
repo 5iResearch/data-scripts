@@ -52,4 +52,10 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add outputs/benchmark-beaters/
           git diff --cached --quiet || git commit -m "chore: update benchmark beaters output [skip ci]"
-          git push
+          for i in 1 2 3 4 5; do
+            git push && break
+            echo "Push rejected, rebasing onto origin/main and retrying ($i)..."
+            git fetch origin main
+            git rebase origin/main
+            sleep $((RANDOM % 10 + 1))
+          done
