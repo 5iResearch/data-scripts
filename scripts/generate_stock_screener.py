@@ -11,18 +11,28 @@ Differences from the source notebook, deliberate for CI reliability/runtime:
     job on ubuntu-latest.
   - One combined download (deduped across the three lists) instead of three
     separate ones, since S&P 500 and NASDAQ-100 overlap heavily.
-  - 5 years of daily history instead of 25 — plenty for Sharpe/vol/frontier,
-    a fraction of the download+compute cost.
+  - 10 years of daily history instead of 25 — still long enough to see a
+    full-cycle Sharpe/vol/frontier, well under the download+compute cost.
   - Per-ticker detail chart from the notebook is dropped (no natural "which
     ticker" choice for an unattended report); everything else is kept.
+  - The risk/return + efficient-frontier chart is built four times instead
+    of once per index: S&P 500 alone, NASDAQ-100 alone, TSX alone, and a
+    consolidated S&P 500 + NASDAQ-100 chart (deduped where the two overlap,
+    e.g. AAPL/MSFT/NVDA sit in both).
 
-Manual/custom tickers for the efficient frontier ("search for a ticker and
-add it"): set the EXTRA_TICKERS environment variable to a comma-separated
-list (this is wired to a workflow_dispatch input in the GitHub Action, so it
-can be typed into the "Run workflow" form on demand), or edit the WATCHLIST
-constant below for local runs. Those tickers are fetched even if they aren't
-in any index, forced into the efficient-frontier optimization alongside the
-top-Sharpe basket, and always rendered with their own labeled marker.
+── Manually adding your own tickers ──────────────────────────────────────────
+Two ways in, same effect either way — the ticker gets fetched even if it
+isn't in any index, is forced into every chart's efficient-frontier blend
+alongside the top-Sharpe basket, and is always rendered with its own labeled
+gold-diamond marker on all four scatter charts:
+
+  1. Edit the WATCHLIST constant a few lines below (e.g. WATCHLIST =
+     ["RY.TO", "SHOP.TO"]) and re-run the script locally.
+  2. On GitHub: Actions tab -> "Stock Screener (Sharpe / Efficient Frontier)"
+     -> "Run workflow" -> type a comma-separated list into the
+     "extra_tickers" field. That's the workflow_dispatch input wired to the
+     EXTRA_TICKERS environment variable this script reads at runtime — no
+     code edit needed, and it doesn't affect the regular scheduled run.
 """
 
 import base64
@@ -47,12 +57,15 @@ OUTPUT_DIR = os.path.join(REPO_ROOT, "outputs", "stock-screener")
 LOGO_PATH = os.path.join(REPO_ROOT, "assets", "Logo_Transparent_1200px.png")
 
 RISK_FREE = 0.045   # annual risk-free rate, used in Sharpe
-DATA_YEARS = 5       # years of daily history to pull
+DATA_YEARS = 10       # years of daily history to pull
 TOP_N = 25            # top-Sharpe stocks labeled on the scatter / used for the frontier basket
 LEADERBOARD_N = 50   # rows in each Sharpe leaderboard table
 MIN_FRONTIER_HISTORY = 252  # trading days required to be eligible for "top Sharpe" / frontier ranking
 
-WATCHLIST: list = []  # e.g. ["RY.TO", "SHOP.TO"] — always included, local-run convenience
+# ── Manually enter tickers to add to every efficient-frontier chart here ─────
+WATCHLIST: list = []  # e.g. ["RY.TO", "SHOP.TO", "ASML"] — local-run convenience;
+                       # for a one-off run without editing this file, use the
+                       # EXTRA_TICKERS env var / the workflow's "extra_tickers" input instead.
 
 # ── Corporate colours (matches Industry RSI / other reports in this repo) ────
 ORANGE = "#C67A29"
@@ -186,9 +199,35 @@ def compute_signals(prices: pd.DataFrame) -> pd.DataFrame:
 
 
 # ── Efficient frontier ────────────────────────────────────────────────────────
-def efficient_frontier(returns: pd.DataFrame, tickers: list, n_points: int = 40):
+def _largest_overlap_basket(returns: pd.DataFrame, tickers: list, min_rows: int) -> list:
+    """Real small/thin-history tickers can each individually have plenty of history but no single
+    date where ALL of them traded (a halt or listing gap in just one name blanks out the whole row).
+    Greedily drop whichever ticker's removal grows the row-wise overlap the most, until enough
+    common rows remain or too few tickers are left."""
+    tickers = list(dict.fromkeys(tickers))
+    dropped = []
+    while len(tickers) >= 2:
+        if len(returns[tickers].dropna()) >= min_rows:
+            break
+        best_ticker, best_len = None, -1
+        for t in tickers:
+            trial = [x for x in tickers if x != t]
+            trial_len = len(returns[trial].dropna())
+            if trial_len > best_len:
+                best_len, best_ticker = trial_len, t
+        tickers.remove(best_ticker)
+        dropped.append(best_ticker)
+    if dropped:
+        print(f"    (dropped from frontier basket to restore overlapping history: {', '.join(dropped)})")
+    return tickers
+
+
+def efficient_frontier(returns: pd.DataFrame, tickers: list, n_points: int = 40, min_rows: int = 60):
+    tickers = _largest_overlap_basket(returns, tickers, min_rows)
+    if len(tickers) < 2:
+        return None, None
     ret = returns[tickers].dropna()
-    if len(ret) < 60 or len(ret.columns) < 2:
+    if len(ret) < min_rows:
         return None, None
     mu = ret.mean().values * 252
     cov = ret.cov().values * 252
@@ -261,27 +300,33 @@ def make_leaderboard_table(df: pd.DataFrame, title: str, top_n: int) -> go.Figur
     return fig
 
 
-def make_scatter_frontier(signals: pd.DataFrame, returns: pd.DataFrame, extra_tickers: list) -> go.Figure:
-    d = signals.dropna(subset=["Vol%", "AnnRet%", "Sharpe"])
+def make_scatter_frontier(
+    signals: pd.DataFrame, returns: pd.DataFrame, universe_tickers: list, extra_tickers: list, title: str,
+) -> go.Figure:
+    """Risk/return scatter + efficient frontier for one universe (a subset of `signals`' index).
+    `extra_tickers` (the manual/custom watchlist) are overlaid regardless of universe membership —
+    that's the mechanism for "add this ticker to the frontier" even if it's not an index member."""
+    members = [t for t in universe_tickers if t in signals.index]
+    d = signals.loc[members].dropna(subset=["Vol%", "AnnRet%", "Sharpe"])
 
     # The frontier basket needs every member to share a long overlapping return history, or the
     # row-wise dropna() in efficient_frontier() collapses to ~0 rows and the whole frontier vanishes.
     # A recently-listed ticker can post an inflated Sharpe on a short hot run and would otherwise
     # dominate the "top by Sharpe" selection and poison the basket for everyone else in it — so
     # ranking/selection for the frontier is restricted to sufficiently long-history names, while the
-    # scatter's grey background still shows every screened stock, thin-history ones included.
+    # scatter's grey background still shows every screened stock in the universe, thin-history ones included.
     eligible = d[d["NObs"] >= MIN_FRONTIER_HISTORY]
     top_tickers = eligible.nlargest(TOP_N, "Sharpe").index.tolist()
-    custom_in_universe = [t for t in extra_tickers if t in d.index]
-    custom_for_frontier = [t for t in custom_in_universe if t in eligible.index]
-    skipped_custom = [t for t in custom_in_universe if t not in eligible.index]
+    custom_in_data = [t for t in extra_tickers if t in signals.index]
+    custom_for_frontier = [t for t in custom_in_data if signals.loc[t, "NObs"] >= MIN_FRONTIER_HISTORY]
+    skipped_custom = [t for t in custom_in_data if t not in custom_for_frontier]
     if skipped_custom:
-        print(f"  Custom tickers shown but excluded from the frontier blend (too little history, <{MIN_FRONTIER_HISTORY}d): {', '.join(skipped_custom)}")
-    top_tickers_plot = [t for t in top_tickers if t not in custom_in_universe]
+        print(f"  [{title}] Custom tickers shown but excluded from the frontier blend (too little history, <{MIN_FRONTIER_HISTORY}d): {', '.join(skipped_custom)}")
+    top_tickers_plot = [t for t in top_tickers if t not in custom_in_data]
 
     d_all = d.reset_index()
     d_top = d.loc[top_tickers_plot].reset_index()
-    d_custom = d.loc[custom_in_universe].reset_index() if custom_in_universe else pd.DataFrame()
+    d_custom = signals.loc[custom_in_data].reset_index() if custom_in_data else pd.DataFrame()
 
     fig = go.Figure()
 
@@ -289,7 +334,7 @@ def make_scatter_frontier(signals: pd.DataFrame, returns: pd.DataFrame, extra_ti
         x=d_all["Vol%"], y=d_all["AnnRet%"], mode="markers",
         marker=dict(color="#5a6272", size=5, opacity=0.55),
         hovertemplate="<b>%{customdata[0]}</b><br>Vol: %{x:.1f}%<br>Ann Ret: %{y:.1f}%<br>Sharpe: %{customdata[1]:.2f}<extra></extra>",
-        customdata=d_all[["Ticker", "Sharpe"]].values, name="All screened stocks", showlegend=True,
+        customdata=d_all[["Ticker", "Sharpe"]].values, name=f"{title} stocks", showlegend=True,
     ))
 
     if not d_top.empty:
@@ -333,7 +378,7 @@ def make_scatter_frontier(signals: pd.DataFrame, returns: pd.DataFrame, extra_ti
                   annotation_font_color=BLUE, annotation_font_size=10, annotation_position="right")
 
     fig.update_layout(
-        title=dict(text="<b>Risk vs. Return — All Screened Stocks + Efficient Frontier</b>",
+        title=dict(text=f"<b>{title} — Risk vs. Return + Efficient Frontier</b>",
                     font=dict(color=TEXTCLR, size=15)),
         xaxis_title="Annualized Volatility (%)", yaxis_title=f"Annualized Return % ({DATA_YEARS}yr daily avg)",
         paper_bgcolor=BG, plot_bgcolor=LGREY, font=dict(color=TEXTCLR), height=680,
@@ -522,13 +567,25 @@ def build_report(extra_tickers: list):
     except Exception as e:
         print(f"Sector snapshot error: {e}")
 
-    print("Building risk/return scatter + efficient frontier...")
+    print("Building risk/return scatter + efficient frontier charts...")
     parts.append(section_header(
         "Risk vs. Return + Efficient Frontier",
-        f"Grey = all {len(signals)} screened stocks &middot; Colored+labeled = top {TOP_N} by Sharpe &middot; "
-        "Gold diamonds = custom/manual watchlist &middot; Orange dashed = efficient frontier",
+        f"One chart per universe, plus a consolidated S&amp;P 500 + NASDAQ-100 view &middot; "
+        f"Grey = all screened stocks in that universe &middot; Colored+labeled = top {TOP_N} by Sharpe &middot; "
+        "Gold diamonds = custom/manual watchlist (always included, any universe) &middot; Orange dashed = efficient frontier",
     ))
-    parts.append(fig_to_div(make_scatter_frontier(signals, returns, extra_tickers)))
+    sp500_nasdaq100 = list(dict.fromkeys(universes["S&P 500"] + universes["NASDAQ-100"]))
+    frontier_charts = [
+        ("S&P 500", universes["S&P 500"]),
+        ("NASDAQ-100", universes["NASDAQ-100"]),
+        ("TSX", universes["TSX"]),
+        ("S&P 500 + NASDAQ-100 (consolidated)", sp500_nasdaq100),
+    ]
+    for chart_title, chart_universe in frontier_charts:
+        if not chart_universe:
+            continue
+        print(f"  {chart_title}...")
+        parts.append(fig_to_div(make_scatter_frontier(signals, returns, chart_universe, extra_tickers, chart_title)))
 
     print("Building movers chart...")
     parts.append(section_header("1-Month Movers"))
