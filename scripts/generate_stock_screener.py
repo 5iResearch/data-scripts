@@ -36,6 +36,7 @@ gold-diamond marker on all four scatter charts:
 """
 
 import base64
+import json
 import os
 import warnings
 from datetime import datetime, timedelta
@@ -479,13 +480,105 @@ def screens_html(signals: pd.DataFrame) -> str:
     )
 
 
-def fig_to_div(fig: go.Figure) -> str:
-    return pio.to_html(fig, include_plotlyjs=False, full_html=False, config={"responsive": True})
+def fig_to_div(fig: go.Figure, div_id: str = None) -> str:
+    kwargs = {"div_id": div_id} if div_id else {}
+    return pio.to_html(fig, include_plotlyjs=False, full_html=False, config={"responsive": True}, **kwargs)
 
 
 def section_header(title: str, subtitle: str = "") -> str:
     sub = f'<div class="section-sub">{subtitle}</div>' if subtitle else ""
     return f'<div class="section"><h2>{title}</h2>{sub}</div>'
+
+
+FRONTIER_DIV_IDS = ["frontier-sp500", "frontier-nasdaq100", "frontier-tsx", "frontier-consolidated"]
+
+
+def search_box_html(signals: pd.DataFrame) -> str:
+    """Client-side, no-rerun ticker highlighter — same pattern as Channel_Lookup.html: every
+    already-screened ticker's Vol%/AnnRet%/Sharpe is embedded as JSON at build time, so typing one
+    in just looks it up and adds a marker in the browser. A ticker outside this run's universe
+    (S&P 500 / NASDAQ-100 / TSX) isn't in this JSON and can't be added this way — that still needs
+    the workflow's `extra_tickers` input (see the footer), which actually fetches new data."""
+    payload = {
+        tkr: [row["Vol%"], row["AnnRet%"], round(row["Sharpe"], 2)]
+        for tkr, row in signals[["Vol%", "AnnRet%", "Sharpe"]].dropna().iterrows()
+    }
+    data_json = json.dumps(payload, separators=(",", ":"))
+
+    return f"""
+<div class="search-box">
+  <label for="tickerSearch">Highlight a ticker on all 4 charts below (instant, no rerun — searches the {len(payload):,} already-screened tickers above):</label>
+  <div class="search-row">
+    <input type="text" id="tickerSearch" placeholder="e.g. AAPL, RY.TO, SHOP.TO" autocomplete="off">
+    <button onclick="addTickers()">Highlight</button>
+    <button onclick="clearTickers()" class="secondary">Clear highlights</button>
+  </div>
+  <div id="searchStatus" class="search-status"></div>
+</div>
+<script>
+const ALL_SIGNALS = {data_json};
+const FRONTIER_DIVS = {json.dumps(FRONTIER_DIV_IDS)};
+let baseTraceCounts = null;
+let addedCount = {{}};
+
+function ensureBaseCounts() {{
+  if (baseTraceCounts) return;
+  baseTraceCounts = {{}};
+  FRONTIER_DIVS.forEach(function (id) {{
+    const el = document.getElementById(id);
+    baseTraceCounts[id] = el ? el.data.length : 0;
+    addedCount[id] = 0;
+  }});
+}}
+
+function addTickers() {{
+  ensureBaseCounts();
+  const raw = document.getElementById('tickerSearch').value;
+  const tickers = raw.split(/[,\\s]+/).map(function (t) {{ return t.trim().toUpperCase(); }}).filter(Boolean);
+  const found = [], missing = [];
+  tickers.forEach(function (t) {{
+    if (!(t in ALL_SIGNALS)) {{ missing.push(t); return; }}
+    found.push(t);
+    const vol = ALL_SIGNALS[t][0], ret = ALL_SIGNALS[t][1], sharpe = ALL_SIGNALS[t][2];
+    const trace = {{
+      x: [vol], y: [ret], mode: 'markers+text', type: 'scatter',
+      marker: {{ color: '{GOLD}', size: 15, symbol: 'diamond', line: {{ color: 'white', width: 1.2 }} }},
+      text: [t], textposition: 'bottom center', textfont: {{ size: 10, color: '{GOLD}' }},
+      hovertemplate: '<b>' + t + '</b> (searched)<br>Vol: ' + vol.toFixed(1) + '%<br>Ann Ret: ' + ret.toFixed(1) + '%<br>Sharpe: ' + sharpe.toFixed(2) + '<extra></extra>',
+      name: 'Searched: ' + t, showlegend: true,
+    }};
+    FRONTIER_DIVS.forEach(function (id) {{
+      const el = document.getElementById(id);
+      if (el) {{ Plotly.addTraces(id, trace); addedCount[id]++; }}
+    }});
+  }});
+  const parts = [];
+  if (found.length) parts.push('Added: ' + found.join(', '));
+  if (missing.length) parts.push('Not in this run\\'s universe (use the workflow\\'s extra_tickers input instead): ' + missing.join(', '));
+  document.getElementById('searchStatus').textContent = parts.join('  \\u2014  ');
+  document.getElementById('tickerSearch').value = '';
+}}
+
+function clearTickers() {{
+  ensureBaseCounts();
+  FRONTIER_DIVS.forEach(function (id) {{
+    const el = document.getElementById(id);
+    if (!el || addedCount[id] === 0) return;
+    const base = baseTraceCounts[id];
+    const indices = [];
+    for (let i = base; i < base + addedCount[id]; i++) indices.push(i);
+    Plotly.deleteTraces(id, indices);
+    addedCount[id] = 0;
+  }});
+  document.getElementById('searchStatus').textContent = 'Cleared.';
+}}
+
+document.addEventListener('DOMContentLoaded', ensureBaseCounts);
+document.getElementById && document.addEventListener('keydown', function (e) {{
+  if (e.key === 'Enter' && document.activeElement && document.activeElement.id === 'tickerSearch') addTickers();
+}});
+</script>
+"""
 
 
 PAGE_TEMPLATE = """<!DOCTYPE html>
@@ -509,6 +602,16 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   table.screens th {{ background: #12171e; color: white; text-align: left; padding: 8px 10px; }}
   table.screens td {{ padding: 7px 10px; border-bottom: 1px solid #2A2A2C; vertical-align: top; }}
   table.screens tr:nth-child(even) {{ background: #232326; }}
+  .search-box {{ margin: 8px 24px 20px; padding: 14px 16px; background: #232326; border: 1px solid #3A3A3C; border-radius: 6px; }}
+  .search-box label {{ display: block; font-size: 13px; color: #C9C9CC; margin-bottom: 8px; }}
+  .search-row {{ display: flex; gap: 8px; flex-wrap: wrap; }}
+  .search-row input[type=text] {{ flex: 1 1 260px; background: #1C1C1E; color: #E8E8E8; border: 1px solid #3A3A3C;
+    border-radius: 4px; padding: 8px 10px; font-size: 13px; }}
+  .search-row button {{ background: #E8B84B; color: #1C1C1E; border: none; border-radius: 4px; padding: 8px 16px;
+    font-size: 13px; font-weight: bold; cursor: pointer; }}
+  .search-row button.secondary {{ background: #3A3A3C; color: #E8E8E8; font-weight: normal; }}
+  .search-status {{ margin-top: 8px; font-size: 12px; color: #8E8E93; min-height: 16px; }}
+  .frontier-chart {{ margin-bottom: 4px; }}
   footer {{ padding: 24px 32px; color: #8E8E93; font-size: 12px; border-top: 1px solid #3A3A3C; margin-top: 24px; }}
 </style>
 </head>
@@ -574,18 +677,20 @@ def build_report(extra_tickers: list):
         f"Grey = all screened stocks in that universe &middot; Colored+labeled = top {TOP_N} by Sharpe &middot; "
         "Gold diamonds = custom/manual watchlist (always included, any universe) &middot; Orange dashed = efficient frontier",
     ))
+    parts.append(search_box_html(signals))
     sp500_nasdaq100 = list(dict.fromkeys(universes["S&P 500"] + universes["NASDAQ-100"]))
     frontier_charts = [
-        ("S&P 500", universes["S&P 500"]),
-        ("NASDAQ-100", universes["NASDAQ-100"]),
-        ("TSX", universes["TSX"]),
-        ("S&P 500 + NASDAQ-100 (consolidated)", sp500_nasdaq100),
+        ("S&P 500", universes["S&P 500"], "frontier-sp500"),
+        ("NASDAQ-100", universes["NASDAQ-100"], "frontier-nasdaq100"),
+        ("TSX", universes["TSX"], "frontier-tsx"),
+        ("S&P 500 + NASDAQ-100 (consolidated)", sp500_nasdaq100, "frontier-consolidated"),
     ]
-    for chart_title, chart_universe in frontier_charts:
+    for chart_title, chart_universe, div_id in frontier_charts:
         if not chart_universe:
             continue
         print(f"  {chart_title}...")
-        parts.append(fig_to_div(make_scatter_frontier(signals, returns, chart_universe, extra_tickers, chart_title)))
+        fig = make_scatter_frontier(signals, returns, chart_universe, extra_tickers, chart_title)
+        parts.append(f'<div class="frontier-chart">{fig_to_div(fig, div_id=div_id)}</div>')
 
     print("Building movers chart...")
     parts.append(section_header("1-Month Movers"))
