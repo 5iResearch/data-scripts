@@ -887,6 +887,87 @@ def chart_vix3m_ratio_fwd_returns(ratio_df):
     return fig
 
 
+# ── VIX/VIX3M Ratio -> Forward VIX Spike Risk ────────────────────────────────
+ELEVATED_THRESH = 25
+
+
+def forward_max(series, days):
+    """Max of series over the next `days` bars, strictly after the current one."""
+    shifted = series.shift(-1)
+    rev = shifted[::-1]
+    roll = rev.rolling(window=days, min_periods=days).max()[::-1]
+    return roll
+
+
+def add_vix_forward_max_cols(ratio_df, horizons):
+    for hl, days in horizons:
+        ratio_df[f"fwdmax_{hl}"] = forward_max(ratio_df["VIX"], days)
+    return ratio_df
+
+
+def chart_vix_spike_risk_by_regime(ratio_df, horizons):
+    groups = {"All Days": ratio_df}
+    for b in RATIO_BUCKET_ORDER:
+        sub = ratio_df[ratio_df["Regime"] == b]
+        if len(sub) > 0:
+            groups[b] = sub
+
+    rows = []
+    for name, sub in groups.items():
+        row = {"bucket": name, "n": len(sub)}
+        for hl, _ in horizons:
+            data = sub[f"fwdmax_{hl}"].dropna()
+            row[f"{hl}_p30"] = (data >= SPIKE_THRESH).mean() * 100 if len(data) else np.nan
+            row[f"{hl}_p25"] = (data >= ELEVATED_THRESH).mean() * 100 if len(data) else np.nan
+            row[f"{hl}_n"] = len(data)
+        rows.append(row)
+    stats = pd.DataFrame(rows).set_index("bucket")
+
+    cur_ratio, current_regime = ratio_df["Ratio"].iloc[-1], ratio_df["Regime"].iloc[-1]
+    order = ["All Days"] + [r for r in RATIO_BUCKET_ORDER if r in stats.index]
+    stats = stats.reindex(order)
+
+    fig = make_subplots(rows=2, cols=5, vertical_spacing=0.22, horizontal_spacing=0.045,
+        subplot_titles=[f"{hl}: P(VIX &ge; {SPIKE_THRESH})" for hl, _ in horizons] +
+                        [f"{hl}: P(VIX &ge; {ELEVATED_THRESH})" for hl, _ in horizons])
+
+    def bar_colors_for(idx_labels):
+        return [YELLOW if r == current_regime else ("#888888" if r == "All Days" else ORANGE) for r in idx_labels]
+
+    for idx, (hl, _) in enumerate(horizons, 1):
+        fig.add_trace(go.Bar(
+            x=stats.index, y=stats[f"{hl}_p30"], marker_color=bar_colors_for(stats.index),
+            text=[f"{v:.0f}%<br><span style='font-size:8px'>n={n}</span>" for v, n in zip(stats[f"{hl}_p30"], stats[f"{hl}_n"])],
+            textposition="outside", textfont=dict(color=TEXT, size=9), showlegend=False,
+            hovertemplate=f"%{{x}}<br>P(VIX&ge;{SPIKE_THRESH}): " + "%{y:.0f}%<extra></extra>",
+        ), row=1, col=idx)
+
+        fig.add_trace(go.Bar(
+            x=stats.index, y=stats[f"{hl}_p25"], marker_color=bar_colors_for(stats.index),
+            text=[f"{v:.0f}%" for v in stats[f"{hl}_p25"]], textposition="outside",
+            textfont=dict(color=TEXT, size=9), showlegend=False,
+            hovertemplate=f"%{{x}}<br>P(VIX&ge;{ELEVATED_THRESH}): " + "%{y:.0f}%<extra></extra>",
+        ), row=2, col=idx)
+
+    cur_1m_p30 = stats.loc[current_regime, "1m_p30"] if "1m_p30" in stats.columns else np.nan
+    base_1m_p30 = stats.loc["All Days", "1m_p30"]
+    fig.update_layout(
+        title=dict(text=f"<b>Forward VIX Spike Risk by VIX/VIX3M Ratio Regime</b>  "
+                        f'<span style="font-size:12px; color:{YELLOW}">Today: {current_regime} (ratio {cur_ratio:.3f}) &mdash; '
+                        f'{cur_1m_p30:.0f}% historical chance of VIX&ge;{SPIKE_THRESH} within 1m '
+                        f'(vs {base_1m_p30:.0f}% unconditional)</span>',
+                    font=dict(size=16, color=TEXT), x=0.01),
+        paper_bgcolor=DGRAY, plot_bgcolor=MGRAY, font=dict(color=TEXT, family="monospace"),
+        height=760, margin=dict(l=50, r=50, t=100, b=140),
+    )
+    fig.update_xaxes(tickangle=35, tickfont=dict(size=8), gridcolor=LGRAY, linecolor=LGRAY)
+    fig.update_yaxes(gridcolor=LGRAY, linecolor=LGRAY, ticksuffix="%")
+    for ann in fig["layout"]["annotations"]:
+        ann["font"] = dict(size=10, color=SUBTEXT)
+    add_logo(fig)
+    return fig
+
+
 def bucket_stats(df, total_days):
     rows = []
     for b in LEVEL_LABELS:
@@ -1090,6 +1171,12 @@ def build_report() -> str:
                                  f"Since {ratio_df.index[0].year} (VIX3M inception) | Today's regime highlighted in yellow"))
     parts.append(fig_to_div(chart_vix3m_ratio_history(ratio_df)))
     parts.append(fig_to_div(chart_vix3m_ratio_fwd_returns(ratio_df)))
+
+    spike_horizons = [("1w", 5), ("1m", 21), ("3m", 63), ("6m", 126), ("12m", 252)]
+    ratio_df = add_vix_forward_max_cols(ratio_df, spike_horizons)
+    parts.append(section_header("VIX / VIX3M Ratio - Forward VIX Spike Risk",
+                                 "Probability VIX touches a spike level at any point within each forward window, by regime"))
+    parts.append(fig_to_div(chart_vix_spike_risk_by_regime(ratio_df, spike_horizons)))
 
     df_v = pd.DataFrame({"VIX": vix_h})
     for lbl, days in HORIZONS.items():
