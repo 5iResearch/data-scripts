@@ -117,7 +117,7 @@ def get_monthly_rsi(ticker: str, rsi_length: int = 14) -> pd.DataFrame:
     return compute_rsi(data, "ME", rsi_length)
 
 
-def plot_price_rsi(df: pd.DataFrame, ticker: str, industry: str, log_price: bool = False, rsi_range=None) -> go.Figure:
+def plot_price_rsi(df: pd.DataFrame, ticker: str, industry: str, log_price: bool = False, rsi_range=None, thresholds=(40, 75)) -> go.Figure:
     dot_colors = [SIGNAL_COLORS[s] for s in df["Signal"]]
 
     fig = make_subplots(
@@ -146,13 +146,13 @@ def plot_price_rsi(df: pd.DataFrame, ticker: str, industry: str, log_price: bool
         ), row=2, col=1,
     )
 
-    fig.add_hrect(y0=75, y1=100, row=2, col=1, fillcolor=RED, opacity=0.08, line_width=0)
-    fig.add_hrect(y0=0, y1=40, row=2, col=1, fillcolor=GREEN, opacity=0.08, line_width=0)
+    oversold, overbought = thresholds
+    fig.add_hrect(y0=overbought, y1=100, row=2, col=1, fillcolor=RED, opacity=0.08, line_width=0)
+    fig.add_hrect(y0=0, y1=oversold, row=2, col=1, fillcolor=GREEN, opacity=0.08, line_width=0)
 
-    # Thresholds are already conveyed by the shaded bands above and the Buy/Hold/Sell legend to the
-    # right (added below) - no in-plot text label here, since "Oversold 40"/"Overbought 75" sitting
-    # directly on the line tends to overlap the most recent (rightmost) RSI data.
-    for y, color in [(40, GREEN), (75, RED)]:
+    # No in-plot text label - the shaded bands already convey the thresholds, and a text label
+    # sitting directly on the line tends to overlap the most recent (rightmost) RSI data.
+    for y, color in [(oversold, GREEN), (overbought, RED)]:
         fig.add_hline(y=y, line_dash="dash", line_color=color, line_width=1.2, row=2, col=1)
 
     fig.update_layout(
@@ -207,7 +207,10 @@ def build_report() -> str:
             parts.append(fig_to_div(plot_price_rsi(df_w, ticker, name, log_price=True)))
 
             df_52 = get_weekly_rsi(ticker, rsi_length=52)
-            fig_52 = plot_price_rsi(df_52, ticker, name, log_price=True, rsi_range=[30, 70])
+            # A 52-period RSI is much smoother than a 14-period one and rarely reaches 40/75 -
+            # 45/65 are the meaningful oversold/overbought levels at this length, and both actually
+            # fall inside the [30, 70] display range below (40/75 didn't - the red line was clipped off).
+            fig_52 = plot_price_rsi(df_52, ticker, name, log_price=True, rsi_range=[30, 70], thresholds=(45, 65))
             fig_52.update_layout(title_text=f"<b>{ticker}</b>  ·  {name}  ·  Weekly RSI (1-Year / 52-period)")
             parts.append(fig_to_div(fig_52))
         except Exception as e:

@@ -71,7 +71,7 @@ SECTOR_CLR = {
     "Technology": "#1F79BE", "Health Care": "#16A34A", "Financials": "#CA8A04",
     "Energy": "#EA580C", "Industrials": "#78716C", "Cons. Discret.": "#DB2777",
     "Cons. Staples": "#0D9488", "Utilities": "#7C3AED", "Real Estate": "#92400E",
-    "Materials": "#65A30D", "Comm. Services": "#0891B2",
+    "Materials": "#65A30D", "Comm. Services": "#0891B2", "Crypto": "#F7931A",
 }
 SECTOR_UNIVERSE = [
     ("Technology", "XLK", "Technology"), ("Semiconductors", "SOXX", "Technology"),
@@ -97,6 +97,7 @@ SECTOR_UNIVERSE = [
     ("Metals & Mining", "XME", "Materials"), ("Agriculture", "MOO", "Materials"),
     ("Comm. Services", "XLC", "Comm. Services"), ("Telecom", "IYZ", "Comm. Services"),
     ("Social Media", "SOCL", "Comm. Services"), ("Gaming & Esports", "HERO", "Comm. Services"),
+    ("Bitcoin (IBIT)", "IBIT", "Crypto"), ("Ethereum (ETHA)", "ETHA", "Crypto"),
 ]
 SECTOR_BENCHMARK = "SPY"
 
