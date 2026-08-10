@@ -78,6 +78,11 @@ TOP_Z_THRESHOLD = 1.5  # current residual must be at/above this to count as "at 
 TOP_R2_FRACTION = 1.0  # fraction of R^2-ranked survivors to keep (1.0 = keep all)
 CHUNK_SIZE = 250  # yfinance batch download size
 RISING_EST_WINDOWS = ("fy1_1m", "fy1_3m")  # FY1E revenue-revision windows that must both be positive
+RISING_CHART_CAP = 50  # cap on charts re-rendered in the Rising Analyst Estimates section (by R^2);
+                       # the full list is always in that section's table regardless of this cap.
+                       # Keeps the combined US+Canada report safely under GitHub's 100MB file limit
+                       # even though every one of these names' charts is also rendered once already
+                       # in Bottom/Top of Channel.
 
 ORANGE = "#C67A29"
 BLUE = "#1F79BE"
@@ -366,8 +371,8 @@ def fig_to_div(fig):
     return pio.to_html(fig, include_plotlyjs=False, full_html=False, config={"responsive": True})
 
 
-def chart_anchor_id(ticker):
-    return "chart-" + ticker.replace(".", "-")
+def chart_anchor_id(ticker, prefix="chart"):
+    return f"{prefix}-" + ticker.replace(".", "-")
 
 
 def build_summary_table(rows, link_anchors=False):
@@ -428,20 +433,42 @@ def build_section(rows, title, subtitle, name_map, revision_map, sector_map):
     return "\n".join(parts)
 
 
-def build_table_only_section(rows, title, subtitle):
-    """Like build_section, but renders only the summary table with links back
-    to the chart already rendered in the Bottom/Top section above — avoids
-    re-rendering a full Plotly chart per row a second time, which is what
-    blew the combined US+Canada report past GitHub's 100MB file-size limit."""
+def build_rising_section(rows, title, subtitle, name_map, revision_map, sector_map):
+    """Every row here is also already charted once in Bottom/Top of Channel,
+    so re-rendering all of them here a second time is what blew the combined
+    US+Canada report past GitHub's 100MB file-size limit. The summary table
+    always lists every row and links to its original chart; only the top
+    RISING_CHART_CAP (by R^2) get a second, inline chart render here."""
     rows = sorted(rows, key=lambda r: r["R2"], reverse=True)
-    print(f"[{title}] {len(rows)} names")
+    charted = rows[:RISING_CHART_CAP]
+    print(f"[{title}] {len(rows)} names, rendering charts for top {len(charted)} (cap={RISING_CHART_CAP})")
 
     parts = [f'<div class="section"><h2>{title}</h2>']
     if rows:
         parts.append(f'<div class="section-sub">{subtitle}</div>{build_summary_table(rows, link_anchors=True)}')
+        if len(rows) > len(charted):
+            parts.append(
+                f'<div class="section-sub">Charts below are the top {len(charted)} of {len(rows)} by R² '
+                "&mdash; use the table links above to jump to the rest.</div>"
+            )
     else:
         parts.append('<div class="section-sub">No tickers passed all filters today.</div>')
+        parts.append("</div>")
+        return "\n".join(parts)
     parts.append("</div>")
+
+    for row in charted:
+        company_name = name_map.get(row["Ticker"], display_ticker(row["Ticker"]))
+        revision_row = revision_map.get(row["Ticker"])
+        sector, industry = sector_map.get(display_ticker(row["Ticker"]), ("", ""))
+        sector_industry = " | ".join(s for s in (sector, industry) if s)
+        try:
+            fig = build_channel_chart(row, company_name, revision_row, sector_industry)
+            anchor_id = chart_anchor_id(row["Ticker"], prefix="rising-chart")
+            parts.append(f'<div class="chart-wrap" id="{anchor_id}" data-cap="{row["Cap"]}">{fig_to_div(fig)}</div>')
+        except Exception as exc:
+            print(f"  chart error {row['Ticker']}: {exc}")
+
     return "\n".join(parts)
 
 
@@ -502,11 +529,11 @@ def main():
         "Relative strength stretched to the top of an established outperformance trend vs benchmark.",
         name_map, revision_map, sector_map,
     ))
-    parts.append(build_table_only_section(
+    parts.append(build_rising_section(
         rising_rows, "Rising Analyst Estimates",
         f"{len(rising_rows)} names from the Bottom/Top lists above where FY1E revenue estimates were also "
-        "revised up over both the 1M and 3M windows &mdash; relative-strength extreme plus improving fundamentals. "
-        "Click a ticker to jump to its chart above.",
+        "revised up over both the 1M and 3M windows &mdash; relative-strength extreme plus improving fundamentals.",
+        name_map, revision_map, sector_map,
     ))
 
     html = PAGE_TEMPLATE.format(date_str=today.strftime("%B %d, %Y"), body="\n".join(parts),
