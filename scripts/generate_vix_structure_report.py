@@ -968,6 +968,168 @@ def chart_vix_spike_risk_by_regime(ratio_df, horizons):
     return fig
 
 
+# ── "Overdue?" check: does spike risk climb the longer a regime persists ────
+STREAK_BINS = [0, 5, 10, 20, 40, 60, 90, 999]
+STREAK_LABELS = ["1-5d", "6-10d", "11-20d", "21-40d", "41-60d", "61-90d", "90d+"]
+
+
+def compute_streak_length(flag: pd.Series) -> pd.Series:
+    """Consecutive-day count for each True run in `flag`; NaN where flag is False."""
+    grp = (~flag).cumsum()
+    streak = flag.groupby(grp).cumcount() + 1
+    return streak.where(flag)
+
+
+def build_contango_streak_study(ratio_df):
+    df = ratio_df.copy()
+    df["streak"] = compute_streak_length(df["Regime"] == "Deep Contango")
+    df["streak_bucket"] = pd.cut(df["streak"], bins=STREAK_BINS, labels=STREAK_LABELS)
+    return df
+
+
+def chart_spike_risk_by_streak(streak_df, ratio_df, horizons):
+    deep_df = streak_df[streak_df["Regime"] == "Deep Contango"]
+    groups = {"All Days": ratio_df, "All Deep Contango": deep_df}
+    for b in STREAK_LABELS:
+        sub = streak_df[streak_df["streak_bucket"] == b]
+        if len(sub) > 0:
+            groups[b] = sub
+
+    rows = []
+    for name, sub in groups.items():
+        row = {"bucket": name, "n": len(sub)}
+        for hl, _ in horizons:
+            data = sub[f"fwdmax_{hl}"].dropna()
+            row[f"{hl}_p30"] = (data >= SPIKE_THRESH).mean() * 100 if len(data) else np.nan
+            row[f"{hl}_p25"] = (data >= ELEVATED_THRESH).mean() * 100 if len(data) else np.nan
+            row[f"{hl}_n"] = len(data)
+        rows.append(row)
+    stats = pd.DataFrame(rows).set_index("bucket")
+
+    in_regime_now = streak_df["Regime"].iloc[-1] == "Deep Contango"
+    current_streak = int(streak_df["streak"].iloc[-1]) if in_regime_now else 0
+    current_bucket = streak_df["streak_bucket"].iloc[-1] if in_regime_now else None
+    order = ["All Days", "All Deep Contango"] + [b for b in STREAK_LABELS if b in stats.index]
+    stats = stats.reindex(order)
+
+    fig = make_subplots(rows=2, cols=5, vertical_spacing=0.22, horizontal_spacing=0.045,
+        subplot_titles=[f"{hl}: P(VIX &ge; {SPIKE_THRESH})" for hl, _ in horizons] +
+                        [f"{hl}: P(VIX &ge; {ELEVATED_THRESH})" for hl, _ in horizons])
+
+    def bar_colors_for(idx_labels):
+        return [YELLOW if b == current_bucket else ("#888888" if b in ("All Days", "All Deep Contango") else ORANGE)
+                for b in idx_labels]
+
+    for idx, (hl, _) in enumerate(horizons, 1):
+        fig.add_trace(go.Bar(
+            x=stats.index, y=stats[f"{hl}_p30"], marker_color=bar_colors_for(stats.index),
+            text=[f"{v:.0f}%<br><span style='font-size:8px'>n={n}</span>" for v, n in zip(stats[f"{hl}_p30"], stats[f"{hl}_n"])],
+            textposition="outside", textfont=dict(color=TEXT, size=9), showlegend=False,
+            hovertemplate=f"%{{x}}<br>P(VIX&ge;{SPIKE_THRESH}): " + "%{y:.0f}%<extra></extra>",
+        ), row=1, col=idx)
+
+        fig.add_trace(go.Bar(
+            x=stats.index, y=stats[f"{hl}_p25"], marker_color=bar_colors_for(stats.index),
+            text=[f"{v:.0f}%" for v in stats[f"{hl}_p25"]], textposition="outside",
+            textfont=dict(color=TEXT, size=9), showlegend=False,
+            hovertemplate=f"%{{x}}<br>P(VIX&ge;{ELEVATED_THRESH}): " + "%{y:.0f}%<extra></extra>",
+        ), row=2, col=idx)
+
+    base_1m_p30 = stats.loc["All Days", "1m_p30"]
+    deep_1m_p30 = stats.loc["All Deep Contango", "1m_p30"]
+    if in_regime_now:
+        status = (f"Today: Day {current_streak} of current Deep Contango streak (bucket {current_bucket}) &mdash; "
+                  f'{stats.loc[current_bucket, "1m_p30"]:.0f}% chance of VIX&ge;{SPIKE_THRESH} within 1m')
+    else:
+        status = "Not currently in a Deep Contango streak"
+    fig.update_layout(
+        title=dict(text="<b>Does Spike Risk Rise the Longer Deep Contango Persists?</b>  "
+                        f'<span style="font-size:12px; color:{YELLOW}">{status}</span>'
+                        f'<br><span style="font-size:11px; color:{SUBTEXT}">Reference: {deep_1m_p30:.0f}% for all Deep Contango days | '
+                        f'{base_1m_p30:.0f}% unconditional</span>',
+                    font=dict(size=16, color=TEXT), x=0.01),
+        paper_bgcolor=DGRAY, plot_bgcolor=MGRAY, font=dict(color=TEXT, family="monospace"),
+        height=780, margin=dict(l=50, r=50, t=115, b=140),
+    )
+    fig.update_xaxes(tickangle=35, tickfont=dict(size=8), gridcolor=LGRAY, linecolor=LGRAY)
+    fig.update_yaxes(gridcolor=LGRAY, linecolor=LGRAY, ticksuffix="%")
+    for ann in fig["layout"]["annotations"]:
+        ann["font"] = dict(size=10, color=SUBTEXT)
+    add_logo(fig)
+    return fig
+
+
+def build_vix_level_spike_study(vix_h, horizons):
+    df = pd.DataFrame({"VIX": vix_h})
+    for hl, days in horizons:
+        df[f"fwdmax_{hl}"] = forward_max(df["VIX"], days)
+    df["bucket"] = pd.cut(df["VIX"], bins=BINS, labels=LEVEL_LABELS, right=False)
+    return df
+
+
+def chart_vix_spike_risk_by_level(df, horizons):
+    groups = {"All Days": df}
+    for b in LEVEL_LABELS:
+        sub = df[df["bucket"] == b]
+        if len(sub) > 0:
+            groups[b] = sub
+
+    rows = []
+    for name, sub in groups.items():
+        row = {"bucket": name, "n": len(sub)}
+        for hl, _ in horizons:
+            data = sub[f"fwdmax_{hl}"].dropna()
+            row[f"{hl}_p30"] = (data >= SPIKE_THRESH).mean() * 100 if len(data) else np.nan
+            row[f"{hl}_p25"] = (data >= ELEVATED_THRESH).mean() * 100 if len(data) else np.nan
+            row[f"{hl}_n"] = len(data)
+        rows.append(row)
+    stats = pd.DataFrame(rows).set_index("bucket")
+
+    current_vix, current_bucket = df["VIX"].iloc[-1], df["bucket"].iloc[-1]
+    order = ["All Days"] + [b for b in LEVEL_LABELS if b in stats.index]
+    stats = stats.reindex(order)
+
+    fig = make_subplots(rows=2, cols=5, vertical_spacing=0.22, horizontal_spacing=0.045,
+        subplot_titles=[f"{hl}: P(VIX &ge; {SPIKE_THRESH})" for hl, _ in horizons] +
+                        [f"{hl}: P(VIX &ge; {ELEVATED_THRESH})" for hl, _ in horizons])
+
+    def bar_colors_for(idx_labels):
+        return [YELLOW if b == current_bucket else ("#888888" if b == "All Days" else ORANGE) for b in idx_labels]
+
+    for idx, (hl, _) in enumerate(horizons, 1):
+        fig.add_trace(go.Bar(
+            x=stats.index, y=stats[f"{hl}_p30"], marker_color=bar_colors_for(stats.index),
+            text=[f"{v:.0f}%<br><span style='font-size:8px'>n={n}</span>" for v, n in zip(stats[f"{hl}_p30"], stats[f"{hl}_n"])],
+            textposition="outside", textfont=dict(color=TEXT, size=9), showlegend=False,
+            hovertemplate=f"%{{x}}<br>P(VIX&ge;{SPIKE_THRESH}): " + "%{y:.0f}%<extra></extra>",
+        ), row=1, col=idx)
+
+        fig.add_trace(go.Bar(
+            x=stats.index, y=stats[f"{hl}_p25"], marker_color=bar_colors_for(stats.index),
+            text=[f"{v:.0f}%" for v in stats[f"{hl}_p25"]], textposition="outside",
+            textfont=dict(color=TEXT, size=9), showlegend=False,
+            hovertemplate=f"%{{x}}<br>P(VIX&ge;{ELEVATED_THRESH}): " + "%{y:.0f}%<extra></extra>",
+        ), row=2, col=idx)
+
+    cur_1m_p30 = stats.loc[current_bucket, "1m_p30"]
+    base_1m_p30 = stats.loc["All Days", "1m_p30"]
+    fig.update_layout(
+        title=dict(text=f"<b>Forward VIX Spike Risk by VIX Level</b>  "
+                        f'<span style="font-size:12px; color:{YELLOW}">Today: VIX {current_vix:.1f} (bucket {current_bucket}) &mdash; '
+                        f'{cur_1m_p30:.0f}% historical chance of VIX&ge;{SPIKE_THRESH} within 1m '
+                        f'(vs {base_1m_p30:.0f}% unconditional)</span>',
+                    font=dict(size=16, color=TEXT), x=0.01),
+        paper_bgcolor=DGRAY, plot_bgcolor=MGRAY, font=dict(color=TEXT, family="monospace"),
+        height=760, margin=dict(l=50, r=50, t=100, b=140),
+    )
+    fig.update_xaxes(tickangle=35, tickfont=dict(size=8), gridcolor=LGRAY, linecolor=LGRAY)
+    fig.update_yaxes(gridcolor=LGRAY, linecolor=LGRAY, ticksuffix="%")
+    for ann in fig["layout"]["annotations"]:
+        ann["font"] = dict(size=10, color=SUBTEXT)
+    add_logo(fig)
+    return fig
+
+
 def bucket_stats(df, total_days):
     rows = []
     for b in LEVEL_LABELS:
@@ -1177,6 +1339,16 @@ def build_report() -> str:
     parts.append(section_header("VIX / VIX3M Ratio - Forward VIX Spike Risk",
                                  "Probability VIX touches a spike level at any point within each forward window, by regime"))
     parts.append(fig_to_div(chart_vix_spike_risk_by_regime(ratio_df, spike_horizons)))
+
+    streak_df = build_contango_streak_study(ratio_df)
+    parts.append(section_header("Deep Contango - Does Duration Raise Spike Risk?",
+                                 "Tests the \"overdue for a spike\" theory: forward VIX spike risk by length of the current Deep Contango streak"))
+    parts.append(fig_to_div(chart_spike_risk_by_streak(streak_df, ratio_df, spike_horizons)))
+
+    print("Building VIX-level forward spike risk study...")
+    vix_level_df = build_vix_level_spike_study(vix_h, spike_horizons)
+    parts.append(section_header("VIX Level - Forward VIX Spike Risk", f"Since {vix_level_df.index[0].year}"))
+    parts.append(fig_to_div(chart_vix_spike_risk_by_level(vix_level_df, spike_horizons)))
 
     df_v = pd.DataFrame({"VIX": vix_h})
     for lbl, days in HORIZONS.items():

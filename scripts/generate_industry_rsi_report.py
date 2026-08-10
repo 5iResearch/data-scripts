@@ -149,12 +149,11 @@ def plot_price_rsi(df: pd.DataFrame, ticker: str, industry: str, log_price: bool
     fig.add_hrect(y0=75, y1=100, row=2, col=1, fillcolor=RED, opacity=0.08, line_width=0)
     fig.add_hrect(y0=0, y1=40, row=2, col=1, fillcolor=GREEN, opacity=0.08, line_width=0)
 
-    for y, color, label in [(40, GREEN, "Oversold 40"), (75, RED, "Overbought 75")]:
-        fig.add_hline(
-            y=y, line_dash="dash", line_color=color, line_width=1.2, row=2, col=1,
-            annotation_text=label, annotation_position="top right",
-            annotation_font=dict(color=color, size=10),
-        )
+    # Thresholds are already conveyed by the shaded bands above and the Buy/Hold/Sell legend to the
+    # right (added below) - no in-plot text label here, since "Oversold 40"/"Overbought 75" sitting
+    # directly on the line tends to overlap the most recent (rightmost) RSI data.
+    for y, color in [(40, GREEN), (75, RED)]:
+        fig.add_hline(y=y, line_dash="dash", line_color=color, line_width=1.2, row=2, col=1)
 
     fig.update_layout(
         height=680, width=1200,
