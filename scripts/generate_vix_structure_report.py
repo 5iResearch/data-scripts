@@ -47,8 +47,6 @@ START_LONG = "2004-01-01"
 START_ANIM = (TODAY - timedelta(days=90)).strftime("%Y-%m-%d")
 END_DATE = (TODAY + timedelta(days=1)).strftime("%Y-%m-%d")
 
-VIX_TICKERS = {"^VIX9D": 9, "^VIX": 30, "^VIX3M": 93, "^VIX6M": 180}
-
 REGIME_COLORS = {
     "Deep Contango": "#1a6b3c", "Contango": "#2ECC71", "Flat": "#F4D03F",
     "Mild Backwardation": "#C67A29", "Backwardation": "#E74C3C", "Severe Backwardation": "#8B0000",
@@ -68,17 +66,40 @@ def add_logo(fig, x=0.99, y=0.99, sizex=0.10, sizey=0.10, opacity=0.45):
     ))
 
 
+# ── CBOE data source ────────────────────────────────────────────────────────────
+# yfinance's ^VIX9D / ^VIX3M / ^VIX6M feeds intermittently stop returning new
+# rows for stretches of weeks (confirmed: only ^VIX/SPY/^GSPC/^GSPTSE stay
+# current), which silently stales those series after ffill(). CBOE publishes
+# complete, current daily history directly, so all four VIX-family indices are
+# sourced from there instead.
+CBOE_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+
+
+def fetch_cboe_index(name: str) -> pd.Series:
+    url = f"https://cdn.cboe.com/api/global/us_indices/daily_prices/{name}_History.csv"
+    resp = requests.get(url, headers=CBOE_HEADERS, timeout=20)
+    resp.raise_for_status()
+    df = pd.read_csv(StringIO(resp.text))
+    df["DATE"] = pd.to_datetime(df["DATE"], format="%m/%d/%Y")
+    s = df.set_index("DATE")["CLOSE"].sort_index()
+    s.name = name
+    return s
+
+
 # ── Base data ──────────────────────────────────────────────────────────────────
 def load_term_structure():
-    tickers = list(VIX_TICKERS.keys())
-    raw = yf.download(tickers, start=START_LONG, end=END_DATE, auto_adjust=True, progress=False)
-    closes = raw["Close"].copy() if isinstance(raw.columns, pd.MultiIndex) else raw[["Close"]].copy()
-
     all_labels = ["VIX9D", "VIX", "VIX3M", "VIX6M"]
-    rename_map = {t: l for t, l in zip(tickers, all_labels) if t in closes.columns}
-    closes = closes[list(rename_map.keys())].rename(columns=rename_map)
-    labels = closes.columns.tolist()
+    series = {}
+    for label in all_labels:
+        try:
+            series[label] = fetch_cboe_index(label)
+        except Exception as e:
+            print(f"CBOE fetch failed for {label}: {e}")
+    labels = [l for l in all_labels if l in series]
+    closes = pd.DataFrame(series)[labels]
+    closes = closes[closes.index >= pd.Timestamp(START_LONG)]
     maturity_labels = ["9d", "30d", "93d", "180d"][:len(labels)]
+    print(f"  CBOE VIX-family data current through {closes.dropna(how='all').index.max().date()}")
 
     vix = closes.ffill().dropna(how="all")
     vix.index = pd.to_datetime(vix.index)
@@ -753,17 +774,117 @@ LEVEL_LABELS = ["<15", "15-20", "20-25", "25-30", "30-35", "35-40", "40-45", "45
 
 
 def load_long_history():
-    vix_h = yf.download("^VIX", start="1990-01-01", end=END_DATE, auto_adjust=True, progress=False)["Close"].squeeze()
+    vix_h = fetch_cboe_index("VIX")
+    vix3m_h = fetch_cboe_index("VIX3M")
     spx_h = yf.download("^GSPC", start="1990-01-01", end=END_DATE, auto_adjust=True, progress=False)["Close"].squeeze()
     tsx_h = yf.download("^GSPTSE", start="1990-01-01", end=END_DATE, auto_adjust=True, progress=False)["Close"].squeeze()
-    vix3m_h = yf.download("^VIX3M", start="2001-01-01", end=END_DATE, auto_adjust=True, progress=False)["Close"].squeeze()
     for s in (vix_h, spx_h, tsx_h, vix3m_h):
         s.index = pd.to_datetime(s.index)
+    vix_h = vix_h[vix_h.index >= "1990-01-01"]
     return vix_h, spx_h, tsx_h, vix3m_h
 
 
 def fwd_ret(series, days):
     return (series.shift(-days) / series - 1) * 100
+
+
+# ── VIX/VIX3M Ratio -> Forward Returns ───────────────────────────────────────
+RATIO_BUCKET_BINS = [0, 0.85, 1.00, 1.10, 1.20, 1.40, 999]
+RATIO_BUCKET_ORDER = ["Deep Contango", "Contango", "Flat", "Mild Backwardation", "Backwardation", "Severe Backwardation"]
+
+
+def build_ratio_study(vix_h, vix3m_h, spx_h):
+    ratio_df = pd.DataFrame({"VIX": vix_h, "VIX3M": vix3m_h}).dropna()
+    ratio_df["Ratio"] = ratio_df["VIX"] / ratio_df["VIX3M"]
+    ratio_df["Regime"] = pd.cut(ratio_df["Ratio"], bins=RATIO_BUCKET_BINS, labels=RATIO_BUCKET_ORDER)
+    ratio_df["SPX"] = spx_h.reindex(ratio_df.index).ffill()
+    return ratio_df
+
+
+def chart_vix3m_ratio_history(ratio_df):
+    cur = ratio_df.iloc[-1]
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.55, 0.45], vertical_spacing=0.05,
+                         subplot_titles=["VIX / VIX3M Ratio", "S&P 500"])
+    for lvl, color in [(0.85, REGIME_COLORS["Contango"]), (1.00, SUBTEXT), (1.10, REGIME_COLORS["Mild Backwardation"]),
+                        (1.20, REGIME_COLORS["Backwardation"]), (1.40, REGIME_COLORS["Severe Backwardation"])]:
+        fig.add_hline(y=lvl, line_color=color, line_width=0.8, line_dash="dot", row=1, col=1)
+    fig.add_trace(go.Scatter(x=ratio_df.index, y=ratio_df["Ratio"], mode="lines", line=dict(color=ORANGE, width=1.2),
+        name="VIX/VIX3M", hovertemplate="%{x|%b %d, %Y}<br>Ratio: %{y:.3f}<extra></extra>"), row=1, col=1)
+    fig.add_trace(go.Scatter(x=[ratio_df.index[-1]], y=[cur["Ratio"]], mode="markers",
+        marker=dict(symbol="star", size=14, color=YELLOW, line=dict(color="white", width=1)),
+        name=f"Today ({cur['Ratio']:.3f}, {cur['Regime']})",
+        hovertemplate=f"Today: {cur['Ratio']:.3f} ({cur['Regime']})<extra></extra>"), row=1, col=1)
+    fig.add_trace(go.Scatter(x=ratio_df.index, y=ratio_df["SPX"], mode="lines", line=dict(color=BLUE, width=1.2),
+        name="S&P 500", hovertemplate="%{x|%b %d, %Y}<br>SPX: %{y:.0f}<extra></extra>"), row=2, col=1)
+
+    fig.update_layout(
+        title=dict(text="<b>VIX / VIX3M Ratio &mdash; Full History</b>  "
+                        f'<span style="font-size:13px; color:{YELLOW}">Today: {cur["Ratio"]:.3f} &mdash; <b>{cur["Regime"]}</b></span>'
+                        f'<br><span style="font-size:11px; color:{SUBTEXT}">Since {ratio_df.index[0].year} (VIX3M inception) &mdash; '
+                        f'not the full 35-year VIX history</span>',
+                    font=dict(size=18, color=TEXT), x=0.01),
+        paper_bgcolor=DGRAY, plot_bgcolor=MGRAY, font=dict(color=TEXT, family="monospace"),
+        hovermode="x unified", height=680,
+        legend=dict(bgcolor=LGRAY, bordercolor=LGRAY, font=dict(size=10)),
+        margin=dict(l=65, r=65, t=110, b=40),
+    )
+    fig.update_xaxes(gridcolor=LGRAY, linecolor=LGRAY, showspikes=True, spikecolor=SUBTEXT, spikethickness=1)
+    fig.update_yaxes(gridcolor=LGRAY, linecolor=LGRAY)
+    fig.update_yaxes(title_text="Ratio", row=1, col=1)
+    fig.update_yaxes(title_text="Price", row=2, col=1)
+    for ann in fig["layout"]["annotations"]:
+        ann["font"] = dict(size=12, color=SUBTEXT)
+    add_logo(fig)
+    return fig
+
+
+def chart_vix3m_ratio_fwd_returns(ratio_df):
+    horizons = [("1w", 5), ("1m", 21), ("3m", 63), ("6m", 126), ("12m", 252)]
+    for hl, days in horizons:
+        ratio_df[f"fwd_{hl}"] = fwd_ret(ratio_df["SPX"], days)
+
+    agg = {f"{hl}_avg": (f"fwd_{hl}", "mean") for hl, _ in horizons}
+    agg.update({f"{hl}_win": (f"fwd_{hl}", lambda x: (x > 0).mean() * 100) for hl, _ in horizons})
+    agg["n"] = ("Ratio", "count")
+    stats = ratio_df.groupby("Regime", observed=True).agg(**agg).round(2)
+    stats = stats.reindex([r for r in RATIO_BUCKET_ORDER if r in stats.index])
+    cur_ratio, current_regime = ratio_df["Ratio"].iloc[-1], ratio_df["Regime"].iloc[-1]
+
+    fig = make_subplots(rows=2, cols=5, vertical_spacing=0.22, horizontal_spacing=0.045,
+        subplot_titles=[f"{hl} Avg Return" for hl, _ in horizons] + [f"{hl} Win Rate" for hl, _ in horizons])
+    for idx, (hl, _) in enumerate(horizons, 1):
+        bar_colors = [YELLOW if r == current_regime else (GREEN if v >= 0 else RED)
+                      for r, v in zip(stats.index, stats[f"{hl}_avg"])]
+        fig.add_trace(go.Bar(
+            x=stats.index, y=stats[f"{hl}_avg"], marker_color=bar_colors,
+            text=[f"{v:+.1f}%<br><span style='font-size:8px'>n={n}</span>" for v, n in zip(stats[f"{hl}_avg"], stats["n"])],
+            textposition="outside", textfont=dict(color=TEXT, size=9), showlegend=False,
+            hovertemplate="%{x}<br>Avg: %{y:+.2f}%<extra></extra>",
+        ), row=1, col=idx)
+        fig.add_hline(y=0, line_color=SUBTEXT, line_width=1, row=1, col=idx)
+
+        win_colors = [YELLOW if r == current_regime else BLUE for r in stats.index]
+        fig.add_trace(go.Bar(
+            x=stats.index, y=stats[f"{hl}_win"], marker_color=win_colors,
+            text=[f"{v:.0f}%" for v in stats[f"{hl}_win"]], textposition="outside",
+            textfont=dict(color=TEXT, size=9), showlegend=False,
+            hovertemplate="%{x}<br>Win rate: %{y:.0f}%<extra></extra>",
+        ), row=2, col=idx)
+        fig.add_hline(y=50, line_color=SUBTEXT, line_width=1, line_dash="dash", row=2, col=idx)
+
+    fig.update_layout(
+        title=dict(text="<b>S&amp;P 500 Forward Returns by VIX/VIX3M Ratio Regime</b>  "
+                        f'<span style="font-size:12px; color:{YELLOW}">Yellow = Current ({cur_ratio:.3f}, {current_regime})</span>',
+                    font=dict(size=17, color=TEXT), x=0.01),
+        paper_bgcolor=DGRAY, plot_bgcolor=MGRAY, font=dict(color=TEXT, family="monospace"),
+        height=760, margin=dict(l=50, r=50, t=90, b=140),
+    )
+    fig.update_xaxes(tickangle=35, tickfont=dict(size=8), gridcolor=LGRAY, linecolor=LGRAY)
+    fig.update_yaxes(gridcolor=LGRAY, linecolor=LGRAY, ticksuffix="%")
+    for ann in fig["layout"]["annotations"]:
+        ann["font"] = dict(size=10, color=SUBTEXT)
+    add_logo(fig)
+    return fig
 
 
 def bucket_stats(df, total_days):
@@ -960,8 +1081,15 @@ def build_report() -> str:
     parts.append(fig_to_div(chart_spike_fwd_returns(ep_df)))
     parts.append(fig_to_div(chart_spike_episode_heatmap(ep_df)))
 
-    print("Loading long history (VIX/SPX/TSX/VIX3M since 1990/2001)...")
+    print("Loading long history (VIX/SPX/TSX/VIX3M since 1990/2009)...")
     vix_h, spx_h, tsx_h, vix3m_h = load_long_history()
+
+    print("Building VIX/VIX3M ratio study...")
+    ratio_df = build_ratio_study(vix_h, vix3m_h, spx_h)
+    parts.append(section_header("VIX / VIX3M Ratio - Historical Forward Returns",
+                                 f"Since {ratio_df.index[0].year} (VIX3M inception) | Today's regime highlighted in yellow"))
+    parts.append(fig_to_div(chart_vix3m_ratio_history(ratio_df)))
+    parts.append(fig_to_div(chart_vix3m_ratio_fwd_returns(ratio_df)))
 
     df_v = pd.DataFrame({"VIX": vix_h})
     for lbl, days in HORIZONS.items():
