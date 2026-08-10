@@ -94,22 +94,23 @@ def fetch_all(tickers: list) -> dict:
     return {t: _cache[t] for t in tickers}
 
 
-def _add_signals(df: pd.DataFrame) -> pd.DataFrame:
-    cond = [df["RSI"] < 40, df["RSI"] > 75]
+def _add_signals(df: pd.DataFrame, thresholds=(40, 75)) -> pd.DataFrame:
+    oversold, overbought = thresholds
+    cond = [df["RSI"] < oversold, df["RSI"] > overbought]
     vals = ["buy", "sell"]
     df["Signal"] = np.select(cond, vals, default="hold")
     return df
 
 
-def compute_rsi(daily_df: pd.DataFrame, freq: str = "W", rsi_length: int = 14) -> pd.DataFrame:
+def compute_rsi(daily_df: pd.DataFrame, freq: str = "W", rsi_length: int = 14, thresholds=(40, 75)) -> pd.DataFrame:
     df = daily_df[["Close"]].resample(freq).last().dropna()
     df["RSI"] = RSIIndicator(df["Close"], rsi_length).rsi()
-    return _add_signals(df.dropna())
+    return _add_signals(df.dropna(), thresholds=thresholds)
 
 
-def get_weekly_rsi(ticker: str, rsi_length: int = 14) -> pd.DataFrame:
+def get_weekly_rsi(ticker: str, rsi_length: int = 14, thresholds=(40, 75)) -> pd.DataFrame:
     data = fetch_all([ticker])[ticker]
-    return compute_rsi(data, "W", rsi_length)
+    return compute_rsi(data, "W", rsi_length, thresholds=thresholds)
 
 
 def get_monthly_rsi(ticker: str, rsi_length: int = 14) -> pd.DataFrame:
@@ -206,10 +207,12 @@ def build_report() -> str:
             df_w = get_weekly_rsi(ticker, rsi_length=14)
             parts.append(fig_to_div(plot_price_rsi(df_w, ticker, name, log_price=True)))
 
-            df_52 = get_weekly_rsi(ticker, rsi_length=52)
             # A 52-period RSI is much smoother than a 14-period one and rarely reaches 40/75 -
             # 45/65 are the meaningful oversold/overbought levels at this length, and both actually
             # fall inside the [30, 70] display range below (40/75 didn't - the red line was clipped off).
+            # Same thresholds passed to get_weekly_rsi() too, so the dot colors (buy/hold/sell) agree
+            # with where the dashed lines actually are, instead of using the 14-period 40/75 cutoffs.
+            df_52 = get_weekly_rsi(ticker, rsi_length=52, thresholds=(45, 65))
             fig_52 = plot_price_rsi(df_52, ticker, name, log_price=True, rsi_range=[30, 70], thresholds=(45, 65))
             fig_52.update_layout(title_text=f"<b>{ticker}</b>  ·  {name}  ·  Weekly RSI (1-Year / 52-period)")
             parts.append(fig_to_div(fig_52))
