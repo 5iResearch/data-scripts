@@ -366,19 +366,25 @@ def fig_to_div(fig):
     return pio.to_html(fig, include_plotlyjs=False, full_html=False, config={"responsive": True})
 
 
-def build_summary_table(rows):
+def chart_anchor_id(ticker):
+    return "chart-" + ticker.replace(".", "-")
+
+
+def build_summary_table(rows, link_anchors=False):
     df = pd.DataFrame(rows).drop(columns=[c for c in rows[0] if c.startswith("_")])
     df = df.sort_values("R2", ascending=False).reset_index(drop=True)
+    anchor_ids = df["Ticker"].map(chart_anchor_id)
     df["Ticker"] = df["Ticker"].map(display_ticker)
     cols = ["Ticker", "Bench", "Cap", "R2", "Z_Score", "10Y_Return_%", "10Y_Bench_Return_%", "Relative_Strength_10Y_%", "Annual_Trend_Return_%", "Rising_Est"]
     df = df[cols]
     html = ['<table class="summary"><thead><tr>']
     html.append("".join(f"<th>{c.replace('_', ' ')}</th>" for c in cols))
     html.append("</tr></thead><tbody>")
-    for _, r in df.iterrows():
+    for (_, r), anchor_id in zip(df.iterrows(), anchor_ids):
+        ticker_cell = f'<a href="#{anchor_id}">{r["Ticker"]}</a>' if link_anchors else r["Ticker"]
         html.append(
             "<tr>"
-            f"<td>{r['Ticker']}</td>"
+            f"<td>{ticker_cell}</td>"
             f"<td>{r['Bench']}</td>"
             f"<td>{r['Cap']}</td>"
             f"<td>{r['R2']:.2f}</td>"
@@ -414,10 +420,28 @@ def build_section(rows, title, subtitle, name_map, revision_map, sector_map):
         sector_industry = " | ".join(s for s in (sector, industry) if s)
         try:
             fig = build_channel_chart(row, company_name, revision_row, sector_industry)
-            parts.append(f'<div class="chart-wrap" data-cap="{row["Cap"]}">{fig_to_div(fig)}</div>')
+            anchor_id = chart_anchor_id(row["Ticker"])
+            parts.append(f'<div class="chart-wrap" id="{anchor_id}" data-cap="{row["Cap"]}">{fig_to_div(fig)}</div>')
         except Exception as exc:
             print(f"  chart error {row['Ticker']}: {exc}")
 
+    return "\n".join(parts)
+
+
+def build_table_only_section(rows, title, subtitle):
+    """Like build_section, but renders only the summary table with links back
+    to the chart already rendered in the Bottom/Top section above — avoids
+    re-rendering a full Plotly chart per row a second time, which is what
+    blew the combined US+Canada report past GitHub's 100MB file-size limit."""
+    rows = sorted(rows, key=lambda r: r["R2"], reverse=True)
+    print(f"[{title}] {len(rows)} names")
+
+    parts = [f'<div class="section"><h2>{title}</h2>']
+    if rows:
+        parts.append(f'<div class="section-sub">{subtitle}</div>{build_summary_table(rows, link_anchors=True)}')
+    else:
+        parts.append('<div class="section-sub">No tickers passed all filters today.</div>')
+    parts.append("</div>")
     return "\n".join(parts)
 
 
@@ -478,11 +502,11 @@ def main():
         "Relative strength stretched to the top of an established outperformance trend vs benchmark.",
         name_map, revision_map, sector_map,
     ))
-    parts.append(build_section(
+    parts.append(build_table_only_section(
         rising_rows, "Rising Analyst Estimates",
         f"{len(rising_rows)} names from the Bottom/Top lists above where FY1E revenue estimates were also "
-        "revised up over both the 1M and 3M windows &mdash; relative-strength extreme plus improving fundamentals.",
-        name_map, revision_map, sector_map,
+        "revised up over both the 1M and 3M windows &mdash; relative-strength extreme plus improving fundamentals. "
+        "Click a ticker to jump to its chart above.",
     ))
 
     html = PAGE_TEMPLATE.format(date_str=today.strftime("%B %d, %Y"), body="\n".join(parts),
@@ -512,6 +536,8 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   table.summary th, table.summary td {{ padding: 6px 12px; text-align: right; border-bottom: 1px solid #3A3A3C; }}
   table.summary th:first-child, table.summary td:first-child {{ text-align: left; }}
   table.summary th {{ color: #C67A29; font-weight: 600; }}
+  table.summary a {{ color: #1F79BE; text-decoration: none; }}
+  table.summary a:hover {{ text-decoration: underline; }}
 {cap_css}
 </style>
 {cap_js}
