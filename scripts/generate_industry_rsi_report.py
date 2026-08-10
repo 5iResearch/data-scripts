@@ -164,7 +164,7 @@ def plot_price_rsi(df: pd.DataFrame, ticker: str, industry: str, log_price: bool
             font=dict(size=18, color=TEXTCLR), x=0.04, y=0.97,
         ),
         showlegend=False,
-        margin=dict(t=70, b=40, l=60, r=160),
+        margin=dict(t=70, b=40, l=60, r=40),
         hovermode="x unified",
     )
 
@@ -174,12 +174,8 @@ def plot_price_rsi(df: pd.DataFrame, ticker: str, industry: str, log_price: bool
     fig.update_yaxes(title_text="RSI", row=2, col=1, range=_rsi_range, gridcolor="#555", gridwidth=0.5, zeroline=False, tickfont=dict(size=11))
     fig.update_xaxes(gridcolor="#555", gridwidth=0.4, showticklabels=True, tickfont=dict(size=11))
 
-    for label, color, y in [("Buy < 40", GREEN, 0.38), ("Hold 40–75", "#4B8EA9", 0.32), ("Sell > 75", RED, 0.26)]:
-        fig.add_annotation(
-            xref="paper", yref="paper", x=1.01, y=y,
-            text=f'<span style="color:{color}">●</span>  {label}',
-            showarrow=False, align="left", font=dict(size=11, color=TEXTCLR),
-        )
+    # No Buy/Hold/Sell text legend - the dashed lines + shaded bands on the RSI panel already show
+    # the thresholds; a text legend here was overlapping the RSI line data on narrower renders.
 
     fig.add_layout_image(dict(
         source=LOGO_B64, xref="paper", yref="paper", x=1.0, y=1.04,
