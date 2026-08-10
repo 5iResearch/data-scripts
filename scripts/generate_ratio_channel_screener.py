@@ -16,6 +16,10 @@ the bottom of its own channel:
   - Top of Channel: the ratio is stretched to the high end of its trend —
     relative-strength extension, potential mean-reversion vs the benchmark.
 
+Both lists require R^2 of the 10y log-ratio regression >= MIN_R2 (a relatively
+clean, consistent relative-strength trend, not a noisy one) — applies equally
+to Bottom, Top, and (since it's a filtered subset of the two) Rising.
+
 A third section, Rising Analyst Estimates, is the intersection of either list
 with FY1E revenue estimate revisions that are positive over both the 1-month
 and 3-month windows — names combining a relative-strength channel extreme
@@ -75,6 +79,9 @@ MIN_TRADING_DAYS = 2400  # ~95% of the ~2520 trading days in 10y; excludes recen
 CHANNEL_SIGMA = 2.0  # width of the plotted upper/lower channel bands
 BOTTOM_Z_THRESHOLD = -1.5  # current residual must be at/below this to count as "at the bottom"
 TOP_Z_THRESHOLD = 1.5  # current residual must be at/above this to count as "at the top"
+MIN_R2 = 0.60  # 10y log-ratio regression must be a relatively clean fit to even qualify, same bar as
+               # generate_uptrend_channel_screener.py's MIN_R2; applies to Bottom/Top/Rising alike since
+               # Rising is a filtered subset of the other two
 TOP_R2_FRACTION = 1.0  # fraction of R^2-ranked survivors to keep (1.0 = keep all)
 CHUNK_SIZE = 250  # yfinance batch download size
 RISING_EST_WINDOWS = ("fy1_1m", "fy1_3m")  # FY1E revenue-revision windows that must both be positive
@@ -250,6 +257,8 @@ def score_ticker(close, bench_close, bench_ticker):
     slope, intercept, r_value, _, _ = linregress(x, y)
     if slope <= 0:
         return None  # ratio must have a sustained relative-strength uptrend
+    if r_value**2 < MIN_R2:
+        return None  # ratio trend must be a relatively clean regression fit, not noisy
 
     fitted = intercept + slope * x
     resid = y - fitted
@@ -536,7 +545,7 @@ def main():
         name_map, revision_map, sector_map,
     ))
 
-    html = PAGE_TEMPLATE.format(date_str=today.strftime("%B %d, %Y"), body="\n".join(parts),
+    html = PAGE_TEMPLATE.format(date_str=today.strftime("%B %d, %Y"), body="\n".join(parts), min_r2=MIN_R2,
                                  cap_css=CAP_FILTER_CSS, cap_js=CAP_FILTER_JS, cap_control=CAP_FILTER_CONTROL_HTML)
     out_path = os.path.join(OUTPUT_DIR, "Ratio_Channel_Screener_latest.html")
     with open(out_path, "w", encoding="utf-8") as f:
@@ -572,7 +581,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <body>
 <header>
   <h1>10-Year Ratio Channel Screener</h1>
-  <div class="meta">Generated {date_str} &middot; Regression channel fit on price/benchmark ratio (SPY for S&amp;P 500, QQQ for Nasdaq-100, XIC for TSX) &middot; sustained relative-strength uptrend currently at a channel extreme &middot; Universe: S&amp;P 500 + Nasdaq-100 + US revenue-revision screener + TSX universe + Cdn revenue-revision screener</div>
+  <div class="meta">Generated {date_str} &middot; Regression channel fit on price/benchmark ratio (SPY for S&amp;P 500, QQQ for Nasdaq-100, XIC for TSX) &middot; sustained relative-strength uptrend (R&sup2; &ge; {min_r2}) currently at a channel extreme &middot; Universe: S&amp;P 500 + Nasdaq-100 + US revenue-revision screener + TSX universe + Cdn revenue-revision screener</div>
   {cap_control}
 </header>
 {body}
