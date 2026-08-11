@@ -1,0 +1,47 @@
+name: Daily Ratio Channel Lookup
+
+on:
+  schedule:
+    - cron: "35 8 * * 1-5"   # 8:35 AM UTC, weekdays — offset from Ratio Channel Screener (8:25)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-ratio-channel-lookup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Ratio Channel Lookup report
+        timeout-minutes: 80
+        run: |
+          python scripts/generate_ratio_channel_lookup.py
+
+      - name: Commit outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add outputs/ratio-channel-lookup/
+          git diff --cached --quiet || git commit -m "chore: update ratio channel lookup data [skip ci]"
+          for i in 1 2 3 4 5; do
+            git push && break
+            echo "Push rejected, rebasing onto origin/main and retrying ($i)..."
+            git fetch origin main
+            git rebase origin/main
+            sleep $((RANDOM % 10 + 1))
+          done
