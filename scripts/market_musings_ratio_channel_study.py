@@ -373,6 +373,83 @@ def build_example_observations(backtest_df, n_per_band=5):
     return "\n".join(parts)
 
 
+N_BOOTSTRAP = 5000
+
+
+def ticker_level_paired_diff(sub, band_a, band_b):
+    """Collapses each ticker's many overlapping monthly observations down to
+    ONE number per ticker per band (its mean relative return in that band),
+    then keeps only tickers that have both bands present, and returns each
+    such ticker's paired difference (band_a - band_b). This is the unit that
+    should actually be treated as one independent sample — the raw
+    observation count is inflated by autocorrelated, overlapping windows
+    from the same underlying price path and would radically overstate
+    confidence if tested directly."""
+    ticker_means = sub.groupby(["Ticker", "Band"])["Fwd_Relative_Return"].mean().unstack("Band")
+    paired = ticker_means.dropna(subset=[band_a, band_b])
+    return (paired[band_a] - paired[band_b]).values
+
+
+def bootstrap_ci(diffs, n_boot=N_BOOTSTRAP, seed=42):
+    if len(diffs) < 10:
+        return None
+    rng = np.random.default_rng(seed)
+    n = len(diffs)
+    idx = rng.integers(0, n, size=(n_boot, n))
+    boot_means = diffs[idx].mean(axis=1)
+    lo, hi = np.percentile(boot_means, [2.5, 97.5])
+    return {"n": n, "mean_diff": diffs.mean(), "median_diff": np.median(diffs), "ci_lo": lo, "ci_hi": hi,
+            "significant": lo > 0 or hi < 0}
+
+
+def build_significance_section(backtest_df):
+    """Ticker-level paired bootstrap: is Middle's edge over Bottom/Top (from
+    the Study section above) distinguishable from noise, or does it wash out
+    once autocorrelated overlapping observations are collapsed to one
+    independent sample per ticker?"""
+    rows = []
+    for horizon in FORWARD_HORIZONS:
+        sub = backtest_df[backtest_df["Horizon"] == horizon]
+        for other_band in ("Bottom", "Top"):
+            diffs = ticker_level_paired_diff(sub, "Middle", other_band)
+            result = bootstrap_ci(diffs)
+            if result is not None:
+                rows.append({"Horizon": horizon, "Comparison": f"Middle vs. {other_band}", **result})
+
+    if not rows:
+        return '<div class="section-sub">Not enough paired tickers to test significance.</div>', 0, 0
+
+    n_significant = sum(1 for r in rows if r["significant"])
+    parts = []
+    parts.append(
+        '<div class="section-sub">Ticker-level paired bootstrap (n=%d resamples), not a test on the raw '
+        "observation count: each ticker's many overlapping monthly samples are first collapsed to one mean "
+        "relative return per band, so a ticker with both a Middle-band and Bottom/Top-band average contributes "
+        "exactly one paired difference — the true independent sample size is the ticker count below, not the "
+        "tens of thousands of raw rows in the Study section. \"Significant\" means the 95%% bootstrap confidence "
+        "interval on the mean paired difference excludes zero.</div>" % N_BOOTSTRAP
+    )
+    cols = ["Horizon", "Comparison", "Paired Tickers (n)", "Mean Diff", "Median Diff", "95% CI", "Significant?"]
+    html = ['<table class="summary"><thead><tr>']
+    html.append("".join(f"<th>{c}</th>" for c in cols))
+    html.append("</tr></thead><tbody>")
+    for r in rows:
+        html.append(
+            "<tr>"
+            f"<td>{r['Horizon']}</td>"
+            f"<td>{r['Comparison']}</td>"
+            f"<td>{r['n']}</td>"
+            f"<td>{r['mean_diff']*100:+.1f}%</td>"
+            f"<td>{r['median_diff']*100:+.1f}%</td>"
+            f"<td>[{r['ci_lo']*100:+.1f}%, {r['ci_hi']*100:+.1f}%]</td>"
+            f"<td>{'Yes' if r['significant'] else 'No'}</td>"
+            "</tr>"
+        )
+    html.append("</tbody></table>")
+    parts.append("".join(html))
+    return "\n".join(parts), n_significant, len(rows)
+
+
 def build_horizon_table(summary_df, horizon, group_col="Band", group_order=None):
     group_order = group_order or BAND_ORDER
     sub = summary_df[summary_df["Horizon"] == horizon].set_index(group_col).reindex(group_order)
@@ -632,6 +709,27 @@ def main():
         momentum_parts.append('<div class="section-sub">No qualifying observations.</div>')
     momentum_parts.append("</div>")
     parts.append("\n".join(momentum_parts))
+
+    sig_parts = ['<div class="section"><h2>Is the Middle-Band Edge Real, or Noise?</h2>']
+    if not backtest_df.empty:
+        sig_html, n_significant, n_tests = build_significance_section(backtest_df)
+        if n_tests == 0:
+            verdict = "Not enough paired tickers to test significance."
+        elif n_significant >= n_tests / 2:
+            verdict = (f"{n_significant} of {n_tests} Middle-vs-Bottom / Middle-vs-Top comparisons came back "
+                       "statistically significant (95% bootstrap CI excludes zero) at the ticker level — take the "
+                       "Middle-band edge from the Study section seriously, it survives clustering by ticker.")
+        else:
+            verdict = (f"Only {n_significant} of {n_tests} Middle-vs-Bottom / Middle-vs-Top comparisons came back "
+                       "statistically significant (95% bootstrap CI excludes zero) at the ticker level — most of "
+                       "the Middle-band edge from the Study section does not survive clustering by ticker; treat "
+                       "it as directional at best, not a real, actionable signal.")
+        sig_parts.append(f'<div class="callout">{verdict}</div>')
+        sig_parts.append(sig_html)
+    else:
+        sig_parts.append('<div class="section-sub">No observations to test.</div>')
+    sig_parts.append("</div>")
+    parts.append("\n".join(sig_parts))
 
     html = PAGE_TEMPLATE.format(date_str=today.strftime("%B %d, %Y"), body="\n".join(parts))
     out_path = os.path.join(OUTPUT_DIR, "Ratio_Channel_Market_Musings_Study.html")
