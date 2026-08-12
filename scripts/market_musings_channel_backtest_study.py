@@ -655,45 +655,67 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 """
 
 
+CACHE_PATH = os.path.join(OUTPUT_DIR, "_backtest_cache.pkl")
+
+
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     today = datetime.now()
 
-    ticker_info, name_map = load_universe()
-    print(f"Universe: {len(ticker_info)} unique tickers")
+    use_cache = os.environ.get("USE_BACKTEST_CACHE") == "1" and os.path.exists(CACHE_PATH)
+    if use_cache:
+        import pickle
+        print(f"Loading cached download+backtest from {CACHE_PATH} (USE_BACKTEST_CACHE=1)...")
+        with open(CACHE_PATH, "rb") as f:
+            cache = pickle.load(f)
+        ticker_info, name_map = cache["ticker_info"], cache["name_map"]
+        bench_closes, close_map = cache["bench_closes"], cache["close_map"]
+        backtest_obs, band_seq_all = cache["backtest_obs"], cache["band_seq_all"]
+        print(f"Loaded: {len(close_map)} tickers, {len(backtest_obs)} observations")
+    else:
+        ticker_info, name_map = load_universe()
+        print(f"Universe: {len(ticker_info)} unique tickers")
 
-    bench_closes = {}
-    for bench_ticker in (BENCH_SPY, BENCH_QQQ, BENCH_XIC):
-        print(f"Downloading {bench_ticker} ({BACKTEST_LOOKBACK_PERIOD})...")
-        bench_raw = yf.download(bench_ticker, period=BACKTEST_LOOKBACK_PERIOD, auto_adjust=True, progress=False)
-        bench_close = close_series_single(bench_ticker, bench_raw)
-        if bench_close is None:
-            raise RuntimeError(f"Could not download {bench_ticker} close prices")
-        bench_closes[bench_ticker] = bench_close
+        bench_closes = {}
+        for bench_ticker in (BENCH_SPY, BENCH_QQQ, BENCH_XIC):
+            print(f"Downloading {bench_ticker} ({BACKTEST_LOOKBACK_PERIOD})...")
+            bench_raw = yf.download(bench_ticker, period=BACKTEST_LOOKBACK_PERIOD, auto_adjust=True, progress=False)
+            bench_close = close_series_single(bench_ticker, bench_raw)
+            if bench_close is None:
+                raise RuntimeError(f"Could not download {bench_ticker} close prices")
+            bench_closes[bench_ticker] = bench_close
 
-    all_tickers = sorted(ticker_info.keys())
-    print(f"Downloading {len(all_tickers)} tickers ({BACKTEST_LOOKBACK_PERIOD})...")
-    close_map = batch_download_closes(all_tickers, BACKTEST_LOOKBACK_PERIOD, CHUNK_SIZE)
-    print(f"Got price history for {len(close_map)} tickers")
+        all_tickers = sorted(ticker_info.keys())
+        print(f"Downloading {len(all_tickers)} tickers ({BACKTEST_LOOKBACK_PERIOD})...")
+        close_map = batch_download_closes(all_tickers, BACKTEST_LOOKBACK_PERIOD, CHUNK_SIZE)
+        print(f"Got price history for {len(close_map)} tickers")
 
-    backtest_obs = []
-    band_seq_all = []
-    for ticker, close in close_map.items():
-        try:
-            info = ticker_info[ticker]
-            bench_ticker = info["bench"]
-            bench_label = BENCH_LABELS[bench_ticker]
-            close = close.rename(ticker)
-            aligned_full = build_aligned(close, bench_closes[bench_ticker])
-            if len(aligned_full) < MIN_TRADING_DAYS:
-                continue
-            obs, band_seq = collect_rolling_backtest_observations(ticker, aligned_full, bench_label)
-            backtest_obs.extend(obs)
-            band_seq_all.extend(band_seq)
-        except Exception as exc:
-            print(f"  error scoring {ticker}: {exc}")
+        backtest_obs = []
+        band_seq_all = []
+        for ticker, close in close_map.items():
+            try:
+                info = ticker_info[ticker]
+                bench_ticker = info["bench"]
+                bench_label = BENCH_LABELS[bench_ticker]
+                close = close.rename(ticker)
+                aligned_full = build_aligned(close, bench_closes[bench_ticker])
+                if len(aligned_full) < MIN_TRADING_DAYS:
+                    continue
+                obs, band_seq = collect_rolling_backtest_observations(ticker, aligned_full, bench_label)
+                backtest_obs.extend(obs)
+                band_seq_all.extend(band_seq)
+            except Exception as exc:
+                print(f"  error scoring {ticker}: {exc}")
 
-    print(f"Backtest pool: {len({o['Ticker'] for o in backtest_obs})} names, {len(backtest_obs)} observations")
+        print(f"Backtest pool: {len({o['Ticker'] for o in backtest_obs})} names, {len(backtest_obs)} observations")
+
+        import pickle
+        with open(CACHE_PATH, "wb") as f:
+            pickle.dump({
+                "ticker_info": ticker_info, "name_map": name_map, "bench_closes": bench_closes,
+                "close_map": close_map, "backtest_obs": backtest_obs, "band_seq_all": band_seq_all,
+            }, f)
+        print(f"Cached download+backtest to {CACHE_PATH} (set USE_BACKTEST_CACHE=1 to reuse for HTML-only reruns)")
 
     backtest_df = pd.DataFrame(backtest_obs)
     band_seq_df = pd.DataFrame(band_seq_all)
