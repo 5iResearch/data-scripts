@@ -58,10 +58,28 @@ OUTPUT_DIR = os.path.join(REPO_ROOT, "outputs", "stock-screener")
 LOGO_PATH = os.path.join(REPO_ROOT, "assets", "Logo_Transparent_1200px.png")
 
 RISK_FREE = 0.045   # annual risk-free rate, used in Sharpe
-DATA_YEARS = 10       # years of daily history to pull
+DATA_YEARS = 10       # years of trailing daily history used for every snapshot's signals (matches what
+                       # "Today" always used) — each snapshot below gets its own DATA_YEARS-long trailing
+                       # window ending on that snapshot's as-of date, not just a slice of one shared window
 TOP_N = 25            # top-Sharpe stocks labeled on the scatter / used for the frontier basket
 LEADERBOARD_N = 50   # rows in each Sharpe leaderboard table
 MIN_FRONTIER_HISTORY = 252  # trading days required to be eligible for "top Sharpe" / frontier ranking
+
+# Each snapshot recomputes every signal (Sharpe, vol, RSI, etc.) exactly the way "Today" always has,
+# just with the DATA_YEARS-long trailing window ending on that snapshot's as-of date instead of today —
+# i.e. "what would this report have shown had it been generated on that date." Universe membership
+# (S&P 500 / NASDAQ-100 / TSX constituents) is still TODAY's, not a point-in-time historical roster —
+# there's no free point-in-time index membership source, so this is current constituents evaluated with
+# period-appropriate price history, not a true historical reconstruction of who was in the index then.
+SNAPSHOTS = [
+    ("today", 0, "Today"),
+    ("1y", 1, "1 Year Ago"),
+    ("3y", 3, "3 Years Ago"),
+    ("5y", 5, "5 Years Ago"),
+    ("10y", 10, "10 Years Ago"),
+]
+MAX_SNAPSHOT_OFFSET_YEARS = max(offset for _, offset, _ in SNAPSHOTS)
+TOTAL_DOWNLOAD_YEARS = DATA_YEARS + MAX_SNAPSHOT_OFFSET_YEARS  # enough trailing history for the oldest snapshot
 
 # ── Manually enter tickers to add to every efficient-frontier chart here ─────
 WATCHLIST: list = []  # e.g. ["RY.TO", "SHOP.TO", "ASML"] — local-run convenience;
@@ -197,6 +215,21 @@ def compute_signals(prices: pd.DataFrame) -> pd.DataFrame:
             pass
 
     return pd.DataFrame(rows).set_index("Ticker")
+
+
+def price_window_for_as_of(full_prices: pd.DataFrame, as_of_date) -> pd.DataFrame:
+    """The DATA_YEARS-long trailing slice of `full_prices` ending at (on or before) as_of_date —
+    same lookback length "Today" always used, just re-centered so every downstream signal is computed
+    exactly as it would have been had the report run on that date."""
+    window_start = as_of_date - pd.DateOffset(years=DATA_YEARS)
+    return full_prices[(full_prices.index > window_start) & (full_prices.index <= as_of_date)]
+
+
+def resolve_as_of_date(full_prices: pd.DataFrame, offset_years: int):
+    """Nearest available trading day at or before (today - offset_years)."""
+    target = pd.Timestamp(datetime.now().date()) - pd.DateOffset(years=offset_years)
+    eligible = full_prices.index[full_prices.index <= target]
+    return eligible.max() if len(eligible) else None
 
 
 # ── Efficient frontier ────────────────────────────────────────────────────────
@@ -406,9 +439,21 @@ def make_movers_chart(signals: pd.DataFrame, n: int = TOP_N) -> go.Figure:
     return fig
 
 
-def make_sector_snapshot() -> go.Figure:
-    end, start = datetime.now().date(), datetime.now().date() - timedelta(days=420)
-    sec_px = yf.download(list(SECTOR_ETFS), start=start, end=end, auto_adjust=True, progress=False)["Close"]
+def download_sector_prices(years: int) -> pd.DataFrame:
+    """One fetch covering every snapshot's needs; each snapshot then slices its own trailing
+    ~420-day window out of this via make_sector_snapshot's `as_of_date` argument."""
+    end = datetime.now().date()
+    start = end - timedelta(days=int(years * 365.25))
+    return yf.download(list(SECTOR_ETFS), start=start, end=end, auto_adjust=True, progress=False)["Close"]
+
+
+def make_sector_snapshot(sec_px_full: pd.DataFrame, as_of_date) -> go.Figure:
+    eligible = sec_px_full.index[sec_px_full.index <= as_of_date]
+    if not len(eligible):
+        raise ValueError(f"No sector ETF history at or before {as_of_date}")
+    end_ts = eligible.max()
+    sec_px = sec_px_full[sec_px_full.index <= end_ts].tail(420)
+    end = end_ts.date()
 
     def _rsi14(p):
         d = p.diff(1)
@@ -421,6 +466,8 @@ def make_sector_snapshot() -> go.Figure:
         if tkr not in sec_px.columns:
             continue
         p = sec_px[tkr].dropna()
+        if len(p) < 60:
+            continue  # ETF didn't exist yet as of this snapshot's window (e.g. XLC launched 2018, XLRE 2015)
         ytd_idx = p.index[p.index >= f"{end.year}-01-01"]
         ytd_start = p.loc[ytd_idx[0]] if len(ytd_idx) else p.iloc[0]
         rows.append({
@@ -490,56 +537,62 @@ def section_header(title: str, subtitle: str = "") -> str:
     return f'<div class="section"><h2>{title}</h2>{sub}</div>'
 
 
-FRONTIER_DIV_IDS = ["frontier-sp500", "frontier-nasdaq100", "frontier-tsx", "frontier-consolidated"]
+def frontier_div_ids(snap_key: str) -> list:
+    return [f"frontier-sp500-{snap_key}", f"frontier-nasdaq100-{snap_key}", f"frontier-tsx-{snap_key}",
+            f"frontier-consolidated-{snap_key}"]
 
 
-def search_box_html(signals: pd.DataFrame) -> str:
+def search_box_html(signals: pd.DataFrame, snap_key: str) -> str:
     """Client-side, no-rerun ticker highlighter — same pattern as Channel_Lookup.html: every
     already-screened ticker's Vol%/AnnRet%/Sharpe is embedded as JSON at build time, so typing one
     in just looks it up and adds a marker in the browser. A ticker outside this run's universe
     (S&P 500 / NASDAQ-100 / TSX) isn't in this JSON and can't be added this way — that still needs
-    the workflow's `extra_tickers` input (see the footer), which actually fetches new data."""
+    the workflow's `extra_tickers` input (see the footer), which actually fetches new data.
+    Suffixed by snap_key (element ids, JS globals/functions) so each of the 5 snapshot panels has
+    fully independent search state — they share nothing, since each panel has its own signals/charts."""
     payload = {
         tkr: [row["Vol%"], row["AnnRet%"], round(row["Sharpe"], 2)]
         for tkr, row in signals[["Vol%", "AnnRet%", "Sharpe"]].dropna().iterrows()
     }
     data_json = json.dumps(payload, separators=(",", ":"))
+    s = snap_key
+    divs_json = json.dumps(frontier_div_ids(snap_key))
 
     return f"""
 <div class="search-box">
-  <label for="tickerSearch">Highlight a ticker on all 4 charts below (instant, no rerun — searches the {len(payload):,} already-screened tickers above):</label>
+  <label for="tickerSearch-{s}">Highlight a ticker on all 4 charts below (instant, no rerun — searches the {len(payload):,} already-screened tickers above):</label>
   <div class="search-row">
-    <input type="text" id="tickerSearch" placeholder="e.g. AAPL, RY.TO, SHOP.TO" autocomplete="off">
-    <button onclick="addTickers()">Highlight</button>
-    <button onclick="clearTickers()" class="secondary">Clear highlights</button>
+    <input type="text" id="tickerSearch-{s}" placeholder="e.g. AAPL, RY.TO, SHOP.TO" autocomplete="off">
+    <button onclick="addTickers_{s}()">Highlight</button>
+    <button onclick="clearTickers_{s}()" class="secondary">Clear highlights</button>
   </div>
-  <div id="searchStatus" class="search-status"></div>
+  <div id="searchStatus-{s}" class="search-status"></div>
 </div>
 <script>
-const ALL_SIGNALS = {data_json};
-const FRONTIER_DIVS = {json.dumps(FRONTIER_DIV_IDS)};
-let baseTraceCounts = null;
-let addedCount = {{}};
+const ALL_SIGNALS_{s} = {data_json};
+const FRONTIER_DIVS_{s} = {divs_json};
+let baseTraceCounts_{s} = null;
+let addedCount_{s} = {{}};
 
-function ensureBaseCounts() {{
-  if (baseTraceCounts) return;
-  baseTraceCounts = {{}};
-  FRONTIER_DIVS.forEach(function (id) {{
+function ensureBaseCounts_{s}() {{
+  if (baseTraceCounts_{s}) return;
+  baseTraceCounts_{s} = {{}};
+  FRONTIER_DIVS_{s}.forEach(function (id) {{
     const el = document.getElementById(id);
-    baseTraceCounts[id] = el ? el.data.length : 0;
-    addedCount[id] = 0;
+    baseTraceCounts_{s}[id] = el ? el.data.length : 0;
+    addedCount_{s}[id] = 0;
   }});
 }}
 
-function addTickers() {{
-  ensureBaseCounts();
-  const raw = document.getElementById('tickerSearch').value;
+function addTickers_{s}() {{
+  ensureBaseCounts_{s}();
+  const raw = document.getElementById('tickerSearch-{s}').value;
   const tickers = raw.split(/[,\\s]+/).map(function (t) {{ return t.trim().toUpperCase(); }}).filter(Boolean);
   const found = [], missing = [];
   tickers.forEach(function (t) {{
-    if (!(t in ALL_SIGNALS)) {{ missing.push(t); return; }}
+    if (!(t in ALL_SIGNALS_{s})) {{ missing.push(t); return; }}
     found.push(t);
-    const vol = ALL_SIGNALS[t][0], ret = ALL_SIGNALS[t][1], sharpe = ALL_SIGNALS[t][2];
+    const vol = ALL_SIGNALS_{s}[t][0], ret = ALL_SIGNALS_{s}[t][1], sharpe = ALL_SIGNALS_{s}[t][2];
     const trace = {{
       x: [vol], y: [ret], mode: 'markers+text', type: 'scatter',
       marker: {{ color: '{GOLD}', size: 15, symbol: 'diamond', line: {{ color: 'white', width: 1.2 }} }},
@@ -547,35 +600,35 @@ function addTickers() {{
       hovertemplate: '<b>' + t + '</b> (searched)<br>Vol: ' + vol.toFixed(1) + '%<br>Ann Ret: ' + ret.toFixed(1) + '%<br>Sharpe: ' + sharpe.toFixed(2) + '<extra></extra>',
       name: 'Searched: ' + t, showlegend: true,
     }};
-    FRONTIER_DIVS.forEach(function (id) {{
+    FRONTIER_DIVS_{s}.forEach(function (id) {{
       const el = document.getElementById(id);
-      if (el) {{ Plotly.addTraces(id, trace); addedCount[id]++; }}
+      if (el) {{ Plotly.addTraces(id, trace); addedCount_{s}[id]++; }}
     }});
   }});
   const parts = [];
   if (found.length) parts.push('Added: ' + found.join(', '));
   if (missing.length) parts.push('Not in this run\\'s universe (use the workflow\\'s extra_tickers input instead): ' + missing.join(', '));
-  document.getElementById('searchStatus').textContent = parts.join('  \\u2014  ');
-  document.getElementById('tickerSearch').value = '';
+  document.getElementById('searchStatus-{s}').textContent = parts.join('  \\u2014  ');
+  document.getElementById('tickerSearch-{s}').value = '';
 }}
 
-function clearTickers() {{
-  ensureBaseCounts();
-  FRONTIER_DIVS.forEach(function (id) {{
+function clearTickers_{s}() {{
+  ensureBaseCounts_{s}();
+  FRONTIER_DIVS_{s}.forEach(function (id) {{
     const el = document.getElementById(id);
-    if (!el || addedCount[id] === 0) return;
-    const base = baseTraceCounts[id];
+    if (!el || addedCount_{s}[id] === 0) return;
+    const base = baseTraceCounts_{s}[id];
     const indices = [];
-    for (let i = base; i < base + addedCount[id]; i++) indices.push(i);
+    for (let i = base; i < base + addedCount_{s}[id]; i++) indices.push(i);
     Plotly.deleteTraces(id, indices);
-    addedCount[id] = 0;
+    addedCount_{s}[id] = 0;
   }});
-  document.getElementById('searchStatus').textContent = 'Cleared.';
+  document.getElementById('searchStatus-{s}').textContent = 'Cleared.';
 }}
 
-document.addEventListener('DOMContentLoaded', ensureBaseCounts);
+document.addEventListener('DOMContentLoaded', ensureBaseCounts_{s});
 document.getElementById && document.addEventListener('keydown', function (e) {{
-  if (e.key === 'Enter' && document.activeElement && document.activeElement.id === 'tickerSearch') addTickers();
+  if (e.key === 'Enter' && document.activeElement && document.activeElement.id === 'tickerSearch-{s}') addTickers_{s}();
 }});
 </script>
 """
@@ -613,13 +666,26 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .search-status {{ margin-top: 8px; font-size: 12px; color: #8E8E93; min-height: 16px; }}
   .frontier-chart {{ margin-bottom: 4px; }}
   footer {{ padding: 24px 32px; color: #8E8E93; font-size: 12px; border-top: 1px solid #3A3A3C; margin-top: 24px; }}
+  .snapshot-switcher {{ display: flex; align-items: center; gap: 10px; margin-top: 10px; }}
+  .snapshot-switcher label {{ font-size: 13px; color: #C9C9CC; }}
+  .snapshot-switcher select {{ background: #232326; color: #E8E8E8; border: 1px solid #3A3A3C; border-radius: 4px;
+    padding: 6px 10px; font-size: 13px; font-weight: bold; }}
+  .snapshot-panel {{ display: none; }}
+  .snapshot-panel.active {{ display: block; }}
+  .snapshot-meta {{ padding: 10px 32px 0; color: #8E8E93; font-size: 13px; }}
 </style>
 </head>
 <body>
 <header>
   <div>
     <h1>Stock Screener — Sharpe Leaderboard &amp; Efficient Frontier</h1>
-    <div class="meta">Generated {date_str} &middot; Universe: S&amp;P 500 + NASDAQ-100 + TSX ({n_universe} tickers) &middot; {years}yr daily history &middot; Risk-free rate {rf:.1f}%{custom_note}</div>
+    <div class="meta">Generated {date_str} &middot; Universe: S&amp;P 500 + NASDAQ-100 + TSX ({n_universe} tickers, today's constituents) &middot; {years}yr trailing daily history per snapshot &middot; Risk-free rate {rf:.1f}%{custom_note}</div>
+    <div class="snapshot-switcher">
+      <label for="snapshotSelect">View as of:</label>
+      <select id="snapshotSelect" onchange="showSnapshot(this.value)">
+        {snapshot_options}
+      </select>
+    </div>
   </div>
   <img src="{logo_b64}" alt="logo">
 </header>
@@ -628,28 +694,43 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   Research tool, not investment advice. Sharpe uses a {rf:.1f}% annual risk-free rate; the efficient
   frontier is a long-only minimum-variance blend of the top {top_n} Sharpe stocks (plus any custom
   watchlist tickers), not a recommended portfolio. To add tickers to the frontier, re-run this
-  workflow manually with a comma-separated ticker list in the "extra_tickers" input.
+  workflow manually with a comma-separated ticker list in the "extra_tickers" input. Every "as of"
+  snapshot uses today's S&amp;P 500 / NASDAQ-100 / TSX constituents (no point-in-time index membership
+  source) evaluated with a {years}yr trailing price window ending on that snapshot's date — i.e. what
+  each metric would have read on that date, not a reconstruction of who was actually in the index then.
 </footer>
+<script>
+function showSnapshot(key) {{
+  document.querySelectorAll('.snapshot-panel').forEach(function (el) {{
+    el.classList.toggle('active', el.id === 'panel-' + key);
+  }});
+  const panel = document.getElementById('panel-' + key);
+  if (panel) {{
+    panel.querySelectorAll('.js-plotly-plot').forEach(function (gd) {{
+      try {{ Plotly.Plots.resize(gd); }} catch (e) {{}}
+    }});
+  }}
+}}
+document.addEventListener('DOMContentLoaded', function () {{ showSnapshot('today'); }});
+</script>
 </body>
 </html>
 """
 
 
-def build_report(extra_tickers: list):
-    universes = load_universes(extra_tickers)
-    all_tickers = list(dict.fromkeys(
-        universes["S&P 500"] + universes["NASDAQ-100"] + universes["TSX"] + extra_tickers
-    ))
-    print(f"\nDownloading {len(all_tickers)} tickers, {DATA_YEARS}yr history...")
-    prices = download_prices(all_tickers, DATA_YEARS)
-    print(f"Downloaded {prices.shape[1]} tickers with data.\n")
-
-    print("Computing signals...")
+def build_snapshot_body(snap_key: str, snap_label: str, as_of_date, universes: dict, extra_tickers: list,
+                         full_prices: pd.DataFrame, sec_px_full: pd.DataFrame) -> str:
+    """Everything build_report used to build, for ONE as-of date — same signals, same four
+    scatter/frontier charts, same leaderboards/sector/movers/screens — just computed from the
+    DATA_YEARS-long trailing price window ending on as_of_date instead of always-today. Every element
+    id and JS global is suffixed with snap_key so all 5 snapshots' markup can coexist in one page."""
+    prices = price_window_for_as_of(full_prices, as_of_date)
     signals = compute_signals(prices)
     returns = prices.pct_change(fill_method=None)
-    print(f"{len(signals)} stocks with usable signals.\n")
+    print(f"  [{snap_label}] as of {as_of_date.date()}: {len(signals)} stocks with usable signals")
 
-    parts = []
+    parts = [f'<div class="snapshot-meta">As of <b>{as_of_date.strftime("%B %d, %Y")}</b> &middot; '
+             f'signals computed from the trailing {DATA_YEARS}yr of price history ending that date.</div>']
 
     parts.append(section_header("Sharpe Leaderboards (Top 50 per index)"))
     leaderboard_html = ['<div class="leaderboards">']
@@ -663,55 +744,82 @@ def build_report(extra_tickers: list):
     leaderboard_html.append("</div>")
     parts.append("".join(leaderboard_html))
 
-    print("Building sector snapshot...")
     try:
         parts.append(section_header("Sector Snapshot"))
-        parts.append(fig_to_div(make_sector_snapshot()))
+        parts.append(fig_to_div(make_sector_snapshot(sec_px_full, as_of_date)))
     except Exception as e:
-        print(f"Sector snapshot error: {e}")
+        print(f"  [{snap_label}] Sector snapshot error: {e}")
 
-    print("Building risk/return scatter + efficient frontier charts...")
     parts.append(section_header(
         "Risk vs. Return + Efficient Frontier",
         f"One chart per universe, plus a consolidated S&amp;P 500 + NASDAQ-100 view &middot; "
         f"Grey = all screened stocks in that universe &middot; Colored+labeled = top {TOP_N} by Sharpe &middot; "
         "Gold diamonds = custom/manual watchlist (always included, any universe) &middot; Orange dashed = efficient frontier",
     ))
-    parts.append(search_box_html(signals))
+    parts.append(search_box_html(signals, snap_key))
     sp500_nasdaq100 = list(dict.fromkeys(universes["S&P 500"] + universes["NASDAQ-100"]))
+    div_ids = frontier_div_ids(snap_key)
     frontier_charts = [
-        ("S&P 500", universes["S&P 500"], "frontier-sp500"),
-        ("NASDAQ-100", universes["NASDAQ-100"], "frontier-nasdaq100"),
-        ("TSX", universes["TSX"], "frontier-tsx"),
-        ("S&P 500 + NASDAQ-100 (consolidated)", sp500_nasdaq100, "frontier-consolidated"),
+        ("S&P 500", universes["S&P 500"], div_ids[0]),
+        ("NASDAQ-100", universes["NASDAQ-100"], div_ids[1]),
+        ("TSX", universes["TSX"], div_ids[2]),
+        ("S&P 500 + NASDAQ-100 (consolidated)", sp500_nasdaq100, div_ids[3]),
     ]
     for chart_title, chart_universe, div_id in frontier_charts:
         if not chart_universe:
             continue
-        print(f"  {chart_title}...")
+        print(f"  [{snap_label}] {chart_title}...")
         fig = make_scatter_frontier(signals, returns, chart_universe, extra_tickers, chart_title)
         parts.append(f'<div class="frontier-chart">{fig_to_div(fig, div_id=div_id)}</div>')
 
-    print("Building movers chart...")
     parts.append(section_header("1-Month Movers"))
     parts.append(fig_to_div(make_movers_chart(signals)))
 
-    print("Building signal screens...")
     parts.append(section_header("Signal Screens", "Pre-defined screens run across the full combined universe"))
     parts.append(screens_html(signals))
 
-    custom_note = f" &middot; Custom watchlist: {', '.join(extra_tickers)}" if extra_tickers else ""
-    return "\n".join(parts), len(all_tickers), custom_note
+    active = " active" if snap_key == "today" else ""
+    return f'<div class="snapshot-panel{active}" id="panel-{snap_key}">' + "\n".join(parts) + "</div>"
 
 
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     extra_tickers = get_extra_tickers()
-    body, n_universe, custom_note = build_report(extra_tickers)
+    universes = load_universes(extra_tickers)
+    all_tickers = list(dict.fromkeys(
+        universes["S&P 500"] + universes["NASDAQ-100"] + universes["TSX"] + extra_tickers
+    ))
 
+    print(f"\nDownloading {len(all_tickers)} tickers, {TOTAL_DOWNLOAD_YEARS}yr history "
+          f"(covers a {DATA_YEARS}yr trailing window for every snapshot back to {MAX_SNAPSHOT_OFFSET_YEARS}y ago)...")
+    full_prices = download_prices(all_tickers, TOTAL_DOWNLOAD_YEARS)
+    print(f"Downloaded {full_prices.shape[1]} tickers with data.\n")
+
+    print("Downloading sector ETF history...")
+    sec_px_full = download_sector_prices(TOTAL_DOWNLOAD_YEARS)
+
+    panels = []
+    for snap_key, offset_years, snap_label in SNAPSHOTS:
+        as_of_date = resolve_as_of_date(full_prices, offset_years)
+        if as_of_date is None:
+            print(f"  [{snap_label}] no price history available that far back, skipping")
+            continue
+        print(f"\nBuilding snapshot: {snap_label} (as of {as_of_date.date()})...")
+        panels.append(build_snapshot_body(
+            snap_key, snap_label, as_of_date, universes, extra_tickers, full_prices, sec_px_full,
+        ))
+
+    body = "\n".join(panels)
+    snapshot_options = "\n".join(
+        f'<option value="{key}"{" selected" if key == "today" else ""}>{label}</option>'
+        for key, _, label in SNAPSHOTS
+    )
+
+    custom_note = f" &middot; Custom watchlist: {', '.join(extra_tickers)}" if extra_tickers else ""
     html = PAGE_TEMPLATE.format(
-        date_str=datetime.now().strftime("%B %d, %Y"), body=body, n_universe=n_universe,
+        date_str=datetime.now().strftime("%B %d, %Y"), body=body, n_universe=len(all_tickers),
         years=DATA_YEARS, rf=RISK_FREE * 100, top_n=TOP_N, custom_note=custom_note, logo_b64=LOGO_B64,
+        snapshot_options=snapshot_options,
     )
     out_path = os.path.join(OUTPUT_DIR, "Stock_Screener.html")
     with open(out_path, "w", encoding="utf-8") as f:
