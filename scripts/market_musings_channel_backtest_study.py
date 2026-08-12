@@ -393,6 +393,93 @@ def build_significance_section(backtest_df):
     return "\n".join(parts), n_significant, len(rows)
 
 
+CLEAN_BAND_COLORS = {"Bottom": BLUE, "Middle": ORANGE, "Top": RED}
+
+
+def build_clean_band_levels(backtest_df):
+    """Ticker-normalized per-band levels (not pairwise diffs): for tickers that have ALL THREE bands
+    represented at a given horizon (same matched-sample logic as the significance test), each ticker's
+    own mean return in that band, then average across tickers with equal weight per ticker — not equal
+    weight per raw (autocorrelated, overlapping) observation. This is the fair, apples-to-apples read
+    of "what does the average stock return when at the bottom vs. middle vs. top" — the raw pooled
+    Study section above answers a different (and misleading) question, since a handful of very
+    frequently-sampled tickers (long stretches spent in one band) dominate the pooled average and wash
+    out the true per-stock effect."""
+    rows = []
+    for horizon in FORWARD_HORIZONS:
+        sub = backtest_df[backtest_df["Horizon"] == horizon]
+        abs_pivot = sub.groupby(["Ticker", "Band"])["Fwd_Stock_Return"].mean().unstack("Band")
+        rel_pivot = sub.groupby(["Ticker", "Band"])["Fwd_Relative_Return"].mean().unstack("Band")
+        if not all(b in abs_pivot.columns for b in BAND_ORDER):
+            continue
+        full = abs_pivot.dropna(subset=BAND_ORDER)
+        if full.empty:
+            continue
+        for band in BAND_ORDER:
+            abs_vals = abs_pivot.loc[full.index, band]
+            rel_vals = rel_pivot.loc[full.index, band]
+            rows.append({
+                "Horizon": horizon, "Band": band, "N_Tickers": len(full),
+                "Mean_Abs": abs_vals.mean(), "Median_Abs": abs_vals.median(),
+                "Mean_Rel": rel_vals.mean(), "Median_Rel": rel_vals.median(),
+            })
+    return pd.DataFrame(rows)
+
+
+def build_clean_band_levels_table(clean_df):
+    cols = ["Horizon", "Band", "Paired Tickers (n)", "Mean Abs. Return", "Median Abs. Return",
+            "Mean Return vs. Bench", "Median Return vs. Bench"]
+    band_order = {b: i for i, b in enumerate(BAND_ORDER)}
+    horizon_order = {h: i for i, h in enumerate(FORWARD_HORIZONS)}
+    ordered = clean_df.assign(
+        _h=clean_df["Horizon"].map(horizon_order), _b=clean_df["Band"].map(band_order),
+    ).sort_values(["_h", "_b"])
+    html = ['<table class="summary"><thead><tr>']
+    html.append("".join(f"<th>{c}</th>" for c in cols))
+    html.append("</tr></thead><tbody>")
+    for _, r in ordered.iterrows():
+        html.append(
+            "<tr>"
+            f"<td>{r['Horizon']}</td>"
+            f"<td>{r['Band']}</td>"
+            f"<td>{int(r['N_Tickers'])}</td>"
+            f"<td>{r['Mean_Abs']*100:+.1f}%</td>"
+            f"<td>{r['Median_Abs']*100:+.1f}%</td>"
+            f"<td>{r['Mean_Rel']*100:+.1f}%</td>"
+            f"<td>{r['Median_Rel']*100:+.1f}%</td>"
+            "</tr>"
+        )
+    html.append("</tbody></table>")
+    return "".join(html)
+
+
+def build_clean_band_levels_chart(clean_df, metric, title, ytitle):
+    horizons = list(FORWARD_HORIZONS.keys())
+    fig = go.Figure()
+    for band in BAND_ORDER:
+        sub = clean_df[clean_df["Band"] == band].set_index("Horizon").reindex(horizons)
+        vals = sub[f"Mean_{metric}"] * 100
+        med_vals = sub[f"Median_{metric}"] * 100
+        fig.add_trace(go.Bar(
+            x=horizons, y=vals, name=band, marker_color=CLEAN_BAND_COLORS[band],
+            text=[f"{v:+.1f}%" for v in vals], textposition="outside",
+            customdata=med_vals,
+            hovertemplate="%{x} " + band + "<br>Mean: %{y:+.1f}%<br>Median: %{customdata:+.1f}%<extra></extra>",
+        ))
+    fig.update_layout(
+        barmode="group", height=420, width=900,
+        paper_bgcolor=DGREY, plot_bgcolor=LGREY,
+        font=dict(family="Arial, sans-serif", color=TEXTCLR, size=12),
+        title=dict(text=f"<b>{title}</b>", font=dict(size=14, color=TEXTCLR)),
+        yaxis=dict(title=ytitle, ticksuffix="%", gridcolor="#555", zeroline=True, zerolinecolor="#888"),
+        xaxis=dict(title="Forward-Return Horizon", gridcolor="#555"),
+        legend=dict(orientation="h", y=1.14, x=0.5, xanchor="center"),
+        margin=dict(t=60, b=50, l=60, r=30),
+        uniformtext=dict(mode="hide", minsize=9),
+    )
+    return pio.to_html(fig, include_plotlyjs=False, full_html=False, config={"responsive": True})
+
+
 def compute_dwell_times(band_seq_df):
     """How many consecutive monthly samples (~months, given RESAMPLE_STEP_DAYS is ~1 month) a ticker
     typically stays in the same band before its rolling fit reclassifies it. Each ticker's first and
@@ -663,7 +750,11 @@ def main():
             "trailing relative strength are all required at that date to count at all. That date is then "
             "classified Bottom (Z&le;-1.5) / Middle / Top (Z&ge;+1.5) against its own trailing-only fit, and the "
             "name's real forward return is measured 6M/12M/3Y/5Y later. Because classification never sees the "
-            "future, this is a fair walk-forward read of whether the setup has actually worked historically.</div>"
+            "future, this is a fair walk-forward read of whether the setup has actually worked historically. "
+            "<b>Caveat:</b> the numbers immediately below pool every raw monthly sample with equal weight, so a "
+            "ticker that spent years continuously in one band contributes far more rows than one sampled only "
+            "briefly — see the ticker-normalized \"Clean Comparison\" table further down (one number per stock, "
+            "not per overlapping sample) for the apples-to-apples read.</div>"
         )
         study_parts.append(f'<div class="callout">{build_takeaway(summary_df)}</div>')
         for horizon in FORWARD_HORIZONS:
@@ -715,6 +806,28 @@ def main():
                        "not a real, actionable signal.")
         sig_parts.append(f'<div class="callout">{verdict}</div>')
         sig_parts.append(sig_html)
+
+        sig_parts.append("<h3>Clean Comparison: Typical Stock's Own Return by Band</h3>")
+        sig_parts.append(
+            '<div class="section-sub">Ticker-normalized: for the same paired-ticker population as the '
+            "significance test, each ticker's own mean return in a band is averaged first, then averaged across "
+            "tickers with equal weight per ticker — not equal weight per raw (autocorrelated, overlapping) "
+            "observation. This is the fair, apples-to-apples version of \"what does the average stock return "
+            "when at the bottom vs. middle vs. top\" — pooling raw observations directly gives a different, "
+            "misleading answer (see the Study section above).</div>"
+        )
+        clean_df = build_clean_band_levels(backtest_df)
+        if not clean_df.empty:
+            sig_parts.append(build_clean_band_levels_chart(
+                clean_df, "Abs", "Average Forward Return (Absolute)", "Average Forward Return (%)",
+            ))
+            sig_parts.append(build_clean_band_levels_chart(
+                clean_df, "Rel", "Average Forward Return vs. Benchmark", "Average Return vs. Benchmark (%)",
+            ))
+            sig_parts.append(build_clean_band_levels_table(clean_df))
+        else:
+            sig_parts.append('<div class="section-sub">Not enough paired tickers.</div>')
+
         sig_parts.append("</div>")
         parts.append("\n".join(sig_parts))
 
