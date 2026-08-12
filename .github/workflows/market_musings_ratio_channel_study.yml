@@ -1,0 +1,47 @@
+name: Market Musings Ratio Channel Study
+
+on:
+  schedule:
+    - cron: "45 8 * * 1-5"   # 8:45 AM UTC, weekdays — offset from Ratio Channel Lookup (8:35)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-market-musings-ratio-channel-study:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Market Musings Ratio Channel Study report
+        timeout-minutes: 50
+        run: |
+          python scripts/market_musings_ratio_channel_study.py
+
+      - name: Commit outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add outputs/market-musings/
+          git diff --cached --quiet || git commit -m "chore: update market musings ratio channel study report [skip ci]"
+          for i in 1 2 3 4 5; do
+            git push && break
+            echo "Push rejected, rebasing onto origin/main and retrying ($i)..."
+            git fetch origin main
+            git rebase origin/main
+            sleep $((RANDOM % 10 + 1))
+          done
