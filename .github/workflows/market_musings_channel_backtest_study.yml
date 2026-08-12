@@ -1,0 +1,46 @@
+name: Market Musings Channel Backtest Study
+
+on:
+  workflow_dispatch:   # manual/on-demand only — expensive walk-forward backtest (25y x full universe x
+                        # monthly rolling regression + bootstrap significance), not part of daily automation
+
+permissions:
+  contents: write
+
+jobs:
+  run-market-musings-channel-backtest-study:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Market Musings Channel Backtest Study report
+        timeout-minutes: 170
+        run: |
+          python scripts/market_musings_channel_backtest_study.py
+
+      - name: Commit outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add outputs/market-musings/Ratio_Channel_Backtest_Study.html
+          git diff --cached --quiet || git commit -m "chore: update market musings channel backtest study report [skip ci]"
+          for i in 1 2 3 4 5; do
+            git push && break
+            echo "Push rejected, rebasing onto origin/main and retrying ($i)..."
+            git fetch origin main
+            git rebase origin/main
+            sleep $((RANDOM % 10 + 1))
+          done
