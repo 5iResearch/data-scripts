@@ -1,2 +1,7 @@
 __pycache__/
 *.pyc
+
+# local-only iteration cache for market_musings_channel_backtest_study.py — regenerable, large (~250MB+),
+# exceeds GitHub's 100MB file limit; never meant to be committed
+outputs/market-musings/_backtest_cache.pkl
+outputs/market-musings/_survivorship_analysis.csv
