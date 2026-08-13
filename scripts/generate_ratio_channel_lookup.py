@@ -8,7 +8,7 @@ XIC.TO for Canada) and screens the whole universe for names whose ratio to
 THAT benchmark sits at a channel extreme. This page instead lets you pick
 BOTH sides of the ratio yourself — any "base" ticker (e.g. SPY, or any other
 stock/ETF) and any number of "compare" tickers (e.g. AAPL, MSFT, RY.TO) — and
-renders a 10-year log(compare/base) regression channel for each pair on
+renders a 20-year log(compare/base) regression channel for each pair on
 demand, using the exact same methodology (log-ratio linregress, +/-2 sigma
 bands, R^2, Z-score) as the screener, just computed in the browser instead of
 pre-screened server-side against one fixed benchmark.
@@ -56,7 +56,7 @@ CDN_REV_PATH = os.path.join(REPO_ROOT, "data", "cdn_1w_rev_est_screener.csv")
 KOYFIN_US_PATH = os.path.join(REPO_ROOT, "data", "koyfin_us.csv")
 KOYFIN_CDN_PATH = os.path.join(REPO_ROOT, "data", "koyfin_cdn.csv")
 
-LOOKBACK_PERIOD = "10y"
+LOOKBACK_PERIOD = "20y"
 MIN_WEEKS = 26  # bare minimum weekly bars to embed a ticker at all (~6 months) - a lookup tool,
                 # not a screener, so this is deliberately permissive; per-pair overlap is checked
                 # again client-side once you actually pick two tickers.
@@ -272,7 +272,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <body>
 <header>
   <h1>Ratio Channel Lookup</h1>
-  <div class="meta">Generated {date_str} &middot; {count} tickers available (US + Canada) &middot; pick any base ticker and any comparison ticker(s) for an on-demand 10-year log-ratio regression channel &mdash; same methodology as the Ratio Channel Screener, computed here for whichever pair you choose</div>
+  <div class="meta">Generated {date_str} &middot; {count} tickers available (US + Canada) &middot; pick any base ticker and any comparison ticker(s) for an on-demand 20-year log-ratio regression channel &mdash; same methodology as the Ratio Channel Screener, computed here for whichever pair you choose</div>
 </header>
 <div class="controls">
   <div class="field">
@@ -286,7 +286,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   <button onclick="renderRatios()">Show</button>
 </div>
 <div id="notFound" class="not-found"></div>
-<div id="results"><div class="placeholder">Enter a base ticker (defaults to SPY) and one or more comparison tickers, then press Enter or click Show. Each chart shows Compare/Base as a 10-year log-ratio regression channel.</div></div>
+<div id="results"><div class="placeholder">Enter a base ticker (defaults to SPY) and one or more comparison tickers, then press Enter or click Show. Each chart shows Compare/Base as a 20-year log-ratio regression channel.</div></div>
 
 <script>
 const DATA = {data_json};
