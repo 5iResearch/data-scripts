@@ -53,6 +53,20 @@ MARKET_SYMBOLS = {
     "RSP": "S&P 500 Equal Weight",
 }
 
+SECTOR_SYMBOLS = {
+    "XLK": "Technology",
+    "XLF": "Financials",
+    "XLV": "Health Care",
+    "XLY": "Consumer Discretionary",
+    "XLP": "Consumer Staples",
+    "XLE": "Energy",
+    "XLI": "Industrials",
+    "XLB": "Materials",
+    "XLU": "Utilities",
+    "XLRE": "Real Estate",
+    "XLC": "Communication Services",
+}
+
 INDUSTRY_SYMBOLS = {
     "XME": "Metals & Mining",
     "VNQ": "Real Estate",
@@ -212,6 +226,21 @@ def build_report() -> str:
             # fall inside the [30, 70] display range below (40/75 didn't - the red line was clipped off).
             # Same thresholds passed to get_weekly_rsi() too, so the dot colors (buy/hold/sell) agree
             # with where the dashed lines actually are, instead of using the 14-period 40/75 cutoffs.
+            df_52 = get_weekly_rsi(ticker, rsi_length=52, thresholds=(45, 65))
+            fig_52 = plot_price_rsi(df_52, ticker, name, log_price=True, rsi_range=[30, 70], thresholds=(45, 65))
+            fig_52.update_layout(title_text=f"<b>{ticker}</b>  ·  {name}  ·  Weekly RSI (1-Year / 52-period)")
+            parts.append(fig_to_div(fig_52))
+        except Exception as e:
+            print(f"Error {ticker}: {e}")
+
+    print("Downloading sector ETFs...")
+    fetch_all(list(SECTOR_SYMBOLS.keys()))
+    parts.append(section_header("Sector ETFs", "Weekly RSI-14 &middot; Weekly RSI-52 (1-Year)"))
+    for ticker, name in SECTOR_SYMBOLS.items():
+        try:
+            df_w = get_weekly_rsi(ticker, rsi_length=14)
+            parts.append(fig_to_div(plot_price_rsi(df_w, ticker, name, log_price=True)))
+
             df_52 = get_weekly_rsi(ticker, rsi_length=52, thresholds=(45, 65))
             fig_52 = plot_price_rsi(df_52, ticker, name, log_price=True, rsi_range=[30, 70], thresholds=(45, 65))
             fig_52.update_layout(title_text=f"<b>{ticker}</b>  ·  {name}  ·  Weekly RSI (1-Year / 52-period)")
