@@ -110,14 +110,17 @@ def load_koyfin_sector_map(path):
 
 
 def load_rev_csv(path):
-    raw = pd.read_csv(path)
+    # keep_default_na=False on the Ticker column only: pandas otherwise parses the
+    # ticker "NA" (National Bank of Canada) as NaN, which crashes the .TO suffixing
+    # in build_section the moment that name ranks into the spotlight.
+    raw = pd.read_csv(path, converters={"Ticker": lambda v: str(v).strip()})
     df = raw.rename(columns=COL_MAP)
     df = df[[c for c in COL_MAP.values() if c in df.columns]].copy()
     for c in [c for c in df.columns if c.startswith("fy")] + ["price", "mktcap", "below_52wh"]:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce")
     df = df.dropna(subset=["fy1_1w", "fy2_1w"], how="all").reset_index(drop=True)
-    return df
+    return df[df["ticker"].str.len() > 0].reset_index(drop=True)
 
 
 def score_row(row):

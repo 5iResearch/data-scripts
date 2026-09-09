@@ -26,8 +26,10 @@ MIN_TRADING_DAYS = 100  # ~80% of the ~126 trading days in a 180-day window;
 
 
 def load_tsx_symbols():
-    tsx_list = pd.read_csv(TSX_UNIVERSE_PATH)
-    symbols = tsx_list["Symbol"].dropna().astype(str).tolist()
+    # converters, not the default parser: pandas reads the symbol "NA" (National
+    # Bank of Canada) as NaN, which silently dropped it from every TSX screen.
+    tsx_list = pd.read_csv(TSX_UNIVERSE_PATH, converters={"Symbol": lambda v: str(v).strip()})
+    symbols = [s for s in tsx_list["Symbol"].tolist() if s]
     symbols = [s.replace(".", "-") + ".TO" for s in symbols]
     return symbols
 
