@@ -20,8 +20,8 @@ columns the notebooks read, one CSV per universe):
 plus the ETF holdings list used for the GRNJ/GRNY flag:
   data/etf_holdings.csv   (two columns: ETF, Ticker)
 
-On top of the notebooks, every table gets a "Beat QQQ 5Y" check — total return
-vs QQQ over the last 5 years (or since listing for younger names), from
+On top of the notebooks, every table gets a "Beat QQQ 10Y" check — total return
+vs QQQ over the last 10 years (or since listing for younger names), from
 yfinance. It's an annotation only; it doesn't feed the ranking.
 """
 
@@ -63,10 +63,11 @@ N_ELITE = 35
 OVERALL_TOP_N = 50
 
 BENCH = "QQQ"
-REL_YEARS = 5
+REL_YEARS = 10
 MIN_REL_DAYS = 20       # ~a month of trading; any less and the comparison is noise
 PRICE_CHUNK = 200       # tickers per yf.download call
 BEAT_COL = f"Beat {BENCH} {REL_YEARS}Y"
+REL_COL = f"vs_{BENCH}_{REL_YEARS}Y"   # CSV export column: outperformance in pct points
 
 BG_CELL, BG_HEADER, FG_MAIN, FG_HEADER = "#1a1d27", "#252840", "#c8ccd8", "#e2e5f0"
 BORDER = "1px solid #2d3148"
@@ -356,7 +357,7 @@ def build_overall_html(df, etf, etf_source):
         "Sales$ Rank": top["Rank_Sales_D"].astype(int),
         "Price3Y Rank": top["Rank_Price3Y"].astype(int),
         "Price 1Y": top["PriceChg1Y"].map(fmt_pct), "Price 3Y": top["PriceChg3Y"].map(fmt_pct),
-        BEAT_COL: top["Beat_QQQ_5Y"],
+        BEAT_COL: top["beat_mark"],
         "Sales $": top["Sales_D"].map(fmt_num), "Sales %": top["Sales_Pct"].map(fmt_pct),
         "Profits $": top["Profits_D"].map(fmt_num),
         etf: top[f"On{etf}"].map({True: "✓", False: ""}),
@@ -394,7 +395,7 @@ def build_group_html(df, group, n_total, etf):
         f"{sfx} Price3Y Rank": g[f"Rank_Price3Y_{sfx}"].astype(int),
         third_label: g[third_col].astype(int),
         "Price 1Y": g["PriceChg1Y"].map(fmt_pct), "Price 3Y": g["PriceChg3Y"].map(fmt_pct),
-        BEAT_COL: g["Beat_QQQ_5Y"],
+        BEAT_COL: g["beat_mark"],
         "Sales $": g["Sales_D"].map(fmt_num), "Sales %": g["Sales_Pct"].map(fmt_pct),
         "Profits $": g["Profits_D"].map(fmt_num),
         f"Sales$% of {sfx}": g[f"Sales_D_{sfx}Share"].map(fmt_share),
@@ -450,14 +451,14 @@ def build_universe(u, df, vs_bench):
     df, n_momentum = compute_metrics(df)
     holdings, etf_source = load_etf_holdings(etf)
     df[f"On{etf}"] = df["Ticker"].isin(holdings)
-    df["vs_QQQ_5Y"] = df["Ticker"].map(lambda t: vs_bench.get(t, (np.nan, np.nan))[0]).round(1)
+    df[REL_COL] = df["Ticker"].map(lambda t: vs_bench.get(t, (np.nan, np.nan))[0]).round(1)
     df["vs_QQQ_Years"] = df["Ticker"].map(lambda t: vs_bench.get(t, (np.nan, np.nan))[1]).round(2)
-    df["Beat_QQQ_5Y"] = [beat_label(r, y) for r, y in zip(df["vs_QQQ_5Y"], df["vs_QQQ_Years"])]
+    df["beat_mark"] = [beat_label(r, y) for r, y in zip(df[REL_COL], df["vs_QQQ_Years"])]
     print(f"  {(df['O'] > 0).sum()} tickers in at least one top-{N_ELITE} list")
     print(f"  {n_momentum} tickers pass the >{PRICE_THRESHOLD * 100:.0f}% price momentum filter")
     print(f"  {etf}: {etf_source}, {df[f'On{etf}'].sum()} matched")
-    print(f"  {BEAT_COL}: {df['Beat_QQQ_5Y'].str.startswith('✓').sum()} beat, "
-          f"{df['Beat_QQQ_5Y'].str.startswith('✗').sum()} lagged, {(df['Beat_QQQ_5Y'] == '—').sum()} no data")
+    print(f"  {BEAT_COL}: {df['beat_mark'].str.startswith('✓').sum()} beat, "
+          f"{df['beat_mark'].str.startswith('✗').sum()} lagged, {(df['beat_mark'] == '—').sum()} no data")
 
     parts = [
         f'<div class="section"><h2>Overall Ranking</h2><div class="section-sub">'
@@ -479,7 +480,7 @@ def build_universe(u, df, vs_bench):
     print(f"Saved: {out_path}")
 
     csv_path = os.path.join(OUTPUT_DIR, u["csv"])
-    export_cols = [c for c in EXPORT_COLS if c in df.columns] + [f"On{etf}", "vs_QQQ_5Y", "vs_QQQ_Years"]
+    export_cols = [c for c in EXPORT_COLS if c in df.columns] + [f"On{etf}", REL_COL, "vs_QQQ_Years"]
     df[export_cols].sort_values("Q", na_position="last").to_csv(csv_path, index=False)
     print(f"Saved: {csv_path}")
 

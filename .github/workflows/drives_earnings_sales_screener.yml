@@ -22,7 +22,7 @@ concurrency:                  # a manual run fired during a push-triggered one w
 jobs:
   run-drives-earnings-sales-screener:
     runs-on: ubuntu-latest
-    timeout-minutes: 30       # ~1,650-ticker 5Y price download for the Beat-QQQ column
+    timeout-minutes: 30       # ~1,650-ticker 10Y price download for the Beat-QQQ column
 
     steps:
       - name: Checkout repo
