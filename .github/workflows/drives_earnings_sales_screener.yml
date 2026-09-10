@@ -1,0 +1,63 @@
+name: Drives Earnings & Sales Screener ($2B-$35B)
+
+on:
+  push:
+    branches: [main]
+    paths:                    # input is a manual export — rebuild as soon as a fresh one is pushed
+      - data/drives_earnings_sales_2_35.csv
+      - data/etf_holdings.csv
+      - scripts/generate_drives_earnings_sales_screener.py
+  schedule:
+    - cron: "55 8 * * 1"      # 8:55 AM UTC, Mondays — weekly refresh, offset from Ratio Channel Lookup (8:45)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-drives-earnings-sales-screener:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # full commit history so the report's "data as of" date comes from
+          filter: blob:none     # the last commit touching the input CSV (blobless keeps it light)
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Check input CSV is present
+        run: |
+          f=data/drives_earnings_sales_2_35.csv
+          lines=$(wc -l < "$f")
+          if [ "$lines" -le 1 ]; then
+            echo "::warning::$f has no data rows — did you forget to export/commit the screener pull?"
+          fi
+
+      - name: Run Drives Earnings & Sales Screener
+        run: |
+          python scripts/generate_drives_earnings_sales_screener.py
+
+      - name: Commit outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add outputs/drives-earnings-sales-screener/
+          git diff --cached --quiet || git commit -m "chore: update drives earnings & sales screener report [skip ci]"
+          for i in 1 2 3 4 5; do
+            git push && break
+            echo "Push rejected, rebasing onto origin/main and retrying ($i)..."
+            git fetch origin main
+            git rebase origin/main
+            sleep $((RANDOM % 10 + 1))
+          done
