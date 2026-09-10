@@ -183,6 +183,11 @@ def vs_bench_lookup(tickers):
     start = datetime.today() - timedelta(days=round(365.25 * REL_YEARS))
     yf_map = {t: t.replace(".", "-") for t in tickers}
     closes = download_closes(sorted(set(yf_map.values()) | {BENCH}), start)
+    # the screener export writes class shares without the dot (BRKA, BFB); yfinance wants BRK-A
+    retry = {t: t[:-1] + "-" + t[-1] for t, yt in yf_map.items() if yt not in closes and len(t) > 1}
+    if retry:
+        closes.update(download_closes(sorted(set(retry.values())), start))
+        yf_map.update({t: yt for t, yt in retry.items() if yt in closes})
     bench = closes.get(BENCH)
     if bench is None:
         print(f"  warning: {BENCH} download failed, {BEAT_COL} will be blank")
