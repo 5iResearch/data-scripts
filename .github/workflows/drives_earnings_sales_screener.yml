@@ -15,10 +15,14 @@ on:
 permissions:
   contents: write
 
+concurrency:                  # a manual run fired during a push-triggered one would otherwise race it
+  group: drives-earnings-sales-screener
+  cancel-in-progress: false
+
 jobs:
   run-drives-earnings-sales-screener:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30       # ~1,650-ticker 5Y price download for the Beat-QQQ column
 
     steps:
       - name: Checkout repo
@@ -47,6 +51,7 @@ jobs:
           done
 
       - name: Run Drives Earnings & Sales Screener
+        timeout-minutes: 25
         run: |
           python scripts/generate_drives_earnings_sales_screener.py
 
@@ -60,6 +65,7 @@ jobs:
             git push && break
             echo "Push rejected, rebasing onto origin/main and retrying ($i)..."
             git fetch origin main
-            git rebase origin/main
+            # -X theirs = keep this run's freshly generated outputs if an earlier run touched the same files
+            git rebase -X theirs origin/main
             sleep $((RANDOM % 10 + 1))
           done

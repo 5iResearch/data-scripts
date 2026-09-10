@@ -13,21 +13,26 @@ its sector, and its industry:
   2. Sector ranking    (xlsm cols AB–AK) — dropdown per sector
   3. Industry ranking  (xlsm cols AT–BC) — dropdown per industry
 
-No price downloads — everything comes from manually-refreshed screener exports
-(the same 20 columns the notebooks read, one CSV per universe):
+Ranking comes entirely from manually-refreshed screener exports (the same 20
+columns the notebooks read, one CSV per universe):
   data/drives_earnings_sales_2_35.csv
   data/drives_earnings_sales_35_plus.csv
 plus the ETF holdings list used for the GRNJ/GRNY flag:
   data/etf_holdings.csv   (two columns: ETF, Ticker)
+
+On top of the notebooks, every table gets a "Beat QQQ 5Y" check — total return
+vs QQQ over the last 5 years (or since listing for younger names), from
+yfinance. It's an annotation only; it doesn't feed the ranking.
 """
 
 import os
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 from html import escape
 
 import numpy as np
 import pandas as pd
+import yfinance as yf
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT_DIR = os.path.join(REPO_ROOT, "outputs", "drives-earnings-sales-screener")
@@ -56,6 +61,12 @@ UNIVERSES = [
 PRICE_THRESHOLD = 0.25
 N_ELITE = 35
 OVERALL_TOP_N = 50
+
+BENCH = "QQQ"
+REL_YEARS = 5
+MIN_REL_DAYS = 20       # ~a month of trading; any less and the comparison is noise
+PRICE_CHUNK = 200       # tickers per yf.download call
+BEAT_COL = f"Beat {BENCH} {REL_YEARS}Y"
 
 BG_CELL, BG_HEADER, FG_MAIN, FG_HEADER = "#1a1d27", "#252840", "#c8ccd8", "#e2e5f0"
 BORDER = "1px solid #2d3148"
@@ -90,7 +101,7 @@ EXPORT_COLS = [
     "Score_Sector", "Score_Sector_Adj", "Score_Ind", "Score_Ind_Adj",
     "Rank_Sales_D", "Rank_Price3Y", "Rank_Sales_TotalShare", "Rank_Profits_D",
     "Rank_Sales_D_Sec", "Rank_Price3Y_Sec", "Rank_Sales_D_Ind", "Rank_Price3Y_Ind",
-    "Sales_D_SecShare", "Sales_D_IndShare",  # + the On<ETF> flag column, appended per universe
+    "Sales_D_SecShare", "Sales_D_IndShare",  # + On<ETF> and the vs-QQQ columns, appended per universe
 ]
 
 
@@ -138,6 +149,63 @@ def load_input(path):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
     return df[df["Ticker"].str.len() > 0].reset_index(drop=True)
+
+
+def download_closes(tickers, start):
+    """Adjusted (total-return) close series per ticker, fetched in chunks so one
+    bad batch only blanks its own names rather than the whole run."""
+    closes = {}
+    for i in range(0, len(tickers), PRICE_CHUNK):
+        chunk = tickers[i:i + PRICE_CHUNK]
+        try:
+            raw = yf.download(chunk, start=start.strftime("%Y-%m-%d"), auto_adjust=True,
+                              progress=False, threads=True)
+        except Exception as e:
+            print(f"  price download error (chunk {i // PRICE_CHUNK + 1}): {e}")
+            continue
+        if raw.empty:
+            continue
+        if isinstance(raw.columns, pd.MultiIndex):
+            close = raw["Close"]
+        else:
+            close = raw[["Close"]].rename(columns={"Close": chunk[0]})
+        for tkr in close.columns:
+            s = close[tkr].dropna()
+            if len(s):
+                closes[tkr] = s
+    return closes
+
+
+def vs_bench_lookup(tickers):
+    """Ticker -> (outperformance in pct points, years measured) vs BENCH total
+    return over the last REL_YEARS, or since listing for younger names. Names
+    with no/too little price history are left out (rendered as —)."""
+    start = datetime.today() - timedelta(days=round(365.25 * REL_YEARS))
+    yf_map = {t: t.replace(".", "-") for t in tickers}
+    closes = download_closes(sorted(set(yf_map.values()) | {BENCH}), start)
+    bench = closes.get(BENCH)
+    if bench is None:
+        print(f"  warning: {BENCH} download failed, {BEAT_COL} will be blank")
+        return {}
+    out = {}
+    for tkr, yt in yf_map.items():
+        s = closes.get(yt)
+        if s is None:
+            continue
+        both = pd.DataFrame({"s": s, "b": bench}).dropna()
+        if len(both) < MIN_REL_DAYS:
+            continue
+        rel = (both["s"].iloc[-1] / both["s"].iloc[0] - both["b"].iloc[-1] / both["b"].iloc[0]) * 100
+        out[tkr] = (rel, (both.index[-1] - both.index[0]).days / 365.25)
+    print(f"  {len(out)}/{len(tickers)} tickers with usable price history vs {BENCH}")
+    return out
+
+
+def beat_label(rel, years):
+    if pd.isna(rel):
+        return "—"
+    # a few days' slack so full-history names aren't starred over holidays at the window start
+    return ("✓" if rel >= 0 else "✗") + ("*" if years < REL_YEARS - 0.05 else "")
 
 
 def rank_desc(series):
@@ -242,6 +310,18 @@ def _check(v):
     return f"color: {C_GREEN}; font-weight: bold" if v == "✓" else ""
 
 
+def _color_beat(v):
+    if v.startswith("✓"):
+        return f"color: {C_GREEN}; font-weight: bold"
+    if v.startswith("✗"):
+        return f"color: {C_RED}; font-weight: bold"
+    return f"color: {C_NEUTRAL}"
+
+
+BEAT_CAPTION = (f"{BEAT_COL}: ✓ beat / ✗ lagged {BENCH} total return over {REL_YEARS}Y "
+                f"(* listed &lt; {REL_YEARS}Y, measured since listing; — no price data)")
+
+
 def _base_style(styler):
     return (
         styler
@@ -271,6 +351,7 @@ def build_overall_html(df, etf, etf_source):
         "Sales$ Rank": top["Rank_Sales_D"].astype(int),
         "Price3Y Rank": top["Rank_Price3Y"].astype(int),
         "Price 1Y": top["PriceChg1Y"].map(fmt_pct), "Price 3Y": top["PriceChg3Y"].map(fmt_pct),
+        BEAT_COL: top["Beat_QQQ_5Y"],
         "Sales $": top["Sales_D"].map(fmt_num), "Sales %": top["Sales_Pct"].map(fmt_pct),
         "Profits $": top["Profits_D"].map(fmt_num),
         etf: top[f"On{etf}"].map({True: "✓", False: ""}),
@@ -279,11 +360,12 @@ def build_overall_html(df, etf, etf_source):
         _base_style(tbl.style)
         .map(_color_pct, subset=["Price 1Y", "Price 3Y", "Sales %"])
         .map(lambda v: _color_rank(v, n), subset=["Sales$ Rank", "Price3Y Rank"])
+        .map(_color_beat, subset=[BEAT_COL])
         .map(_check, subset=[etf])
         .set_caption(
             f"Top {OVERALL_TOP_N} of {ranked_n} scored ({n - ranked_n} unranked) | "
             f"Q = AVERAGE(elite Sales$ rank, elite Price3Y rank) ÷ # top-{N_ELITE} criteria hit | "
-            f"lower Q = better | {etf}: {etf_source}")
+            f"lower Q = better | {etf}: {etf_source}<br>{BEAT_CAPTION}")
     )
     return styled.to_html()
 
@@ -307,6 +389,7 @@ def build_group_html(df, group, n_total, etf):
         f"{sfx} Price3Y Rank": g[f"Rank_Price3Y_{sfx}"].astype(int),
         third_label: g[third_col].astype(int),
         "Price 1Y": g["PriceChg1Y"].map(fmt_pct), "Price 3Y": g["PriceChg3Y"].map(fmt_pct),
+        BEAT_COL: g["Beat_QQQ_5Y"],
         "Sales $": g["Sales_D"].map(fmt_num), "Sales %": g["Sales_Pct"].map(fmt_pct),
         "Profits $": g["Profits_D"].map(fmt_num),
         f"Sales$% of {sfx}": g[f"Sales_D_{sfx}Share"].map(fmt_share),
@@ -321,11 +404,12 @@ def build_group_html(df, group, n_total, etf):
         .map(_color_pct, subset=["Price 1Y", "Price 3Y", "Sales %"])
         .map(lambda v: _color_rank(v, n_g), subset=[f"{sfx} Sales$ Rank", f"{sfx} Price3Y Rank"])
         .map(lambda v: _color_rank(v, third_n), subset=[third_label])
+        .map(_color_beat, subset=[BEAT_COL])
         .map(_check, subset=[etf])
         .map(lambda v: f"color: {C_NEUTRAL}" if v == "n/a" else "", subset=["Score (adj)"])
         .set_caption(
             f"{g[group].iloc[0]} | {n_g} tickers | score penalises stocks with Price 1Y & 3Y "
-            f"both &lt; {PRICE_THRESHOLD * 100:.0f}% (shown as n/a)")
+            f"both &lt; {PRICE_THRESHOLD * 100:.0f}% (shown as n/a)<br>{BEAT_CAPTION}")
     )
     return styled.to_html()
 
@@ -351,9 +435,8 @@ def build_dropdown_section(df, group, title, subtitle, etf, default=None):
     )
 
 
-def build_universe(u):
+def build_universe(u, df, vs_bench):
     etf = u["etf"]
-    df = load_input(u["input"])
     as_of = data_as_of(u["input"])
     print(f"=== {u['label']} ===")
     print(f"Loaded {len(df)} tickers from {u['input']} (data as of {as_of})")
@@ -362,9 +445,14 @@ def build_universe(u):
     df, n_momentum = compute_metrics(df)
     holdings, etf_source = load_etf_holdings(etf)
     df[f"On{etf}"] = df["Ticker"].isin(holdings)
+    df["vs_QQQ_5Y"] = df["Ticker"].map(lambda t: vs_bench.get(t, (np.nan, np.nan))[0]).round(1)
+    df["vs_QQQ_Years"] = df["Ticker"].map(lambda t: vs_bench.get(t, (np.nan, np.nan))[1]).round(2)
+    df["Beat_QQQ_5Y"] = [beat_label(r, y) for r, y in zip(df["vs_QQQ_5Y"], df["vs_QQQ_Years"])]
     print(f"  {(df['O'] > 0).sum()} tickers in at least one top-{N_ELITE} list")
     print(f"  {n_momentum} tickers pass the >{PRICE_THRESHOLD * 100:.0f}% price momentum filter")
     print(f"  {etf}: {etf_source}, {df[f'On{etf}'].sum()} matched")
+    print(f"  {BEAT_COL}: {df['Beat_QQQ_5Y'].str.startswith('✓').sum()} beat, "
+          f"{df['Beat_QQQ_5Y'].str.startswith('✗').sum()} lagged, {(df['Beat_QQQ_5Y'] == '—').sum()} no data")
 
     parts = [
         f'<div class="section"><h2>Overall Ranking</h2><div class="section-sub">'
@@ -386,15 +474,21 @@ def build_universe(u):
     print(f"Saved: {out_path}")
 
     csv_path = os.path.join(OUTPUT_DIR, u["csv"])
-    export_cols = [c for c in EXPORT_COLS if c in df.columns] + [f"On{etf}"]
+    export_cols = [c for c in EXPORT_COLS if c in df.columns] + [f"On{etf}", "vs_QQQ_5Y", "vs_QQQ_Years"]
     df[export_cols].sort_values("Q", na_position="last").to_csv(csv_path, index=False)
     print(f"Saved: {csv_path}")
 
 
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    for u in UNIVERSES:
-        build_universe(u)
+    inputs = [load_input(u["input"]) for u in UNIVERSES]
+
+    print(f"=== {REL_YEARS}Y total return vs {BENCH} ===")
+    all_tickers = sorted(set().union(*(set(df["Ticker"]) for df in inputs)))
+    vs_bench = vs_bench_lookup(all_tickers)
+
+    for u, df in zip(UNIVERSES, inputs):
+        build_universe(u, df, vs_bench)
 
 
 PAGE_TEMPLATE = """<!DOCTYPE html>
