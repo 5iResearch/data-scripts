@@ -1,10 +1,11 @@
-name: Drives Earnings & Sales Screener ($2B-$35B)
+name: Drives Earnings & Sales Screener ($2B-$35B + $35B+)
 
 on:
   push:
     branches: [main]
-    paths:                    # input is a manual export — rebuild as soon as a fresh one is pushed
+    paths:                    # inputs are manual exports — rebuild as soon as a fresh one is pushed
       - data/drives_earnings_sales_2_35.csv
+      - data/drives_earnings_sales_35_plus.csv
       - data/etf_holdings.csv
       - scripts/generate_drives_earnings_sales_screener.py
   schedule:
@@ -36,13 +37,14 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Check input CSV is present
+      - name: Check input CSVs are present
         run: |
-          f=data/drives_earnings_sales_2_35.csv
-          lines=$(wc -l < "$f")
-          if [ "$lines" -le 1 ]; then
-            echo "::warning::$f has no data rows — did you forget to export/commit the screener pull?"
-          fi
+          for f in data/drives_earnings_sales_2_35.csv data/drives_earnings_sales_35_plus.csv; do
+            lines=$(wc -l < "$f")
+            if [ "$lines" -le 1 ]; then
+              echo "::warning::$f has no data rows — did you forget to export/commit the screener pull?"
+            fi
+          done
 
       - name: Run Drives Earnings & Sales Screener
         run: |

@@ -1,20 +1,23 @@
 """
-"Drives Earnings & Sales" screener — $2B–$35B market cap universe.
+"Drives Earnings & Sales" screener — two market-cap universes, one report each:
+  $2B–$35B  (port of drives_earnings_sales_screener_2_35B.ipynb, GRNJ flag)
+  $35B+     (port of drives_earnings_sales_screener.ipynb,       GRNY flag)
 
-Automated port of drives_earnings_sales_screener_2_35B.ipynb, which itself
-replicates the "Final Ranking (3)" tab of `Drives Earnings and Sales - 35+.xlsm`.
-Ranks every name on who is actually driving sales/profit dollars (and price
-performance) across the universe, its sector, and its industry:
+Both notebooks replicate the "Final Ranking (3)" tab of
+`Drives Earnings and Sales - 35+.xlsm`, ranking every name on who is actually
+driving sales/profit dollars (and price performance) across the universe,
+its sector, and its industry:
 
   1. Overall ranking   (xlsm cols S–W)   — Q = avg(elite Sales$ rank, elite
      Price3Y rank) / # of top-35 criteria hit; lower = better. Top 50 shown.
   2. Sector ranking    (xlsm cols AB–AK) — dropdown per sector
   3. Industry ranking  (xlsm cols AT–BC) — dropdown per industry
 
-No price downloads — everything comes from one manually-refreshed screener
-export (same 20 columns as the notebook's final_table_input_2_35.csv):
+No price downloads — everything comes from manually-refreshed screener exports
+(the same 20 columns the notebooks read, one CSV per universe):
   data/drives_earnings_sales_2_35.csv
-plus the ETF holdings list used for the GRNJ flag:
+  data/drives_earnings_sales_35_plus.csv
+plus the ETF holdings list used for the GRNJ/GRNY flag:
   data/etf_holdings.csv   (two columns: ETF, Ticker)
 """
 
@@ -28,8 +31,27 @@ import pandas as pd
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT_DIR = os.path.join(REPO_ROOT, "outputs", "drives-earnings-sales-screener")
-INPUT_CSV_PATH = os.path.join(REPO_ROOT, "data", "drives_earnings_sales_2_35.csv")
 ETF_HOLDINGS_PATH = os.path.join(REPO_ROOT, "data", "etf_holdings.csv")
+
+UNIVERSES = [
+    {
+        "label": "$2B&ndash;$35B",
+        "input": os.path.join(REPO_ROOT, "data", "drives_earnings_sales_2_35.csv"),
+        "etf": "GRNJ",
+        "html": "Drives_Earnings_Sales_Screener.html",
+        "csv": "drives_earnings_sales_2_35B_ranked.csv",
+        "default_sector": None, "default_industry": None,
+    },
+    {
+        "label": "$35B+",
+        "input": os.path.join(REPO_ROOT, "data", "drives_earnings_sales_35_plus.csv"),
+        "etf": "GRNY",
+        "html": "Drives_Earnings_Sales_Screener_35B_Plus.html",
+        "csv": "drives_earnings_sales_35B_plus_ranked.csv",
+        "default_sector": "Health Care",
+        "default_industry": "Semiconductors and Semiconductor Equipment",
+    },
+]
 
 PRICE_THRESHOLD = 0.25
 N_ELITE = 35
@@ -52,7 +74,7 @@ NUM_COLS = ["Price", "MarketCap", "NI_LTM", "NI_FY", "NI_1FY", "NI_2FY",
             "Rev_LTM", "Rev_FY", "Rev_1FY", "Rev_Growth1Y",
             "PriceChg1Y", "PriceChg3Y", "PriceChg5Y", "PriceChg10Y"]
 
-# GRNY fallback kept from the notebook in case etf_holdings.csv is missing
+# GRNY fallback kept from the notebooks in case etf_holdings.csv is missing
 _FALLBACKS = {"GRNY": {
     "GE", "ANET", "GOOGL", "AVGO", "COST", "EMR", "BK", "AXP", "LYV", "AXON",
     "CAT", "PWR", "GRMN", "CDNS", "VST", "MNST", "NVDA", "WTW", "MSTR", "MSFT",
@@ -68,7 +90,7 @@ EXPORT_COLS = [
     "Score_Sector", "Score_Sector_Adj", "Score_Ind", "Score_Ind_Adj",
     "Rank_Sales_D", "Rank_Price3Y", "Rank_Sales_TotalShare", "Rank_Profits_D",
     "Rank_Sales_D_Sec", "Rank_Price3Y_Sec", "Rank_Sales_D_Ind", "Rank_Price3Y_Ind",
-    "Sales_D_SecShare", "Sales_D_IndShare", "OnGRNJ",
+    "Sales_D_SecShare", "Sales_D_IndShare",  # + the On<ETF> flag column, appended per universe
 ]
 
 
@@ -106,8 +128,9 @@ def data_as_of(path):
 
 
 def load_input(path):
-    # converters on Ticker: pandas otherwise parses the ticker "NA" as NaN
-    df = pd.read_csv(path, converters={"Ticker": lambda v: str(v).strip()})
+    # utf-8-sig: Excel-saved exports start with a BOM that would otherwise glue onto "Ticker".
+    # converters on Ticker: pandas otherwise parses the ticker "NA" as NaN.
+    df = pd.read_csv(path, encoding="utf-8-sig", converters={"Ticker": lambda v: str(v).strip()})
     for col in df.select_dtypes("object").columns:
         df[col] = df[col].str.strip()
     df = df.rename(columns={k: v for k, v in RENAME.items() if k in df.columns})
@@ -126,7 +149,7 @@ def rank_desc_group(df, col, group):
 
 
 def compute_metrics(df):
-    """Straight port of the notebook's metric cell — formulas mirror the xlsm."""
+    """Straight port of the notebooks' metric cell — formulas mirror the xlsm."""
     df["Sales_D"] = df["Rev_LTM"] - df["Rev_LTM"] / (1 + df["Rev_Growth1Y"])
 
     ltm_eq_fy_rev = df["Rev_LTM"] == df["Rev_FY"]
@@ -234,7 +257,7 @@ def _base_style(styler):
     )
 
 
-def build_overall_html(df, grnj_source):
+def build_overall_html(df, etf, etf_source):
     n = len(df)
     overall = df.sort_values("Q", na_position="last").reset_index(drop=True)
     ranked_n = int(overall["Q"].notna().sum())
@@ -250,23 +273,23 @@ def build_overall_html(df, grnj_source):
         "Price 1Y": top["PriceChg1Y"].map(fmt_pct), "Price 3Y": top["PriceChg3Y"].map(fmt_pct),
         "Sales $": top["Sales_D"].map(fmt_num), "Sales %": top["Sales_Pct"].map(fmt_pct),
         "Profits $": top["Profits_D"].map(fmt_num),
-        "GRNJ": top["OnGRNJ"].map({True: "✓", False: ""}),
+        etf: top[f"On{etf}"].map({True: "✓", False: ""}),
     })
     styled = (
         _base_style(tbl.style)
         .map(_color_pct, subset=["Price 1Y", "Price 3Y", "Sales %"])
         .map(lambda v: _color_rank(v, n), subset=["Sales$ Rank", "Price3Y Rank"])
-        .map(_check, subset=["GRNJ"])
+        .map(_check, subset=[etf])
         .set_caption(
             f"Top {OVERALL_TOP_N} of {ranked_n} scored ({n - ranked_n} unranked) | "
             f"Q = AVERAGE(elite Sales$ rank, elite Price3Y rank) ÷ # top-{N_ELITE} criteria hit | "
-            f"lower Q = better | GRNJ: {grnj_source}")
+            f"lower Q = better | {etf}: {etf_source}")
     )
     return styled.to_html()
 
 
-def build_group_html(df, group, n_total):
-    """One styled table for a single sector or industry (the notebook's dropdown views)."""
+def build_group_html(df, group, n_total, etf):
+    """One styled table for a single sector or industry (the notebooks' dropdown views)."""
     is_sector = group == "Sector"
     sfx, other = ("Sec", "Industry") if is_sector else ("Ind", "Sector")
     score_adj, score = ("Score_Sector_Adj", "Score_Sector") if is_sector else ("Score_Ind_Adj", "Score_Ind")
@@ -288,9 +311,9 @@ def build_group_html(df, group, n_total):
         "Profits $": g["Profits_D"].map(fmt_num),
         f"Sales$% of {sfx}": g[f"Sales_D_{sfx}Share"].map(fmt_share),
         "MarketCap": g["MarketCap"].map(fmt_num),
-        "GRNJ": g["OnGRNJ"].map({True: "✓", False: ""}),
+        etf: g[f"On{etf}"].map({True: "✓", False: ""}),
     })
-    # matches the notebook: sector tables colour the global rank against the whole universe,
+    # matches the notebooks: sector tables colour the global rank against the whole universe,
     # industry tables colour the sector rank against the industry size
     third_n = n_total if is_sector else n_g
     styled = (
@@ -298,7 +321,7 @@ def build_group_html(df, group, n_total):
         .map(_color_pct, subset=["Price 1Y", "Price 3Y", "Sales %"])
         .map(lambda v: _color_rank(v, n_g), subset=[f"{sfx} Sales$ Rank", f"{sfx} Price3Y Rank"])
         .map(lambda v: _color_rank(v, third_n), subset=[third_label])
-        .map(_check, subset=["GRNJ"])
+        .map(_check, subset=[etf])
         .map(lambda v: f"color: {C_NEUTRAL}" if v == "n/a" else "", subset=["Score (adj)"])
         .set_caption(
             f"{g[group].iloc[0]} | {n_g} tickers | score penalises stocks with Price 1Y & 3Y "
@@ -307,17 +330,19 @@ def build_group_html(df, group, n_total):
     return styled.to_html()
 
 
-def build_dropdown_section(df, group, title, subtitle):
+def build_dropdown_section(df, group, title, subtitle, etf, default=None):
     """All per-group tables rendered up front, toggled by a <select> — the static
-    stand-in for the notebook's ipywidgets dropdown."""
+    stand-in for the notebooks' ipywidgets dropdown."""
     key = group.lower()
     names = sorted(df[group].dropna().unique())
+    shown = names.index(default) if default in names else 0
     options, panels = [], []
     for i, name in enumerate(names):
-        options.append(f'<option value="{i}">{escape(name)}</option>')
-        hidden = "" if i == 0 else " hidden"
+        selected = " selected" if i == shown else ""
+        options.append(f'<option value="{i}"{selected}>{escape(name)}</option>')
+        hidden = "" if i == shown else " hidden"
         panels.append(f'<div class="table-wrap" data-{key}="{i}"{hidden}>'
-                      f'{build_group_html(df[df[group] == name], group, len(df))}</div>')
+                      f'{build_group_html(df[df[group] == name], group, len(df), etf)}</div>')
     return (
         f'<div class="section"><h2>{title}</h2><div class="section-sub">{subtitle}</div>'
         f'<div class="picker"><label for="{key}Select">{group}:</label>'
@@ -326,48 +351,57 @@ def build_dropdown_section(df, group, title, subtitle):
     )
 
 
-def main():
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-    df = load_input(INPUT_CSV_PATH)
-    as_of = data_as_of(INPUT_CSV_PATH)
-    print(f"Loaded {len(df)} tickers from {INPUT_CSV_PATH} (data as of {as_of})")
+def build_universe(u):
+    etf = u["etf"]
+    df = load_input(u["input"])
+    as_of = data_as_of(u["input"])
+    print(f"=== {u['label']} ===")
+    print(f"Loaded {len(df)} tickers from {u['input']} (data as of {as_of})")
     print(f"  sectors: {df['Sector'].nunique()} | industries: {df['Industry'].nunique()}")
 
     df, n_momentum = compute_metrics(df)
-    grnj, grnj_source = load_etf_holdings("GRNJ")
-    df["OnGRNJ"] = df["Ticker"].isin(grnj)
+    holdings, etf_source = load_etf_holdings(etf)
+    df[f"On{etf}"] = df["Ticker"].isin(holdings)
     print(f"  {(df['O'] > 0).sum()} tickers in at least one top-{N_ELITE} list")
     print(f"  {n_momentum} tickers pass the >{PRICE_THRESHOLD * 100:.0f}% price momentum filter")
-    print(f"  GRNJ: {grnj_source}, {df['OnGRNJ'].sum()} matched")
+    print(f"  {etf}: {etf_source}, {df[f'On{etf}'].sum()} matched")
 
     parts = [
         f'<div class="section"><h2>Overall Ranking</h2><div class="section-sub">'
         f'Replicates cols S–W of Final Ranking (3) &middot; sorted by Q score</div></div>'
-        f'<div class="table-wrap">{build_overall_html(df, grnj_source)}</div>',
+        f'<div class="table-wrap">{build_overall_html(df, etf, etf_source)}</div>',
         build_dropdown_section(df, "Sector", "Sector Ranking",
-                               "Replicates cols AB–AK &middot; avg(sector Sales$ rank, sector Price3Y rank, global Sales$ rank)"),
+                               "Replicates cols AB–AK &middot; avg(sector Sales$ rank, sector Price3Y rank, global Sales$ rank)",
+                               etf, u["default_sector"]),
         build_dropdown_section(df, "Industry", "Industry Ranking",
-                               "Replicates cols AT–BC &middot; avg(industry Sales$ rank, industry Price3Y rank, sector Sales$ rank)"),
+                               "Replicates cols AT–BC &middot; avg(industry Sales$ rank, industry Price3Y rank, sector Sales$ rank)",
+                               etf, u["default_industry"]),
     ]
 
-    html = PAGE_TEMPLATE.format(date_str=datetime.now().strftime("%B %d, %Y"), as_of=as_of,
-                                n=len(df), body="\n".join(parts))
-    out_path = os.path.join(OUTPUT_DIR, "Drives_Earnings_Sales_Screener.html")
+    html = PAGE_TEMPLATE.format(label=u["label"], date_str=datetime.now().strftime("%B %d, %Y"),
+                                as_of=as_of, n=len(df), body="\n".join(parts))
+    out_path = os.path.join(OUTPUT_DIR, u["html"])
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"Saved: {out_path}")
 
-    csv_path = os.path.join(OUTPUT_DIR, "drives_earnings_sales_2_35B_ranked.csv")
-    df[[c for c in EXPORT_COLS if c in df.columns]].sort_values("Q", na_position="last").to_csv(csv_path, index=False)
+    csv_path = os.path.join(OUTPUT_DIR, u["csv"])
+    export_cols = [c for c in EXPORT_COLS if c in df.columns] + [f"On{etf}"]
+    df[export_cols].sort_values("Q", na_position="last").to_csv(csv_path, index=False)
     print(f"Saved: {csv_path}")
+
+
+def main():
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    for u in UNIVERSES:
+        build_universe(u)
 
 
 PAGE_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Drives Earnings &amp; Sales Screener</title>
+<title>Drives Earnings &amp; Sales Screener &mdash; {label}</title>
 <style>
   body {{ background: #0f1117; color: #c8ccd8; font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 0 0 40px; }}
   header {{ padding: 24px 32px 16px; border-bottom: 1px solid #2d3148; }}
@@ -396,7 +430,7 @@ function showGroup(key, idx) {{
 </head>
 <body>
 <header>
-  <h1>Drives Earnings &amp; Sales Screener &mdash; $2B&ndash;$35B</h1>
+  <h1>Drives Earnings &amp; Sales Screener &mdash; {label}</h1>
   <div class="meta">Generated {date_str} &middot; Input data as of {as_of} &middot; {n} tickers &middot; Replicates Final Ranking (3) of Drives Earnings and Sales - 35+.xlsm</div>
 </header>
 {body}
