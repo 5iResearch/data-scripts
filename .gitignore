@@ -5,3 +5,6 @@ __pycache__/
 # exceeds GitHub's 100MB file limit; never meant to be committed
 outputs/market-musings/_backtest_cache.pkl
 outputs/market-musings/_survivorship_analysis.csv
+
+# local OHLCV download cache for fear_study.py — regenerable with --refresh
+data/cache/

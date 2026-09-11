@@ -1,0 +1,4 @@
+Date,Market gauge,List,Universe,Ticker,Name,Group,Leader,Fear,Euphoria,Fear price,Fear volatility,Fear volume,Fear relative,12M rel,3Y rel,Drawdown,21d move,vs 200d,Driver,Shock,Fear peak 20d,Days since peak,Trigger date,Earnings,Base rate
+2026-09-10,27.7000,Fear Watch,S&P 500,CASY,Casey's,Consumer Staples,True,97.2718,3.9168,99.0575,92.9233,99.8347,99.8677,0.3405,1.7105,0.3145,-0.2437,-0.1378,Specific,0.4069,97.2718,0,,Reported 2d ago,"+3.0% 6m xs, 54% hit (n=1,119)"
+2026-09-10,27.7000,Extended,S&P 500,SWKS,Skyworks Solutions,Information Technology,False,20.7286,95.9950,7.4901,43.2540,11.4418,0.3307,-0.2582,-1.0903,0.0000,0.2298,0.3216,Specific,,64.7321,11,,,"+1.8% 6m xs, 51% hit (n=9,504)"
+2026-09-10,27.7000,Extended,S&P 500,VLO,Valero Energy,Energy,True,23.7599,90.8620,26.7692,8.0026,36.5079,5.6878,0.8460,0.8620,0.0091,0.1899,0.5983,Specific,,36.1993,11,,,"+1.8% 6m xs, 51% hit (n=9,504)"

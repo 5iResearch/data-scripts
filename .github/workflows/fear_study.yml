@@ -1,0 +1,56 @@
+name: Peak Fear Study (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      write_config:
+        description: "Freeze the chosen thresholds + base rates into data/fear_model_config.json"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  run-fear-study:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Look-ahead check
+        timeout-minutes: 30
+        run: |
+          python scripts/fear_study.py --check-lookahead
+
+      - name: Run study
+        timeout-minutes: 60
+        run: |
+          python scripts/fear_study.py ${{ inputs.write_config && '--write-config' || '' }}
+
+      - name: Commit outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add outputs/fear-study/
+          [ -f data/fear_model_config.json ] && git add data/fear_model_config.json
+          git diff --cached --quiet || git commit -m "chore: update peak fear study [skip ci]"
+          for i in 1 2 3 4 5; do
+            git push && break
+            echo "Push rejected, rebasing onto origin/main and retrying ($i)..."
+            git fetch origin main
+            git rebase origin/main
+            sleep $((RANDOM % 10 + 1))
+          done

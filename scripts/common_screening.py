@@ -89,13 +89,22 @@ function filterByCap(tier) {
 """
 
 
-def load_sp500_symbols():
+def _sp500_table():
     url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
     headers = {"User-Agent": "Mozilla/5.0"}
     response = requests.get(url, headers=headers, timeout=30)
     response.raise_for_status()
-    table = pd.read_html(io.StringIO(response.text))[0]
-    return table["Symbol"].tolist()
+    return pd.read_html(io.StringIO(response.text))[0]
+
+
+def load_sp500_symbols():
+    return _sp500_table()["Symbol"].tolist()
+
+
+def load_sp500_sectors():
+    """Symbol / Security / GICS Sector for the current S&P 500 (same Wikipedia
+    table as load_sp500_symbols)."""
+    return _sp500_table()[["Symbol", "Security", "GICS Sector"]].copy()
 
 
 def load_nasdaq100_symbols():
@@ -109,6 +118,22 @@ def load_nasdaq100_symbols():
             if col in table.columns:
                 return table[col].dropna().astype(str).tolist()
     raise ValueError("Could not find a Ticker/Symbol column in the Nasdaq-100 tables")
+
+
+def load_nasdaq100_table():
+    """Ticker / Company / Sector for the Nasdaq-100. Wikipedia lists ICB
+    industries here (not GICS like the S&P 500 page)."""
+    url = "https://en.wikipedia.org/wiki/List_of_NASDAQ-100_companies"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(url, headers=headers, timeout=30)
+    response.raise_for_status()
+    for table in pd.read_html(io.StringIO(response.text)):
+        tcol = next((c for c in ("Ticker", "Symbol") if c in table.columns), None)
+        ncol = next((c for c in ("Company", "Security") if c in table.columns), None)
+        scol = next((c for c in table.columns if "Industry" in str(c) or "Sector" in str(c)), None)
+        if tcol and ncol and scol:
+            return pd.DataFrame({"Ticker": table[tcol].astype(str), "Company": table[ncol], "Sector": table[scol]})
+    raise ValueError("Could not find a ticker/company/industry table on the Nasdaq-100 page")
 
 
 def close_series(ticker, start, end):

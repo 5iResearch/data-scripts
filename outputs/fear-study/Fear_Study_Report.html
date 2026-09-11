@@ -1,0 +1,2268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leader Selloff Study</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+  body { background: #1C1C1E; color: #E5E5EA; font-family: Arial, sans-serif; margin: 0; padding: 0 0 40px; }
+  header { padding: 24px 32px 16px; border-bottom: 1px solid #3A3A3C; }
+  header h1 { margin: 0 0 4px; font-size: 24px; }
+  header .meta { color: #8E8E93; font-size: 13px; }
+  .section { padding: 28px 32px 4px; }
+  .section h2 { margin: 0; font-size: 20px; color: #E5E5EA; border-bottom: 2px solid #C67A29; display: inline-block; padding-bottom: 4px; }
+  .section-sub { color: #8E8E93; font-size: 13px; margin-top: 6px; max-width: 1050px; line-height: 1.5; }
+  h3 { margin: 18px 32px 4px; font-size: 15px; color: #C67A29; }
+  .note { color: #AEAEB2; font-size: 13px; margin: 8px 32px; max-width: 1050px; line-height: 1.55; }
+  .wrap { overflow-x: auto; margin: 8px 32px; }
+  table.tbl { border-collapse: collapse; font-size: 12.5px; white-space: nowrap; }
+  .tbl th { background: #2C2C2E; color: #E5E5EA; padding: 6px 10px; text-align: right; border-bottom: 1px solid #3A3A3C; }
+  .tbl td { padding: 5px 10px; text-align: right; border-bottom: 1px solid #2C2C2E; }
+  .tbl td:first-child, .tbl th:first-child { text-align: left; }
+  .tbl tr.chosen td { background: #3a3220; }
+  .pos { color: #2ECC71; } .neg { color: #E74C3C; }
+  .verdict { margin: 20px 32px; padding: 14px 18px; border-radius: 6px; border: 1px solid; max-width: 1050px; line-height: 1.55; }
+  .verdict.pass { border-color: #2ECC71; background: rgba(46,204,113,0.08); }
+  .verdict.fail { border-color: #E74C3C; background: rgba(231,76,60,0.08); }
+  @media (max-width: 600px) { .section, header { padding-left: 16px; padding-right: 16px; }
+    .note, .wrap, h3, .verdict { margin-left: 16px; margin-right: 16px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Leader Selloff &mdash; Event Study</h1>
+  <div class="meta">Generated September 11, 2026 &middot; S&amp;P 500 + Nasdaq-100 members, BTC/ETH, sector/theme ETFs &middot; prices since 2000, signals since mid-2005 &middot; excess returns vs SPY from next-day close</div>
+</header>
+<div class="verdict pass"><b>PASS</b> &mdash; out-of-sample (2015+), US stocks, 139 signals on 55 dates. The chosen signal (weekly RSI &le; own 5% pct, monthly RSI &le; own 10% pct, vol spike = VIX 35 equivalent, historic leader) beats both baselines (A: leaders on any day, B: same conditions without the leader filter) on 3m and 6m excess return. 3m: signal +7.7% vs A +1.2% / B +5.7%; 6m: signal +9.4% vs A +2.2% / B +4.9%. 6m mean 90% CI -0.1% to +16.6%.</div>
+<div class="note"><b>How to read this.</b> Every number is an average <i>excess</i> return vs SPY, entered at the close the day <i>after</i> the signal. Signals are capped at one per ticker per 63 trading days. "Hit" = share that beat SPY. MAE = average worst drawdown from entry within 3 months (how much pain came first). The 90% CI resamples whole months, because signals cluster in crises. <b>Survivorship caveat:</b> the universe is today's S&amp;P 500, so former leaders that failed are missing; absolute levels are optimistic, and the comparisons against baselines are the part to trust.</div>
+<div class="section"><h2>1. Market regime check: forward SPY returns</h2><div class="section-sub">Context for the stock signal &mdash; Panic = VIX term structure inverted (VIX above VIX3M)</div></div>
+<div>                            <div id="b71e2fc8-1a42-4940-bc42-ffc9e8f32b91" class="plotly-graph-div" style="height:460px; width:100%;"></div>            <script type="text/javascript">                window.PLOTLYENV=window.PLOTLYENV || {};                                if (document.getElementById("b71e2fc8-1a42-4940-bc42-ffc9e8f32b91")) {                    Plotly.newPlot(                        "b71e2fc8-1a42-4940-bc42-ffc9e8f32b91",                        [{"hovertemplate":"%{x}: %{y:.1f}%\u003cextra\u003e1m\u003c\u002fextra\u003e","marker":{"color":"#1F79BE"},"name":"SPY 1m fwd","x":["0-10","10-20","20-30","30-40","40-50","50-60","60-70","70-80","80-90","90-100"],"y":{"dtype":"f8","bdata":"ho274bA71z8wI2Hl3ljxP9+ltFZOKuQ\u002fDe\u002fySido8z+jaBt4gE7zP\u002f7kzEkHvuw\u002fpRlKM+ih2j+g48Gp2tvyP4vTs1oAcPY\u002fRpu9+uR36T8="},"type":"bar"},{"hovertemplate":"%{x}: %{y:.1f}%\u003cextra\u003e3m\u003c\u002fextra\u003e","marker":{"color":"#C67A29"},"name":"SPY 3m fwd","x":["0-10","10-20","20-30","30-40","40-50","50-60","60-70","70-80","80-90","90-100"],"y":{"dtype":"f8","bdata":"WAukMfqt\u002fD+iv5PqQD8FQOElfW5zGPc\u002fGn2NA++zCUAoTUyhF44KQMvyKwWTcwxAmZFcUgJrBkBl5ZGSx+AMQFrK17xKTwhAV0mZMRsgB0A="},"type":"bar"},{"hovertemplate":"%{x}: %{y:.1f}%\u003cextra\u003e6m\u003c\u002fextra\u003e","marker":{"color":"#2ECC71"},"name":"SPY 6m fwd","x":["0-10","10-20","20-30","30-40","40-50","50-60","60-70","70-80","80-90","90-100"],"y":{"dtype":"f8","bdata":"0Y0eR7pGEkA7uP8vjJ8aQK\u002fHRwsfORNAdw0sX8MkFUAKer3bAf0VQObGnoOflhhAL1iG8teVG0ADs+1LNb0ZQLIJeZGqixVAY0FdadvgFkA="},"type":"bar"},{"hovertemplate":"%{x}: %{y:.1f}%\u003cextra\u003e12m\u003c\u002fextra\u003e","marker":{"color":"#9B59B6"},"name":"SPY 12m fwd","x":["0-10","10-20","20-30","30-40","40-50","50-60","60-70","70-80","80-90","90-100"],"y":{"dtype":"f8","bdata":"v4IPdfVGI0AWTVrfnXkrQH5tI2FaUShAqvgP3UK+JkDqe+7U3M8mQBYpNE5ApydA57r+a+S6K0CmMZAGqTopQDEfl68ozSVAg3CgXjJMLEA="},"type":"bar"}],                        {"template":{"data":{"histogram2dcontour":[{"type":"histogram2dcontour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"choropleth":[{"type":"choropleth","colorbar":{"outlinewidth":0,"ticks":""}}],"histogram2d":[{"type":"histogram2d","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"heatmap":[{"type":"heatmap","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"contourcarpet":[{"type":"contourcarpet","colorbar":{"outlinewidth":0,"ticks":""}}],"contour":[{"type":"contour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"surface":[{"type":"surface","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"mesh3d":[{"type":"mesh3d","colorbar":{"outlinewidth":0,"ticks":""}}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"parcoords":[{"type":"parcoords","line":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolargl":[{"type":"scatterpolargl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"scattergeo":[{"type":"scattergeo","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolar":[{"type":"scatterpolar","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"scattergl":[{"type":"scattergl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatter3d":[{"type":"scatter3d","line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermap":[{"type":"scattermap","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermapbox":[{"type":"scattermapbox","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterternary":[{"type":"scatterternary","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattercarpet":[{"type":"scattercarpet","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"type":"carpet"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}],"barpolar":[{"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"pie":[{"automargin":true,"type":"pie"}]},"layout":{"autotypenumbers":"strict","colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"hovermode":"closest","hoverlabel":{"align":"left"},"paper_bgcolor":"white","plot_bgcolor":"#E5ECF6","polar":{"bgcolor":"#E5ECF6","angularaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"radialaxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"ternary":{"bgcolor":"#E5ECF6","aaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"baxis":{"gridcolor":"white","linecolor":"white","ticks":""},"caxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]]},"xaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"yaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"scene":{"xaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"yaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"zaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"geo":{"bgcolor":"white","landcolor":"#E5ECF6","subunitcolor":"white","showland":true,"showlakes":true,"lakecolor":"white"},"title":{"x":0.05},"mapbox":{"style":"light"}}},"shapes":[{"line":{"color":"#2ECC71","dash":"dot"},"type":"line","x0":0,"x1":1,"xref":"x domain","y0":5.591124381866707,"y1":5.591124381866707,"yref":"y"}],"annotations":[{"font":{"color":"#2ECC71"},"showarrow":false,"text":"all-days 6m avg","x":1,"xanchor":"right","xref":"x domain","y":5.591124381866707,"yanchor":"bottom","yref":"y"}],"title":{"font":{"size":16,"color":"#E5E5EA"},"text":"\u003cb\u003eForward SPY return by Market Fear Gauge bucket (0 = calm, 100 = panic)\u003c\u002fb\u003e","x":0.01},"font":{"color":"#E5E5EA","family":"monospace"},"margin":{"l":70,"r":40,"t":70,"b":60},"legend":{"font":{"size":11},"bgcolor":"#3A3A3C","bordercolor":"#3A3A3C"},"paper_bgcolor":"#1C1C1E","plot_bgcolor":"#2C2C2E","height":460,"xaxis":{"gridcolor":"#3A3A3C","linecolor":"#3A3A3C","title":{"text":"Market Fear Gauge"}},"yaxis":{"gridcolor":"#3A3A3C","linecolor":"#3A3A3C","zeroline":true,"zerolinecolor":"#8E8E93","title":{"text":"Avg forward return (%)"}},"barmode":"group"},                        {"responsive": true}                    )                };            </script>        </div>
+<div class="wrap"><table class="dataframe tbl">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Condition</th>
+      <th>Days</th>
+      <th>SPY 1m</th>
+      <th>SPY 3m</th>
+      <th>SPY 6m</th>
+      <th>SPY 12m</th>
+      <th>6m hit</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>All days</td>
+      <td>6,209</td>
+      <td><span class="pos">+0.9%</span></td>
+      <td><span class="pos">+2.7%</span></td>
+      <td><span class="pos">+5.6%</span></td>
+      <td><span class="pos">+11.9%</span></td>
+      <td>77%</td>
+    </tr>
+    <tr>
+      <td>Gauge 0-10</td>
+      <td>841</td>
+      <td><span class="pos">+0.4%</span></td>
+      <td><span class="pos">+1.8%</span></td>
+      <td><span class="pos">+4.6%</span></td>
+      <td><span class="pos">+9.6%</span></td>
+      <td>85%</td>
+    </tr>
+    <tr>
+      <td>Gauge 10-20</td>
+      <td>680</td>
+      <td><span class="pos">+1.1%</span></td>
+      <td><span class="pos">+2.7%</span></td>
+      <td><span class="pos">+6.7%</span></td>
+      <td><span class="pos">+13.7%</span></td>
+      <td>89%</td>
+    </tr>
+    <tr>
+      <td>Gauge 20-30</td>
+      <td>831</td>
+      <td><span class="pos">+0.6%</span></td>
+      <td><span class="pos">+1.4%</span></td>
+      <td><span class="pos">+4.8%</span></td>
+      <td><span class="pos">+12.2%</span></td>
+      <td>73%</td>
+    </tr>
+    <tr>
+      <td>Gauge 30-40</td>
+      <td>857</td>
+      <td><span class="pos">+1.2%</span></td>
+      <td><span class="pos">+3.2%</span></td>
+      <td><span class="pos">+5.3%</span></td>
+      <td><span class="pos">+11.4%</span></td>
+      <td>74%</td>
+    </tr>
+    <tr>
+      <td>Gauge 40-50</td>
+      <td>697</td>
+      <td><span class="pos">+1.2%</span></td>
+      <td><span class="pos">+3.3%</span></td>
+      <td><span class="pos">+5.5%</span></td>
+      <td><span class="pos">+11.4%</span></td>
+      <td>76%</td>
+    </tr>
+    <tr>
+      <td>Gauge 50-60</td>
+      <td>465</td>
+      <td><span class="pos">+0.9%</span></td>
+      <td><span class="pos">+3.6%</span></td>
+      <td><span class="pos">+6.1%</span></td>
+      <td><span class="pos">+11.8%</span></td>
+      <td>79%</td>
+    </tr>
+    <tr>
+      <td>Gauge 60-70</td>
+      <td>412</td>
+      <td><span class="pos">+0.4%</span></td>
+      <td><span class="pos">+2.8%</span></td>
+      <td><span class="pos">+6.9%</span></td>
+      <td><span class="pos">+13.9%</span></td>
+      <td>82%</td>
+    </tr>
+    <tr>
+      <td>Gauge 70-80</td>
+      <td>451</td>
+      <td><span class="pos">+1.2%</span></td>
+      <td><span class="pos">+3.6%</span></td>
+      <td><span class="pos">+6.4%</span></td>
+      <td><span class="pos">+12.6%</span></td>
+      <td>78%</td>
+    </tr>
+    <tr>
+      <td>Gauge 80-90</td>
+      <td>539</td>
+      <td><span class="pos">+1.4%</span></td>
+      <td><span class="pos">+3.0%</span></td>
+      <td><span class="pos">+5.4%</span></td>
+      <td><span class="pos">+10.9%</span></td>
+      <td>69%</td>
+    </tr>
+    <tr>
+      <td>Gauge 90-100</td>
+      <td>436</td>
+      <td><span class="pos">+0.8%</span></td>
+      <td><span class="pos">+2.9%</span></td>
+      <td><span class="pos">+5.7%</span></td>
+      <td><span class="pos">+14.1%</span></td>
+      <td>58%</td>
+    </tr>
+    <tr>
+      <td>Elevated (gauge >= 70, not inverted)</td>
+      <td>1,167</td>
+      <td><span class="pos">+0.6%</span></td>
+      <td><span class="pos">+1.9%</span></td>
+      <td><span class="pos">+3.6%</span></td>
+      <td><span class="pos">+9.8%</span></td>
+      <td>63%</td>
+    </tr>
+    <tr>
+      <td>Panic (VIX > VIX3M), credit calm</td>
+      <td>274</td>
+      <td><span class="pos">+2.6%</span></td>
+      <td><span class="pos">+6.1%</span></td>
+      <td><span class="pos">+12.2%</span></td>
+      <td><span class="pos">+18.8%</span></td>
+      <td>91%</td>
+    </tr>
+    <tr>
+      <td>Panic (VIX > VIX3M) + credit stress</td>
+      <td>50</td>
+      <td><span class="pos">+6.2%</span></td>
+      <td><span class="pos">+17.0%</span></td>
+      <td><span class="pos">+25.9%</span></td>
+      <td><span class="pos">+45.9%</span></td>
+      <td>100%</td>
+    </tr>
+  </tbody>
+</table></div>
+<div class="section"><h2>2. Signal vs baselines &mdash; US stocks (S&P 500 + Nasdaq-100)</h2><div class="section-sub">The "Without ..." rows drop one condition at a time: if a row does as well as the full signal, that condition isn't pulling its weight</div></div>
+<h3>Full 2005+</h3>
+<div class="wrap"><table class="dataframe tbl">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Signal</th>
+      <th>Basis</th>
+      <th>N</th>
+      <th>Dates</th>
+      <th>1m excess</th>
+      <th>1m hit</th>
+      <th>3m excess</th>
+      <th>3m hit</th>
+      <th>6m excess</th>
+      <th>6m hit</th>
+      <th>12m excess</th>
+      <th>12m hit</th>
+      <th>6m median</th>
+      <th>6m mean 90% CI</th>
+      <th>Avg MAE (3m)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Buy signal: all four conditions (chosen)</td>
+      <td>events</td>
+      <td>364</td>
+      <td>172</td>
+      <td><span class="pos">+1.7%</span></td>
+      <td>57%</td>
+      <td><span class="pos">+4.2%</span></td>
+      <td>59%</td>
+      <td><span class="pos">+7.1%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+12.2%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+3.8%</span></td>
+      <td>+4.2% to +9.8%</td>
+      <td>-18.1%</td>
+    </tr>
+    <tr>
+      <td>Without vol spike</td>
+      <td>events</td>
+      <td>1,252</td>
+      <td>721</td>
+      <td><span class="pos">+1.5%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+2.6%</span></td>
+      <td>56%</td>
+      <td><span class="pos">+4.3%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+7.8%</span></td>
+      <td>53%</td>
+      <td><span class="pos">+2.7%</span></td>
+      <td>+2.7% to +5.6%</td>
+      <td>-12.7%</td>
+    </tr>
+    <tr>
+      <td>Without monthly RSI</td>
+      <td>events</td>
+      <td>478</td>
+      <td>222</td>
+      <td><span class="pos">+1.7%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+4.4%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+5.1%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+9.4%</span></td>
+      <td>54%</td>
+      <td><span class="pos">+2.4%</span></td>
+      <td>+2.6% to +7.3%</td>
+      <td>-17.9%</td>
+    </tr>
+    <tr>
+      <td>Without weekly RSI</td>
+      <td>events</td>
+      <td>466</td>
+      <td>226</td>
+      <td><span class="pos">+1.6%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+3.6%</span></td>
+      <td>56%</td>
+      <td><span class="pos">+5.9%</span></td>
+      <td>56%</td>
+      <td><span class="pos">+10.2%</span></td>
+      <td>57%</td>
+      <td><span class="pos">+3.3%</span></td>
+      <td>+3.3% to +8.4%</td>
+      <td>-18.9%</td>
+    </tr>
+    <tr>
+      <td>B: RSI + vol conditions, no leader filter</td>
+      <td>events</td>
+      <td>1,011</td>
+      <td>313</td>
+      <td><span class="pos">+0.0%</span></td>
+      <td>50%</td>
+      <td><span class="pos">+5.3%</span></td>
+      <td>57%</td>
+      <td><span class="pos">+6.6%</span></td>
+      <td>54%</td>
+      <td><span class="pos">+17.4%</span></td>
+      <td>59%</td>
+      <td><span class="pos">+3.0%</span></td>
+      <td>+4.4% to +11.3%</td>
+      <td>-18.8%</td>
+    </tr>
+    <tr>
+      <td>A: leaders, any day</td>
+      <td>stock-days</td>
+      <td>764,669</td>
+      <td>&ndash;</td>
+      <td><span class="pos">+0.5%</span></td>
+      <td>52%</td>
+      <td><span class="pos">+1.3%</span></td>
+      <td>52%</td>
+      <td><span class="pos">+2.5%</span></td>
+      <td>53%</td>
+      <td><span class="pos">+4.9%</span></td>
+      <td>52%</td>
+      <td><span class="pos">+1.1%</span></td>
+      <td>&ndash;</td>
+      <td>-8.9%</td>
+    </tr>
+    <tr>
+      <td>D: whole universe, any day</td>
+      <td>stock-days</td>
+      <td>2,490,243</td>
+      <td>&ndash;</td>
+      <td><span class="pos">+0.4%</span></td>
+      <td>51%</td>
+      <td><span class="pos">+1.3%</span></td>
+      <td>52%</td>
+      <td><span class="pos">+2.6%</span></td>
+      <td>52%</td>
+      <td><span class="pos">+5.5%</span></td>
+      <td>52%</td>
+      <td><span class="pos">+0.7%</span></td>
+      <td>&ndash;</td>
+      <td>-8.7%</td>
+    </tr>
+  </tbody>
+</table></div>
+<h3>In-sample 2005-14</h3>
+<div class="wrap"><table class="dataframe tbl">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Signal</th>
+      <th>Basis</th>
+      <th>N</th>
+      <th>Dates</th>
+      <th>1m excess</th>
+      <th>1m hit</th>
+      <th>3m excess</th>
+      <th>3m hit</th>
+      <th>6m excess</th>
+      <th>6m hit</th>
+      <th>12m excess</th>
+      <th>12m hit</th>
+      <th>6m median</th>
+      <th>6m mean 90% CI</th>
+      <th>Avg MAE (3m)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Buy signal: all four conditions (chosen)</td>
+      <td>events</td>
+      <td>225</td>
+      <td>117</td>
+      <td><span class="pos">+0.8%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+2.1%</span></td>
+      <td>56%</td>
+      <td><span class="pos">+5.7%</span></td>
+      <td>56%</td>
+      <td><span class="pos">+8.7%</span></td>
+      <td>56%</td>
+      <td><span class="pos">+3.8%</span></td>
+      <td>+2.8% to +9.2%</td>
+      <td>-22.5%</td>
+    </tr>
+    <tr>
+      <td>Without vol spike</td>
+      <td>events</td>
+      <td>582</td>
+      <td>337</td>
+      <td><span class="pos">+1.4%</span></td>
+      <td>57%</td>
+      <td><span class="pos">+1.4%</span></td>
+      <td>52%</td>
+      <td><span class="pos">+3.7%</span></td>
+      <td>54%</td>
+      <td><span class="pos">+5.0%</span></td>
+      <td>51%</td>
+      <td><span class="pos">+2.7%</span></td>
+      <td>+1.7% to +5.5%</td>
+      <td>-16.0%</td>
+    </tr>
+    <tr>
+      <td>Without monthly RSI</td>
+      <td>events</td>
+      <td>278</td>
+      <td>147</td>
+      <td><span class="pos">+0.4%</span></td>
+      <td>54%</td>
+      <td><span class="pos">+2.0%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+3.5%</span></td>
+      <td>53%</td>
+      <td><span class="pos">+4.8%</span></td>
+      <td>52%</td>
+      <td><span class="pos">+1.7%</span></td>
+      <td>+1.6% to +5.4%</td>
+      <td>-22.7%</td>
+    </tr>
+    <tr>
+      <td>Without weekly RSI</td>
+      <td>events</td>
+      <td>310</td>
+      <td>156</td>
+      <td><span class="pos">+0.9%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+2.1%</span></td>
+      <td>53%</td>
+      <td><span class="pos">+4.8%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+7.3%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+3.3%</span></td>
+      <td>+2.4% to +7.8%</td>
+      <td>-22.9%</td>
+    </tr>
+    <tr>
+      <td>B: RSI + vol conditions, no leader filter</td>
+      <td>events</td>
+      <td>532</td>
+      <td>171</td>
+      <td><span class="neg">-0.7%</span></td>
+      <td>51%</td>
+      <td><span class="pos">+5.0%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+8.1%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+12.5%</span></td>
+      <td>57%</td>
+      <td><span class="pos">+4.3%</span></td>
+      <td>+4.6% to +15.6%</td>
+      <td>-24.2%</td>
+    </tr>
+    <tr>
+      <td>A: leaders, any day</td>
+      <td>stock-days</td>
+      <td>310,747</td>
+      <td>&ndash;</td>
+      <td><span class="pos">+0.5%</span></td>
+      <td>52%</td>
+      <td><span class="pos">+1.5%</span></td>
+      <td>54%</td>
+      <td><span class="pos">+3.1%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+5.9%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+1.9%</span></td>
+      <td>&ndash;</td>
+      <td>-8.9%</td>
+    </tr>
+    <tr>
+      <td>D: whole universe, any day</td>
+      <td>stock-days</td>
+      <td>1,037,219</td>
+      <td>&ndash;</td>
+      <td><span class="pos">+0.7%</span></td>
+      <td>52%</td>
+      <td><span class="pos">+1.9%</span></td>
+      <td>54%</td>
+      <td><span class="pos">+3.9%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+7.4%</span></td>
+      <td>57%</td>
+      <td><span class="pos">+2.0%</span></td>
+      <td>&ndash;</td>
+      <td>-8.8%</td>
+    </tr>
+  </tbody>
+</table></div>
+<h3>Out-of-sample 2015+</h3>
+<div class="wrap"><table class="dataframe tbl">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Signal</th>
+      <th>Basis</th>
+      <th>N</th>
+      <th>Dates</th>
+      <th>1m excess</th>
+      <th>1m hit</th>
+      <th>3m excess</th>
+      <th>3m hit</th>
+      <th>6m excess</th>
+      <th>6m hit</th>
+      <th>12m excess</th>
+      <th>12m hit</th>
+      <th>6m median</th>
+      <th>6m mean 90% CI</th>
+      <th>Avg MAE (3m)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Buy signal: all four conditions (chosen)</td>
+      <td>events</td>
+      <td>139</td>
+      <td>55</td>
+      <td><span class="pos">+3.0%</span></td>
+      <td>62%</td>
+      <td><span class="pos">+7.7%</span></td>
+      <td>63%</td>
+      <td><span class="pos">+9.4%</span></td>
+      <td>61%</td>
+      <td><span class="pos">+17.9%</span></td>
+      <td>61%</td>
+      <td><span class="pos">+3.8%</span></td>
+      <td>-0.1% to +16.6%</td>
+      <td>-11.0%</td>
+    </tr>
+    <tr>
+      <td>Without vol spike</td>
+      <td>events</td>
+      <td>670</td>
+      <td>384</td>
+      <td><span class="pos">+1.6%</span></td>
+      <td>60%</td>
+      <td><span class="pos">+3.7%</span></td>
+      <td>59%</td>
+      <td><span class="pos">+4.7%</span></td>
+      <td>56%</td>
+      <td><span class="pos">+10.5%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+2.7%</span></td>
+      <td>+2.5% to +6.6%</td>
+      <td>-9.8%</td>
+    </tr>
+    <tr>
+      <td>Without monthly RSI</td>
+      <td>events</td>
+      <td>200</td>
+      <td>75</td>
+      <td><span class="pos">+3.7%</span></td>
+      <td>63%</td>
+      <td><span class="pos">+7.7%</span></td>
+      <td>62%</td>
+      <td><span class="pos">+7.4%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+15.9%</span></td>
+      <td>56%</td>
+      <td><span class="pos">+3.3%</span></td>
+      <td>+1.8% to +13.1%</td>
+      <td>-11.2%</td>
+    </tr>
+    <tr>
+      <td>Without weekly RSI</td>
+      <td>events</td>
+      <td>156</td>
+      <td>70</td>
+      <td><span class="pos">+2.8%</span></td>
+      <td>65%</td>
+      <td><span class="pos">+6.6%</span></td>
+      <td>62%</td>
+      <td><span class="pos">+8.0%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+16.2%</span></td>
+      <td>62%</td>
+      <td><span class="pos">+3.2%</span></td>
+      <td>+0.0% to +12.8%</td>
+      <td>-10.9%</td>
+    </tr>
+    <tr>
+      <td>B: RSI + vol conditions, no leader filter</td>
+      <td>events</td>
+      <td>479</td>
+      <td>142</td>
+      <td><span class="pos">+0.8%</span></td>
+      <td>50%</td>
+      <td><span class="pos">+5.7%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+4.9%</span></td>
+      <td>50%</td>
+      <td><span class="pos">+23.3%</span></td>
+      <td>61%</td>
+      <td><span class="neg">-0.2%</span></td>
+      <td>+3.0% to +11.5%</td>
+      <td>-12.9%</td>
+    </tr>
+    <tr>
+      <td>A: leaders, any day</td>
+      <td>stock-days</td>
+      <td>453,922</td>
+      <td>&ndash;</td>
+      <td><span class="pos">+0.4%</span></td>
+      <td>51%</td>
+      <td><span class="pos">+1.2%</span></td>
+      <td>52%</td>
+      <td><span class="pos">+2.2%</span></td>
+      <td>51%</td>
+      <td><span class="pos">+4.1%</span></td>
+      <td>50%</td>
+      <td><span class="pos">+0.5%</span></td>
+      <td>&ndash;</td>
+      <td>-8.8%</td>
+    </tr>
+    <tr>
+      <td>D: whole universe, any day</td>
+      <td>stock-days</td>
+      <td>1,453,024</td>
+      <td>&ndash;</td>
+      <td><span class="pos">+0.3%</span></td>
+      <td>50%</td>
+      <td><span class="pos">+0.8%</span></td>
+      <td>50%</td>
+      <td><span class="pos">+1.6%</span></td>
+      <td>49%</td>
+      <td><span class="pos">+4.0%</span></td>
+      <td>48%</td>
+      <td><span class="neg">-0.4%</span></td>
+      <td>&ndash;</td>
+      <td>-8.7%</td>
+    </tr>
+  </tbody>
+</table></div>
+<div class="section"><h2>2. Signal vs baselines &mdash; Crypto (BTC, ETH)</h2><div class="section-sub">Only two coins with short histories (BTC 2014+, ETH 2017+; 5 years of monthly bars needed first) &mdash; a handful of signals, illustrative rather than proof. Same rules on a 7-day calendar; leader = beat SPY over 5 years.</div></div>
+<h3>Full 2005+</h3>
+<div class="wrap"><table class="dataframe tbl">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Signal</th>
+      <th>Basis</th>
+      <th>N</th>
+      <th>Dates</th>
+      <th>1m excess</th>
+      <th>1m hit</th>
+      <th>3m excess</th>
+      <th>3m hit</th>
+      <th>6m excess</th>
+      <th>6m hit</th>
+      <th>12m excess</th>
+      <th>12m hit</th>
+      <th>6m median</th>
+      <th>6m mean 90% CI</th>
+      <th>Avg MAE (3m)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Buy signal: all four conditions (chosen)</td>
+      <td>events</td>
+      <td>0</td>
+      <td>0</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+    </tr>
+    <tr>
+      <td>Without vol spike</td>
+      <td>events</td>
+      <td>6</td>
+      <td>6</td>
+      <td><span class="pos">+0.6%</span></td>
+      <td>50%</td>
+      <td><span class="pos">+16.4%</span></td>
+      <td>67%</td>
+      <td><span class="pos">+22.9%</span></td>
+      <td>50%</td>
+      <td><span class="pos">+34.3%</span></td>
+      <td>50%</td>
+      <td><span class="pos">+15.1%</span></td>
+      <td>&ndash;</td>
+      <td>-11.7%</td>
+    </tr>
+    <tr>
+      <td>Without monthly RSI</td>
+      <td>events</td>
+      <td>1</td>
+      <td>1</td>
+      <td><span class="pos">+20.9%</span></td>
+      <td>100%</td>
+      <td><span class="pos">+60.5%</span></td>
+      <td>100%</td>
+      <td><span class="pos">+66.1%</span></td>
+      <td>100%</td>
+      <td><span class="pos">+886.9%</span></td>
+      <td>100%</td>
+      <td><span class="pos">+66.1%</span></td>
+      <td>&ndash;</td>
+      <td>-7.0%</td>
+    </tr>
+    <tr>
+      <td>Without weekly RSI</td>
+      <td>events</td>
+      <td>0</td>
+      <td>0</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+    </tr>
+    <tr>
+      <td>B: RSI + vol conditions, no leader filter</td>
+      <td>events</td>
+      <td>0</td>
+      <td>0</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+    </tr>
+    <tr>
+      <td>A: leaders, any day</td>
+      <td>stock-days</td>
+      <td>3,446</td>
+      <td>&ndash;</td>
+      <td><span class="pos">+2.5%</span></td>
+      <td>49%</td>
+      <td><span class="pos">+8.4%</span></td>
+      <td>50%</td>
+      <td><span class="pos">+20.6%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+51.7%</span></td>
+      <td>56%</td>
+      <td><span class="pos">+6.6%</span></td>
+      <td>&ndash;</td>
+      <td>-17.2%</td>
+    </tr>
+    <tr>
+      <td>D: whole universe, any day</td>
+      <td>stock-days</td>
+      <td>7,607</td>
+      <td>&ndash;</td>
+      <td><span class="pos">+4.5%</span></td>
+      <td>52%</td>
+      <td><span class="pos">+14.5%</span></td>
+      <td>53%</td>
+      <td><span class="pos">+38.0%</span></td>
+      <td>57%</td>
+      <td><span class="pos">+119.9%</span></td>
+      <td>61%</td>
+      <td><span class="pos">+12.7%</span></td>
+      <td>&ndash;</td>
+      <td>-18.8%</td>
+    </tr>
+  </tbody>
+</table></div>
+<h3>In-sample 2005-14</h3>
+<div class="wrap"><table class="dataframe tbl">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Signal</th>
+      <th>Basis</th>
+      <th>N</th>
+      <th>Dates</th>
+      <th>1m excess</th>
+      <th>1m hit</th>
+      <th>3m excess</th>
+      <th>3m hit</th>
+      <th>6m excess</th>
+      <th>6m hit</th>
+      <th>12m excess</th>
+      <th>12m hit</th>
+      <th>6m median</th>
+      <th>6m mean 90% CI</th>
+      <th>Avg MAE (3m)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Buy signal: all four conditions (chosen)</td>
+      <td>events</td>
+      <td>0</td>
+      <td>0</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+    </tr>
+    <tr>
+      <td>Without vol spike</td>
+      <td>events</td>
+      <td>0</td>
+      <td>0</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+    </tr>
+    <tr>
+      <td>Without monthly RSI</td>
+      <td>events</td>
+      <td>0</td>
+      <td>0</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+    </tr>
+    <tr>
+      <td>Without weekly RSI</td>
+      <td>events</td>
+      <td>0</td>
+      <td>0</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+    </tr>
+    <tr>
+      <td>B: RSI + vol conditions, no leader filter</td>
+      <td>events</td>
+      <td>0</td>
+      <td>0</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+    </tr>
+    <tr>
+      <td>A: leaders, any day</td>
+      <td>stock-days</td>
+      <td>0</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+    </tr>
+    <tr>
+      <td>D: whole universe, any day</td>
+      <td>stock-days</td>
+      <td>106</td>
+      <td>&ndash;</td>
+      <td><span class="neg">-12.0%</span></td>
+      <td>15%</td>
+      <td><span class="neg">-31.2%</span></td>
+      <td>0%</td>
+      <td><span class="neg">-39.0%</span></td>
+      <td>0%</td>
+      <td><span class="neg">-9.9%</span></td>
+      <td>34%</td>
+      <td><span class="neg">-39.9%</span></td>
+      <td>&ndash;</td>
+      <td>-43.0%</td>
+    </tr>
+  </tbody>
+</table></div>
+<h3>Out-of-sample 2015+</h3>
+<div class="wrap"><table class="dataframe tbl">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Signal</th>
+      <th>Basis</th>
+      <th>N</th>
+      <th>Dates</th>
+      <th>1m excess</th>
+      <th>1m hit</th>
+      <th>3m excess</th>
+      <th>3m hit</th>
+      <th>6m excess</th>
+      <th>6m hit</th>
+      <th>12m excess</th>
+      <th>12m hit</th>
+      <th>6m median</th>
+      <th>6m mean 90% CI</th>
+      <th>Avg MAE (3m)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Buy signal: all four conditions (chosen)</td>
+      <td>events</td>
+      <td>0</td>
+      <td>0</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+    </tr>
+    <tr>
+      <td>Without vol spike</td>
+      <td>events</td>
+      <td>6</td>
+      <td>6</td>
+      <td><span class="pos">+0.6%</span></td>
+      <td>50%</td>
+      <td><span class="pos">+16.4%</span></td>
+      <td>67%</td>
+      <td><span class="pos">+22.9%</span></td>
+      <td>50%</td>
+      <td><span class="pos">+34.3%</span></td>
+      <td>50%</td>
+      <td><span class="pos">+15.1%</span></td>
+      <td>&ndash;</td>
+      <td>-11.7%</td>
+    </tr>
+    <tr>
+      <td>Without monthly RSI</td>
+      <td>events</td>
+      <td>1</td>
+      <td>1</td>
+      <td><span class="pos">+20.9%</span></td>
+      <td>100%</td>
+      <td><span class="pos">+60.5%</span></td>
+      <td>100%</td>
+      <td><span class="pos">+66.1%</span></td>
+      <td>100%</td>
+      <td><span class="pos">+886.9%</span></td>
+      <td>100%</td>
+      <td><span class="pos">+66.1%</span></td>
+      <td>&ndash;</td>
+      <td>-7.0%</td>
+    </tr>
+    <tr>
+      <td>Without weekly RSI</td>
+      <td>events</td>
+      <td>0</td>
+      <td>0</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+    </tr>
+    <tr>
+      <td>B: RSI + vol conditions, no leader filter</td>
+      <td>events</td>
+      <td>0</td>
+      <td>0</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+      <td>&ndash;</td>
+    </tr>
+    <tr>
+      <td>A: leaders, any day</td>
+      <td>stock-days</td>
+      <td>3,446</td>
+      <td>&ndash;</td>
+      <td><span class="pos">+2.5%</span></td>
+      <td>49%</td>
+      <td><span class="pos">+8.4%</span></td>
+      <td>50%</td>
+      <td><span class="pos">+20.6%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+51.7%</span></td>
+      <td>56%</td>
+      <td><span class="pos">+6.6%</span></td>
+      <td>&ndash;</td>
+      <td>-17.2%</td>
+    </tr>
+    <tr>
+      <td>D: whole universe, any day</td>
+      <td>stock-days</td>
+      <td>7,501</td>
+      <td>&ndash;</td>
+      <td><span class="pos">+4.7%</span></td>
+      <td>53%</td>
+      <td><span class="pos">+15.2%</span></td>
+      <td>53%</td>
+      <td><span class="pos">+39.1%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+122.0%</span></td>
+      <td>62%</td>
+      <td><span class="pos">+13.7%</span></td>
+      <td>&ndash;</td>
+      <td>-18.5%</td>
+    </tr>
+  </tbody>
+</table></div>
+<div class="section"><h2>2. Signal vs baselines &mdash; Sector/theme ETFs</h2><div class="section-sub">The "Without ..." rows drop one condition at a time: if a row does as well as the full signal, that condition isn't pulling its weight</div></div>
+<h3>Full 2005+</h3>
+<div class="wrap"><table class="dataframe tbl">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Signal</th>
+      <th>Basis</th>
+      <th>N</th>
+      <th>Dates</th>
+      <th>1m excess</th>
+      <th>1m hit</th>
+      <th>3m excess</th>
+      <th>3m hit</th>
+      <th>6m excess</th>
+      <th>6m hit</th>
+      <th>12m excess</th>
+      <th>12m hit</th>
+      <th>6m median</th>
+      <th>6m mean 90% CI</th>
+      <th>Avg MAE (3m)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Buy signal: all four conditions (chosen)</td>
+      <td>events</td>
+      <td>37</td>
+      <td>30</td>
+      <td><span class="pos">+2.5%</span></td>
+      <td>70%</td>
+      <td><span class="pos">+0.8%</span></td>
+      <td>57%</td>
+      <td><span class="neg">-2.3%</span></td>
+      <td>35%</td>
+      <td><span class="pos">+4.4%</span></td>
+      <td>51%</td>
+      <td><span class="neg">-7.3%</span></td>
+      <td>-10.5% to +5.6%</td>
+      <td>-13.5%</td>
+    </tr>
+    <tr>
+      <td>Without vol spike</td>
+      <td>events</td>
+      <td>58</td>
+      <td>43</td>
+      <td><span class="pos">+2.1%</span></td>
+      <td>64%</td>
+      <td><span class="neg">-1.7%</span></td>
+      <td>48%</td>
+      <td><span class="neg">-3.8%</span></td>
+      <td>41%</td>
+      <td><span class="neg">-1.8%</span></td>
+      <td>43%</td>
+      <td><span class="neg">-4.9%</span></td>
+      <td>-9.8% to +1.7%</td>
+      <td>-12.6%</td>
+    </tr>
+    <tr>
+      <td>Without monthly RSI</td>
+      <td>events</td>
+      <td>66</td>
+      <td>45</td>
+      <td><span class="pos">+2.1%</span></td>
+      <td>64%</td>
+      <td><span class="pos">+2.4%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+2.6%</span></td>
+      <td>38%</td>
+      <td><span class="pos">+10.6%</span></td>
+      <td>44%</td>
+      <td><span class="neg">-2.1%</span></td>
+      <td>-9.6% to +12.5%</td>
+      <td>-14.7%</td>
+    </tr>
+    <tr>
+      <td>Without weekly RSI</td>
+      <td>events</td>
+      <td>41</td>
+      <td>35</td>
+      <td><span class="pos">+1.5%</span></td>
+      <td>66%</td>
+      <td><span class="pos">+0.5%</span></td>
+      <td>51%</td>
+      <td><span class="neg">-2.2%</span></td>
+      <td>39%</td>
+      <td><span class="pos">+3.7%</span></td>
+      <td>49%</td>
+      <td><span class="neg">-6.8%</span></td>
+      <td>-9.4% to +4.4%</td>
+      <td>-14.3%</td>
+    </tr>
+    <tr>
+      <td>B: RSI + vol conditions, no leader filter</td>
+      <td>events</td>
+      <td>92</td>
+      <td>54</td>
+      <td><span class="pos">+1.2%</span></td>
+      <td>61%</td>
+      <td><span class="pos">+3.9%</span></td>
+      <td>59%</td>
+      <td><span class="pos">+1.0%</span></td>
+      <td>45%</td>
+      <td><span class="pos">+12.9%</span></td>
+      <td>64%</td>
+      <td><span class="neg">-1.1%</span></td>
+      <td>-4.4% to +5.4%</td>
+      <td>-12.8%</td>
+    </tr>
+    <tr>
+      <td>A: leaders, any day</td>
+      <td>stock-days</td>
+      <td>62,038</td>
+      <td>&ndash;</td>
+      <td><span class="pos">+0.0%</span></td>
+      <td>51%</td>
+      <td><span class="pos">+0.1%</span></td>
+      <td>50%</td>
+      <td><span class="pos">+0.2%</span></td>
+      <td>48%</td>
+      <td><span class="neg">-0.1%</span></td>
+      <td>48%</td>
+      <td><span class="neg">-0.4%</span></td>
+      <td>&ndash;</td>
+      <td>-7.4%</td>
+    </tr>
+    <tr>
+      <td>D: whole universe, any day</td>
+      <td>stock-days</td>
+      <td>284,255</td>
+      <td>&ndash;</td>
+      <td><span class="neg">-0.1%</span></td>
+      <td>49%</td>
+      <td><span class="neg">-0.3%</span></td>
+      <td>47%</td>
+      <td><span class="neg">-0.5%</span></td>
+      <td>46%</td>
+      <td><span class="neg">-0.9%</span></td>
+      <td>45%</td>
+      <td><span class="neg">-1.1%</span></td>
+      <td>&ndash;</td>
+      <td>-8.1%</td>
+    </tr>
+  </tbody>
+</table></div>
+<h3>In-sample 2005-14</h3>
+<div class="wrap"><table class="dataframe tbl">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Signal</th>
+      <th>Basis</th>
+      <th>N</th>
+      <th>Dates</th>
+      <th>1m excess</th>
+      <th>1m hit</th>
+      <th>3m excess</th>
+      <th>3m hit</th>
+      <th>6m excess</th>
+      <th>6m hit</th>
+      <th>12m excess</th>
+      <th>12m hit</th>
+      <th>6m median</th>
+      <th>6m mean 90% CI</th>
+      <th>Avg MAE (3m)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Buy signal: all four conditions (chosen)</td>
+      <td>events</td>
+      <td>7</td>
+      <td>7</td>
+      <td><span class="neg">-0.3%</span></td>
+      <td>57%</td>
+      <td><span class="pos">+7.3%</span></td>
+      <td>86%</td>
+      <td><span class="pos">+6.0%</span></td>
+      <td>71%</td>
+      <td><span class="pos">+10.8%</span></td>
+      <td>71%</td>
+      <td><span class="pos">+7.9%</span></td>
+      <td>&ndash;</td>
+      <td>-11.9%</td>
+    </tr>
+    <tr>
+      <td>Without vol spike</td>
+      <td>events</td>
+      <td>9</td>
+      <td>9</td>
+      <td><span class="neg">-1.2%</span></td>
+      <td>56%</td>
+      <td><span class="neg">-1.5%</span></td>
+      <td>67%</td>
+      <td><span class="neg">-2.0%</span></td>
+      <td>56%</td>
+      <td><span class="neg">-3.2%</span></td>
+      <td>56%</td>
+      <td><span class="pos">+1.0%</span></td>
+      <td>&ndash;</td>
+      <td>-15.6%</td>
+    </tr>
+    <tr>
+      <td>Without monthly RSI</td>
+      <td>events</td>
+      <td>11</td>
+      <td>11</td>
+      <td><span class="neg">-0.5%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+1.3%</span></td>
+      <td>64%</td>
+      <td><span class="pos">+3.1%</span></td>
+      <td>45%</td>
+      <td><span class="pos">+8.6%</span></td>
+      <td>45%</td>
+      <td><span class="neg">-0.6%</span></td>
+      <td>&ndash;</td>
+      <td>-22.0%</td>
+    </tr>
+    <tr>
+      <td>Without weekly RSI</td>
+      <td>events</td>
+      <td>9</td>
+      <td>9</td>
+      <td><span class="pos">+0.2%</span></td>
+      <td>67%</td>
+      <td><span class="pos">+5.8%</span></td>
+      <td>67%</td>
+      <td><span class="pos">+6.1%</span></td>
+      <td>78%</td>
+      <td><span class="pos">+10.5%</span></td>
+      <td>67%</td>
+      <td><span class="pos">+6.2%</span></td>
+      <td>&ndash;</td>
+      <td>-13.8%</td>
+    </tr>
+    <tr>
+      <td>B: RSI + vol conditions, no leader filter</td>
+      <td>events</td>
+      <td>20</td>
+      <td>15</td>
+      <td><span class="neg">-1.6%</span></td>
+      <td>35%</td>
+      <td><span class="pos">+2.4%</span></td>
+      <td>60%</td>
+      <td><span class="pos">+2.7%</span></td>
+      <td>70%</td>
+      <td><span class="pos">+5.1%</span></td>
+      <td>70%</td>
+      <td><span class="pos">+5.7%</span></td>
+      <td>-0.6% to +6.5%</td>
+      <td>-19.7%</td>
+    </tr>
+    <tr>
+      <td>A: leaders, any day</td>
+      <td>stock-days</td>
+      <td>18,141</td>
+      <td>&ndash;</td>
+      <td><span class="pos">+0.1%</span></td>
+      <td>53%</td>
+      <td><span class="pos">+0.3%</span></td>
+      <td>53%</td>
+      <td><span class="pos">+0.8%</span></td>
+      <td>54%</td>
+      <td><span class="pos">+1.5%</span></td>
+      <td>54%</td>
+      <td><span class="pos">+0.9%</span></td>
+      <td>&ndash;</td>
+      <td>-6.0%</td>
+    </tr>
+    <tr>
+      <td>D: whole universe, any day</td>
+      <td>stock-days</td>
+      <td>87,982</td>
+      <td>&ndash;</td>
+      <td><span class="neg">-0.1%</span></td>
+      <td>50%</td>
+      <td><span class="neg">-0.4%</span></td>
+      <td>49%</td>
+      <td><span class="neg">-0.6%</span></td>
+      <td>49%</td>
+      <td><span class="neg">-1.6%</span></td>
+      <td>48%</td>
+      <td><span class="neg">-0.2%</span></td>
+      <td>&ndash;</td>
+      <td>-8.0%</td>
+    </tr>
+  </tbody>
+</table></div>
+<h3>Out-of-sample 2015+</h3>
+<div class="wrap"><table class="dataframe tbl">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Signal</th>
+      <th>Basis</th>
+      <th>N</th>
+      <th>Dates</th>
+      <th>1m excess</th>
+      <th>1m hit</th>
+      <th>3m excess</th>
+      <th>3m hit</th>
+      <th>6m excess</th>
+      <th>6m hit</th>
+      <th>12m excess</th>
+      <th>12m hit</th>
+      <th>6m median</th>
+      <th>6m mean 90% CI</th>
+      <th>Avg MAE (3m)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Buy signal: all four conditions (chosen)</td>
+      <td>events</td>
+      <td>30</td>
+      <td>23</td>
+      <td><span class="pos">+3.2%</span></td>
+      <td>73%</td>
+      <td><span class="neg">-0.7%</span></td>
+      <td>50%</td>
+      <td><span class="neg">-4.3%</span></td>
+      <td>27%</td>
+      <td><span class="pos">+3.0%</span></td>
+      <td>47%</td>
+      <td><span class="neg">-8.6%</span></td>
+      <td>-14.2% to +5.0%</td>
+      <td>-13.8%</td>
+    </tr>
+    <tr>
+      <td>Without vol spike</td>
+      <td>events</td>
+      <td>49</td>
+      <td>34</td>
+      <td><span class="pos">+2.7%</span></td>
+      <td>65%</td>
+      <td><span class="neg">-1.7%</span></td>
+      <td>45%</td>
+      <td><span class="neg">-4.1%</span></td>
+      <td>39%</td>
+      <td><span class="neg">-1.5%</span></td>
+      <td>41%</td>
+      <td><span class="neg">-6.8%</span></td>
+      <td>-10.8% to +1.8%</td>
+      <td>-12.1%</td>
+    </tr>
+    <tr>
+      <td>Without monthly RSI</td>
+      <td>events</td>
+      <td>55</td>
+      <td>34</td>
+      <td><span class="pos">+2.6%</span></td>
+      <td>65%</td>
+      <td><span class="pos">+2.6%</span></td>
+      <td>56%</td>
+      <td><span class="pos">+2.5%</span></td>
+      <td>36%</td>
+      <td><span class="pos">+10.9%</span></td>
+      <td>44%</td>
+      <td><span class="neg">-5.4%</span></td>
+      <td>-14.6% to +12.5%</td>
+      <td>-13.2%</td>
+    </tr>
+    <tr>
+      <td>Without weekly RSI</td>
+      <td>events</td>
+      <td>32</td>
+      <td>26</td>
+      <td><span class="pos">+1.9%</span></td>
+      <td>66%</td>
+      <td><span class="neg">-1.0%</span></td>
+      <td>47%</td>
+      <td><span class="neg">-4.5%</span></td>
+      <td>28%</td>
+      <td><span class="pos">+1.8%</span></td>
+      <td>44%</td>
+      <td><span class="neg">-8.6%</span></td>
+      <td>-14.0% to +3.7%</td>
+      <td>-14.4%</td>
+    </tr>
+    <tr>
+      <td>B: RSI + vol conditions, no leader filter</td>
+      <td>events</td>
+      <td>72</td>
+      <td>39</td>
+      <td><span class="pos">+2.0%</span></td>
+      <td>68%</td>
+      <td><span class="pos">+4.3%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+0.6%</span></td>
+      <td>38%</td>
+      <td><span class="pos">+15.2%</span></td>
+      <td>62%</td>
+      <td><span class="neg">-5.0%</span></td>
+      <td>-7.5% to +6.5%</td>
+      <td>-10.9%</td>
+    </tr>
+    <tr>
+      <td>A: leaders, any day</td>
+      <td>stock-days</td>
+      <td>43,897</td>
+      <td>&ndash;</td>
+      <td><span class="pos">+0.0%</span></td>
+      <td>50%</td>
+      <td><span class="neg">-0.0%</span></td>
+      <td>49%</td>
+      <td><span class="neg">-0.1%</span></td>
+      <td>46%</td>
+      <td><span class="neg">-0.8%</span></td>
+      <td>46%</td>
+      <td><span class="neg">-1.1%</span></td>
+      <td>&ndash;</td>
+      <td>-8.0%</td>
+    </tr>
+    <tr>
+      <td>D: whole universe, any day</td>
+      <td>stock-days</td>
+      <td>196,273</td>
+      <td>&ndash;</td>
+      <td><span class="neg">-0.1%</span></td>
+      <td>48%</td>
+      <td><span class="neg">-0.2%</span></td>
+      <td>46%</td>
+      <td><span class="neg">-0.5%</span></td>
+      <td>44%</td>
+      <td><span class="neg">-0.6%</span></td>
+      <td>43%</td>
+      <td><span class="neg">-1.6%</span></td>
+      <td>&ndash;</td>
+      <td>-8.1%</td>
+    </tr>
+  </tbody>
+</table></div>
+<div class="section"><h2>3. Walk-forward threshold grid (US stocks)</h2><div class="section-sub">Chosen on 2005-14 only (highest avg of 3m and 6m excess, min 100 signals); 2015+ shown untouched. Percentiles are vs each stock's own history.</div></div>
+<div class="wrap"><table class="dataframe tbl">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Weekly RSI</th>
+      <th>Monthly RSI</th>
+      <th>Vol spike</th>
+      <th>IS signals</th>
+      <th>IS 3m</th>
+      <th>IS 6m</th>
+      <th>IS 12m</th>
+      <th>IS 6m hit</th>
+      <th>OOS signals</th>
+      <th>OOS 3m</th>
+      <th>OOS 6m</th>
+      <th>OOS 12m</th>
+      <th>OOS 6m hit</th>
+      <th>IS objective</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>&le; 5%</td>
+      <td>&le; 10%</td>
+      <td>VIX 25 (83th pct)</td>
+      <td>357</td>
+      <td><span class="pos">+1.5%</span></td>
+      <td><span class="pos">+4.5%</span></td>
+      <td><span class="pos">+5.8%</span></td>
+      <td>53%</td>
+      <td>359</td>
+      <td><span class="pos">+6.5%</span></td>
+      <td><span class="pos">+7.9%</span></td>
+      <td><span class="pos">+15.9%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+3.0%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 5%</td>
+      <td>&le; 10%</td>
+      <td>VIX 30 (92th pct)</td>
+      <td>280</td>
+      <td><span class="pos">+2.2%</span></td>
+      <td><span class="pos">+5.2%</span></td>
+      <td><span class="pos">+7.4%</span></td>
+      <td>54%</td>
+      <td>200</td>
+      <td><span class="pos">+7.3%</span></td>
+      <td><span class="pos">+8.8%</span></td>
+      <td><span class="pos">+17.3%</span></td>
+      <td>56%</td>
+      <td><span class="pos">+3.7%</span></td>
+    </tr>
+    <tr class="chosen">
+      <td>&le; 5%</td>
+      <td>&le; 10%</td>
+      <td>VIX 35 (96th pct)</td>
+      <td>225</td>
+      <td><span class="pos">+2.1%</span></td>
+      <td><span class="pos">+5.7%</span></td>
+      <td><span class="pos">+8.7%</span></td>
+      <td>56%</td>
+      <td>139</td>
+      <td><span class="pos">+7.7%</span></td>
+      <td><span class="pos">+9.4%</span></td>
+      <td><span class="pos">+17.9%</span></td>
+      <td>61%</td>
+      <td><span class="pos">+3.9%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 5%</td>
+      <td>&le; 20%</td>
+      <td>VIX 25 (83th pct)</td>
+      <td>410</td>
+      <td><span class="pos">+1.3%</span></td>
+      <td><span class="pos">+4.1%</span></td>
+      <td><span class="pos">+4.3%</span></td>
+      <td>52%</td>
+      <td>509</td>
+      <td><span class="pos">+5.4%</span></td>
+      <td><span class="pos">+6.3%</span></td>
+      <td><span class="pos">+12.5%</span></td>
+      <td>59%</td>
+      <td><span class="pos">+2.7%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 5%</td>
+      <td>&le; 20%</td>
+      <td>VIX 30 (92th pct)</td>
+      <td>311</td>
+      <td><span class="pos">+2.2%</span></td>
+      <td><span class="pos">+4.4%</span></td>
+      <td><span class="pos">+6.0%</span></td>
+      <td>53%</td>
+      <td>264</td>
+      <td><span class="pos">+6.7%</span></td>
+      <td><span class="pos">+8.0%</span></td>
+      <td><span class="pos">+16.3%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+3.3%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 5%</td>
+      <td>&le; 20%</td>
+      <td>VIX 35 (96th pct)</td>
+      <td>245</td>
+      <td><span class="pos">+2.3%</span></td>
+      <td><span class="pos">+5.2%</span></td>
+      <td><span class="pos">+7.0%</span></td>
+      <td>55%</td>
+      <td>175</td>
+      <td><span class="pos">+7.5%</span></td>
+      <td><span class="pos">+8.5%</span></td>
+      <td><span class="pos">+17.3%</span></td>
+      <td>59%</td>
+      <td><span class="pos">+3.8%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 5%</td>
+      <td>&le; 30%</td>
+      <td>VIX 25 (83th pct)</td>
+      <td>456</td>
+      <td><span class="pos">+1.6%</span></td>
+      <td><span class="pos">+4.3%</span></td>
+      <td><span class="pos">+4.6%</span></td>
+      <td>53%</td>
+      <td>568</td>
+      <td><span class="pos">+4.8%</span></td>
+      <td><span class="pos">+5.3%</span></td>
+      <td><span class="pos">+11.0%</span></td>
+      <td>56%</td>
+      <td><span class="pos">+3.0%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 5%</td>
+      <td>&le; 30%</td>
+      <td>VIX 30 (92th pct)</td>
+      <td>331</td>
+      <td><span class="pos">+2.2%</span></td>
+      <td><span class="pos">+4.0%</span></td>
+      <td><span class="pos">+5.2%</span></td>
+      <td>53%</td>
+      <td>287</td>
+      <td><span class="pos">+6.2%</span></td>
+      <td><span class="pos">+6.5%</span></td>
+      <td><span class="pos">+14.3%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+3.1%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 5%</td>
+      <td>&le; 30%</td>
+      <td>VIX 35 (96th pct)</td>
+      <td>256</td>
+      <td><span class="pos">+2.3%</span></td>
+      <td><span class="pos">+4.7%</span></td>
+      <td><span class="pos">+6.3%</span></td>
+      <td>54%</td>
+      <td>186</td>
+      <td><span class="pos">+7.3%</span></td>
+      <td><span class="pos">+8.0%</span></td>
+      <td><span class="pos">+16.5%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+3.5%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 10%</td>
+      <td>&le; 10%</td>
+      <td>VIX 25 (83th pct)</td>
+      <td>432</td>
+      <td><span class="pos">+2.0%</span></td>
+      <td><span class="pos">+4.7%</span></td>
+      <td><span class="pos">+6.9%</span></td>
+      <td>56%</td>
+      <td>404</td>
+      <td><span class="pos">+6.0%</span></td>
+      <td><span class="pos">+7.5%</span></td>
+      <td><span class="pos">+14.6%</span></td>
+      <td>57%</td>
+      <td><span class="pos">+3.4%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 10%</td>
+      <td>&le; 10%</td>
+      <td>VIX 30 (92th pct)</td>
+      <td>334</td>
+      <td><span class="pos">+2.4%</span></td>
+      <td><span class="pos">+5.0%</span></td>
+      <td><span class="pos">+7.4%</span></td>
+      <td>55%</td>
+      <td>220</td>
+      <td><span class="pos">+6.4%</span></td>
+      <td><span class="pos">+8.4%</span></td>
+      <td><span class="pos">+17.3%</span></td>
+      <td>54%</td>
+      <td><span class="pos">+3.7%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 10%</td>
+      <td>&le; 10%</td>
+      <td>VIX 35 (96th pct)</td>
+      <td>268</td>
+      <td><span class="pos">+2.2%</span></td>
+      <td><span class="pos">+5.0%</span></td>
+      <td><span class="pos">+7.9%</span></td>
+      <td>56%</td>
+      <td>147</td>
+      <td><span class="pos">+7.0%</span></td>
+      <td><span class="pos">+8.4%</span></td>
+      <td><span class="pos">+16.8%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+3.6%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 10%</td>
+      <td>&le; 20%</td>
+      <td>VIX 25 (83th pct)</td>
+      <td>503</td>
+      <td><span class="pos">+1.5%</span></td>
+      <td><span class="pos">+4.3%</span></td>
+      <td><span class="pos">+5.1%</span></td>
+      <td>52%</td>
+      <td>625</td>
+      <td><span class="pos">+5.2%</span></td>
+      <td><span class="pos">+6.6%</span></td>
+      <td><span class="pos">+12.3%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+2.9%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 10%</td>
+      <td>&le; 20%</td>
+      <td>VIX 30 (92th pct)</td>
+      <td>378</td>
+      <td><span class="pos">+1.9%</span></td>
+      <td><span class="pos">+4.2%</span></td>
+      <td><span class="pos">+5.9%</span></td>
+      <td>51%</td>
+      <td>304</td>
+      <td><span class="pos">+6.1%</span></td>
+      <td><span class="pos">+8.5%</span></td>
+      <td><span class="pos">+17.0%</span></td>
+      <td>56%</td>
+      <td><span class="pos">+3.1%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 10%</td>
+      <td>&le; 20%</td>
+      <td>VIX 35 (96th pct)</td>
+      <td>297</td>
+      <td><span class="pos">+1.9%</span></td>
+      <td><span class="pos">+4.7%</span></td>
+      <td><span class="pos">+6.9%</span></td>
+      <td>51%</td>
+      <td>195</td>
+      <td><span class="pos">+6.7%</span></td>
+      <td><span class="pos">+7.9%</span></td>
+      <td><span class="pos">+16.9%</span></td>
+      <td>57%</td>
+      <td><span class="pos">+3.3%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 10%</td>
+      <td>&le; 30%</td>
+      <td>VIX 25 (83th pct)</td>
+      <td>580</td>
+      <td><span class="pos">+1.1%</span></td>
+      <td><span class="pos">+3.5%</span></td>
+      <td><span class="pos">+4.5%</span></td>
+      <td>53%</td>
+      <td>737</td>
+      <td><span class="pos">+4.2%</span></td>
+      <td><span class="pos">+4.9%</span></td>
+      <td><span class="pos">+9.1%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+2.3%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 10%</td>
+      <td>&le; 30%</td>
+      <td>VIX 30 (92th pct)</td>
+      <td>417</td>
+      <td><span class="pos">+1.0%</span></td>
+      <td><span class="pos">+2.7%</span></td>
+      <td><span class="pos">+3.9%</span></td>
+      <td>51%</td>
+      <td>344</td>
+      <td><span class="pos">+4.8%</span></td>
+      <td><span class="pos">+6.2%</span></td>
+      <td><span class="pos">+12.7%</span></td>
+      <td>53%</td>
+      <td><span class="pos">+1.8%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 10%</td>
+      <td>&le; 30%</td>
+      <td>VIX 35 (96th pct)</td>
+      <td>320</td>
+      <td><span class="pos">+0.8%</span></td>
+      <td><span class="pos">+3.1%</span></td>
+      <td><span class="pos">+5.2%</span></td>
+      <td>50%</td>
+      <td>217</td>
+      <td><span class="pos">+6.0%</span></td>
+      <td><span class="pos">+7.1%</span></td>
+      <td><span class="pos">+14.4%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+2.0%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 20%</td>
+      <td>&le; 10%</td>
+      <td>VIX 25 (83th pct)</td>
+      <td>488</td>
+      <td><span class="pos">+2.0%</span></td>
+      <td><span class="pos">+4.4%</span></td>
+      <td><span class="pos">+6.4%</span></td>
+      <td>56%</td>
+      <td>442</td>
+      <td><span class="pos">+5.5%</span></td>
+      <td><span class="pos">+6.9%</span></td>
+      <td><span class="pos">+13.3%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+3.2%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 20%</td>
+      <td>&le; 10%</td>
+      <td>VIX 30 (92th pct)</td>
+      <td>372</td>
+      <td><span class="pos">+2.2%</span></td>
+      <td><span class="pos">+4.8%</span></td>
+      <td><span class="pos">+7.2%</span></td>
+      <td>54%</td>
+      <td>240</td>
+      <td><span class="pos">+5.5%</span></td>
+      <td><span class="pos">+7.4%</span></td>
+      <td><span class="pos">+16.4%</span></td>
+      <td>52%</td>
+      <td><span class="pos">+3.5%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 20%</td>
+      <td>&le; 10%</td>
+      <td>VIX 35 (96th pct)</td>
+      <td>301</td>
+      <td><span class="pos">+2.5%</span></td>
+      <td><span class="pos">+5.2%</span></td>
+      <td><span class="pos">+7.9%</span></td>
+      <td>56%</td>
+      <td>153</td>
+      <td><span class="pos">+6.8%</span></td>
+      <td><span class="pos">+8.0%</span></td>
+      <td><span class="pos">+16.3%</span></td>
+      <td>57%</td>
+      <td><span class="pos">+3.9%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 20%</td>
+      <td>&le; 20%</td>
+      <td>VIX 25 (83th pct)</td>
+      <td>582</td>
+      <td><span class="pos">+1.8%</span></td>
+      <td><span class="pos">+3.9%</span></td>
+      <td><span class="pos">+5.1%</span></td>
+      <td>53%</td>
+      <td>708</td>
+      <td><span class="pos">+4.6%</span></td>
+      <td><span class="pos">+6.0%</span></td>
+      <td><span class="pos">+11.7%</span></td>
+      <td>57%</td>
+      <td><span class="pos">+2.8%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 20%</td>
+      <td>&le; 20%</td>
+      <td>VIX 30 (92th pct)</td>
+      <td>429</td>
+      <td><span class="pos">+2.0%</span></td>
+      <td><span class="pos">+4.1%</span></td>
+      <td><span class="pos">+5.9%</span></td>
+      <td>51%</td>
+      <td>338</td>
+      <td><span class="pos">+5.6%</span></td>
+      <td><span class="pos">+8.2%</span></td>
+      <td><span class="pos">+16.0%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+3.0%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 20%</td>
+      <td>&le; 20%</td>
+      <td>VIX 35 (96th pct)</td>
+      <td>340</td>
+      <td><span class="pos">+2.3%</span></td>
+      <td><span class="pos">+4.6%</span></td>
+      <td><span class="pos">+6.5%</span></td>
+      <td>53%</td>
+      <td>206</td>
+      <td><span class="pos">+6.5%</span></td>
+      <td><span class="pos">+7.7%</span></td>
+      <td><span class="pos">+16.0%</span></td>
+      <td>56%</td>
+      <td><span class="pos">+3.4%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 20%</td>
+      <td>&le; 30%</td>
+      <td>VIX 25 (83th pct)</td>
+      <td>691</td>
+      <td><span class="pos">+1.4%</span></td>
+      <td><span class="pos">+3.0%</span></td>
+      <td><span class="pos">+4.2%</span></td>
+      <td>54%</td>
+      <td>873</td>
+      <td><span class="pos">+3.6%</span></td>
+      <td><span class="pos">+4.8%</span></td>
+      <td><span class="pos">+8.9%</span></td>
+      <td>53%</td>
+      <td><span class="pos">+2.2%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 20%</td>
+      <td>&le; 30%</td>
+      <td>VIX 30 (92th pct)</td>
+      <td>483</td>
+      <td><span class="pos">+1.2%</span></td>
+      <td><span class="pos">+2.9%</span></td>
+      <td><span class="pos">+4.2%</span></td>
+      <td>51%</td>
+      <td>394</td>
+      <td><span class="pos">+4.3%</span></td>
+      <td><span class="pos">+5.9%</span></td>
+      <td><span class="pos">+13.0%</span></td>
+      <td>52%</td>
+      <td><span class="pos">+2.0%</span></td>
+    </tr>
+    <tr>
+      <td>&le; 20%</td>
+      <td>&le; 30%</td>
+      <td>VIX 35 (96th pct)</td>
+      <td>376</td>
+      <td><span class="pos">+1.3%</span></td>
+      <td><span class="pos">+3.2%</span></td>
+      <td><span class="pos">+4.7%</span></td>
+      <td>52%</td>
+      <td>236</td>
+      <td><span class="pos">+6.1%</span></td>
+      <td><span class="pos">+7.4%</span></td>
+      <td><span class="pos">+15.9%</span></td>
+      <td>57%</td>
+      <td><span class="pos">+2.2%</span></td>
+    </tr>
+  </tbody>
+</table></div>
+<div class="note">Highlighted row = chosen. A robust signal shows a broad plateau of similar results across nearby thresholds; one isolated winner is a sign of overfitting.</div>
+<div class="section"><h2>4. Diagnostics (US stocks, chosen signal)</h2></div>
+<h3>What drove the 21-day drop? (market / sector / stock-specific, betas from the prior year)</h3>
+<div class="note"><b>Full 2005+</b></div>
+<div class="wrap"><table class="dataframe tbl">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Signal</th>
+      <th>Basis</th>
+      <th>N</th>
+      <th>Dates</th>
+      <th>1m excess</th>
+      <th>1m hit</th>
+      <th>3m excess</th>
+      <th>3m hit</th>
+      <th>6m excess</th>
+      <th>6m hit</th>
+      <th>12m excess</th>
+      <th>12m hit</th>
+      <th>6m median</th>
+      <th>6m mean 90% CI</th>
+      <th>Avg MAE (3m)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Market</td>
+      <td>events</td>
+      <td>207</td>
+      <td>74</td>
+      <td><span class="pos">+1.2%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+5.4%</span></td>
+      <td>60%</td>
+      <td><span class="pos">+7.3%</span></td>
+      <td>57%</td>
+      <td><span class="pos">+12.5%</span></td>
+      <td>57%</td>
+      <td><span class="pos">+3.7%</span></td>
+      <td>+3.9% to +12.6%</td>
+      <td>-16.9%</td>
+    </tr>
+    <tr>
+      <td>Sector</td>
+      <td>events</td>
+      <td>28</td>
+      <td>23</td>
+      <td><span class="pos">+3.2%</span></td>
+      <td>61%</td>
+      <td><span class="pos">+0.0%</span></td>
+      <td>54%</td>
+      <td><span class="pos">+0.9%</span></td>
+      <td>57%</td>
+      <td><span class="neg">-1.2%</span></td>
+      <td>57%</td>
+      <td><span class="pos">+3.3%</span></td>
+      <td>-3.5% to +5.1%</td>
+      <td>-17.9%</td>
+    </tr>
+    <tr>
+      <td>Specific</td>
+      <td>events</td>
+      <td>129</td>
+      <td>105</td>
+      <td><span class="pos">+2.1%</span></td>
+      <td>56%</td>
+      <td><span class="pos">+3.2%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+8.2%</span></td>
+      <td>61%</td>
+      <td><span class="pos">+14.6%</span></td>
+      <td>61%</td>
+      <td><span class="pos">+6.4%</span></td>
+      <td>+3.3% to +13.0%</td>
+      <td>-20.2%</td>
+    </tr>
+  </tbody>
+</table></div>
+<div class="note"><b>In-sample 2005-14</b></div>
+<div class="wrap"><table class="dataframe tbl">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Signal</th>
+      <th>Basis</th>
+      <th>N</th>
+      <th>Dates</th>
+      <th>1m excess</th>
+      <th>1m hit</th>
+      <th>3m excess</th>
+      <th>3m hit</th>
+      <th>6m excess</th>
+      <th>6m hit</th>
+      <th>12m excess</th>
+      <th>12m hit</th>
+      <th>6m median</th>
+      <th>6m mean 90% CI</th>
+      <th>Avg MAE (3m)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Market</td>
+      <td>events</td>
+      <td>119</td>
+      <td>47</td>
+      <td><span class="neg">-0.4%</span></td>
+      <td>54%</td>
+      <td><span class="pos">+1.7%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+4.7%</span></td>
+      <td>52%</td>
+      <td><span class="pos">+6.1%</span></td>
+      <td>51%</td>
+      <td><span class="pos">+3.3%</span></td>
+      <td>+2.4% to +10.6%</td>
+      <td>-22.0%</td>
+    </tr>
+    <tr>
+      <td>Sector</td>
+      <td>events</td>
+      <td>24</td>
+      <td>19</td>
+      <td><span class="pos">+2.8%</span></td>
+      <td>54%</td>
+      <td><span class="pos">+0.8%</span></td>
+      <td>58%</td>
+      <td><span class="pos">+2.3%</span></td>
+      <td>62%</td>
+      <td><span class="pos">+3.6%</span></td>
+      <td>67%</td>
+      <td><span class="pos">+3.7%</span></td>
+      <td>-2.4% to +6.5%</td>
+      <td>-19.5%</td>
+    </tr>
+    <tr>
+      <td>Specific</td>
+      <td>events</td>
+      <td>82</td>
+      <td>69</td>
+      <td><span class="pos">+2.0%</span></td>
+      <td>56%</td>
+      <td><span class="pos">+3.2%</span></td>
+      <td>56%</td>
+      <td><span class="pos">+8.3%</span></td>
+      <td>61%</td>
+      <td><span class="pos">+14.0%</span></td>
+      <td>60%</td>
+      <td><span class="pos">+6.5%</span></td>
+      <td>+1.5% to +15.4%</td>
+      <td>-24.1%</td>
+    </tr>
+  </tbody>
+</table></div>
+<div class="note"><b>Out-of-sample 2015+</b></div>
+<div class="wrap"><table class="dataframe tbl">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Signal</th>
+      <th>Basis</th>
+      <th>N</th>
+      <th>Dates</th>
+      <th>1m excess</th>
+      <th>1m hit</th>
+      <th>3m excess</th>
+      <th>3m hit</th>
+      <th>6m excess</th>
+      <th>6m hit</th>
+      <th>12m excess</th>
+      <th>12m hit</th>
+      <th>6m median</th>
+      <th>6m mean 90% CI</th>
+      <th>Avg MAE (3m)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Market</td>
+      <td>events</td>
+      <td>88</td>
+      <td>27</td>
+      <td><span class="pos">+3.4%</span></td>
+      <td>64%</td>
+      <td><span class="pos">+10.5%</span></td>
+      <td>66%</td>
+      <td><span class="pos">+10.8%</span></td>
+      <td>62%</td>
+      <td><span class="pos">+21.2%</span></td>
+      <td>64%</td>
+      <td><span class="pos">+6.6%</span></td>
+      <td>-4.3% to +31.3%</td>
+      <td>-10.0%</td>
+    </tr>
+    <tr>
+      <td>Sector</td>
+      <td>events</td>
+      <td>4</td>
+      <td>4</td>
+      <td><span class="pos">+5.6%</span></td>
+      <td>100%</td>
+      <td><span class="neg">-4.9%</span></td>
+      <td>25%</td>
+      <td><span class="neg">-7.4%</span></td>
+      <td>25%</td>
+      <td><span class="neg">-29.8%</span></td>
+      <td>0%</td>
+      <td><span class="neg">-4.1%</span></td>
+      <td>&ndash;</td>
+      <td>-8.7%</td>
+    </tr>
+    <tr>
+      <td>Specific</td>
+      <td>events</td>
+      <td>47</td>
+      <td>36</td>
+      <td><span class="pos">+2.1%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+3.3%</span></td>
+      <td>61%</td>
+      <td><span class="pos">+8.2%</span></td>
+      <td>60%</td>
+      <td><span class="pos">+15.7%</span></td>
+      <td>63%</td>
+      <td><span class="pos">+3.5%</span></td>
+      <td>-0.8% to +12.8%</td>
+      <td>-13.2%</td>
+    </tr>
+  </tbody>
+</table></div>
+<h3>Market regime on the signal date</h3>
+<div class="wrap"><table class="dataframe tbl">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Signal</th>
+      <th>Basis</th>
+      <th>N</th>
+      <th>Dates</th>
+      <th>1m excess</th>
+      <th>1m hit</th>
+      <th>3m excess</th>
+      <th>3m hit</th>
+      <th>6m excess</th>
+      <th>6m hit</th>
+      <th>12m excess</th>
+      <th>12m hit</th>
+      <th>6m median</th>
+      <th>6m mean 90% CI</th>
+      <th>Avg MAE (3m)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Calm</td>
+      <td>events</td>
+      <td>24</td>
+      <td>24</td>
+      <td><span class="pos">+1.2%</span></td>
+      <td>50%</td>
+      <td><span class="pos">+4.3%</span></td>
+      <td>70%</td>
+      <td><span class="pos">+2.4%</span></td>
+      <td>48%</td>
+      <td><span class="pos">+2.7%</span></td>
+      <td>68%</td>
+      <td><span class="neg">-0.6%</span></td>
+      <td>-3.7% to +11.0%</td>
+      <td>-8.7%</td>
+    </tr>
+    <tr>
+      <td>Elevated</td>
+      <td>events</td>
+      <td>228</td>
+      <td>119</td>
+      <td><span class="pos">+1.0%</span></td>
+      <td>57%</td>
+      <td><span class="pos">+1.8%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+5.3%</span></td>
+      <td>57%</td>
+      <td><span class="pos">+7.9%</span></td>
+      <td>55%</td>
+      <td><span class="pos">+3.8%</span></td>
+      <td>+2.3% to +8.5%</td>
+      <td>-22.7%</td>
+    </tr>
+    <tr>
+      <td>Panic</td>
+      <td>events</td>
+      <td>14</td>
+      <td>11</td>
+      <td><span class="pos">+6.1%</span></td>
+      <td>57%</td>
+      <td><span class="pos">+13.4%</span></td>
+      <td>64%</td>
+      <td><span class="pos">+28.8%</span></td>
+      <td>62%</td>
+      <td><span class="pos">+40.3%</span></td>
+      <td>77%</td>
+      <td><span class="pos">+25.5%</span></td>
+      <td>&ndash;</td>
+      <td>-11.0%</td>
+    </tr>
+    <tr>
+      <td>Elevated + credit stress</td>
+      <td>events</td>
+      <td>1</td>
+      <td>1</td>
+      <td><span class="pos">+13.3%</span></td>
+      <td>100%</td>
+      <td><span class="pos">+21.9%</span></td>
+      <td>100%</td>
+      <td><span class="pos">+23.2%</span></td>
+      <td>100%</td>
+      <td><span class="pos">+36.5%</span></td>
+      <td>100%</td>
+      <td><span class="pos">+23.2%</span></td>
+      <td>&ndash;</td>
+      <td>+0.0%</td>
+    </tr>
+    <tr>
+      <td>Panic + credit stress</td>
+      <td>events</td>
+      <td>97</td>
+      <td>17</td>
+      <td><span class="pos">+2.6%</span></td>
+      <td>61%</td>
+      <td><span class="pos">+8.5%</span></td>
+      <td>63%</td>
+      <td><span class="pos">+9.5%</span></td>
+      <td>62%</td>
+      <td><span class="pos">+20.3%</span></td>
+      <td>61%</td>
+      <td><span class="pos">+6.8%</span></td>
+      <td>-2.0% to +18.6%</td>
+      <td>-10.8%</td>
+    </tr>
+  </tbody>
+</table></div>
+<div class="section"><h2>5. When did the signals happen?</h2><div class="section-sub">Clustering check &mdash; yellow line = in-sample / out-of-sample split</div></div>
+<div>                            <div id="fa6bdcda-80cc-4a61-9737-0a8386ed569d" class="plotly-graph-div" style="height:520px; width:100%;"></div>            <script type="text/javascript">                window.PLOTLYENV=window.PLOTLYENV || {};                                if (document.getElementById("fa6bdcda-80cc-4a61-9737-0a8386ed569d")) {                    Plotly.newPlot(                        "fa6bdcda-80cc-4a61-9737-0a8386ed569d",                        [{"hovertemplate":"%{x}: %{y} signals\u003cextra\u003e\u003c\u002fextra\u003e","marker":{"color":"#1F79BE"},"name":"signals","x":{"dtype":"i4","bdata":"1gcAANcHAADYBwAA2QcAANsHAADfBwAA4AcAAOEHAADiBwAA5AcAAOYHAADnBwAA6AcAAOkHAADqBwAA"},"y":{"dtype":"i2","bdata":"AQAbAJUALgACAAEAAQADAAEAYQAUAAEAAgAJAAQA"},"type":"bar","xaxis":"x","yaxis":"y"},{"hovertemplate":"%{x}: %{y:.1f}%\u003cextra\u003e\u003c\u002fextra\u003e","marker":{"color":["#2ECC71","#2ECC71","#2ECC71","#2ECC71","#E74C3C","#E74C3C","#2ECC71","#2ECC71","#2ECC71","#2ECC71","#E74C3C","#2ECC71","#2ECC71","#2ECC71","#2ECC71"]},"name":"avg 6m excess","x":{"dtype":"i4","bdata":"1gcAANcHAADYBwAA2QcAANsHAADfBwAA4AcAAOEHAADiBwAA5AcAAOYHAADnBwAA6AcAAOkHAADqBwAA"},"y":{"dtype":"f8","bdata":"1w\u002fbtrcBP0CVI+SCoRsPQIMqjvRgnxZAjIrIaIeTHUD80GVo3X0qwCin\u002fCI0deK\u002fcYx5APqESkCKR8pgGhYlQLt14nhufjlAJdp9bqpkIkChX9KaEpIYwCC7\u002flc+Fv8\u002fbITIxRuiJ0BfDyxjJcpDQMqmagsHaihA"},"type":"bar","xaxis":"x2","yaxis":"y2"}],                        {"template":{"data":{"histogram2dcontour":[{"type":"histogram2dcontour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"choropleth":[{"type":"choropleth","colorbar":{"outlinewidth":0,"ticks":""}}],"histogram2d":[{"type":"histogram2d","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"heatmap":[{"type":"heatmap","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"contourcarpet":[{"type":"contourcarpet","colorbar":{"outlinewidth":0,"ticks":""}}],"contour":[{"type":"contour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"surface":[{"type":"surface","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"mesh3d":[{"type":"mesh3d","colorbar":{"outlinewidth":0,"ticks":""}}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"parcoords":[{"type":"parcoords","line":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolargl":[{"type":"scatterpolargl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"scattergeo":[{"type":"scattergeo","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolar":[{"type":"scatterpolar","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"scattergl":[{"type":"scattergl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatter3d":[{"type":"scatter3d","line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermap":[{"type":"scattermap","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermapbox":[{"type":"scattermapbox","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterternary":[{"type":"scatterternary","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattercarpet":[{"type":"scattercarpet","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"type":"carpet"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}],"barpolar":[{"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"pie":[{"automargin":true,"type":"pie"}]},"layout":{"autotypenumbers":"strict","colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"hovermode":"closest","hoverlabel":{"align":"left"},"paper_bgcolor":"white","plot_bgcolor":"#E5ECF6","polar":{"bgcolor":"#E5ECF6","angularaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"radialaxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"ternary":{"bgcolor":"#E5ECF6","aaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"baxis":{"gridcolor":"white","linecolor":"white","ticks":""},"caxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]]},"xaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"yaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"scene":{"xaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"yaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"zaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"geo":{"bgcolor":"white","landcolor":"#E5ECF6","subunitcolor":"white","showland":true,"showlakes":true,"lakecolor":"white"},"title":{"x":0.05},"mapbox":{"style":"light"}}},"xaxis":{"anchor":"y","domain":[0.0,1.0],"matches":"x2","showticklabels":false,"gridcolor":"#3A3A3C","linecolor":"#3A3A3C"},"yaxis":{"anchor":"x","domain":[0.54,1.0],"gridcolor":"#3A3A3C","linecolor":"#3A3A3C","zeroline":true,"zerolinecolor":"#8E8E93"},"xaxis2":{"anchor":"y2","domain":[0.0,1.0],"gridcolor":"#3A3A3C","linecolor":"#3A3A3C"},"yaxis2":{"anchor":"x2","domain":[0.0,0.46],"gridcolor":"#3A3A3C","linecolor":"#3A3A3C","zeroline":true,"zerolinecolor":"#8E8E93"},"annotations":[{"font":{"color":"#8E8E93","size":12},"showarrow":false,"text":"Signals per year","x":0.5,"xanchor":"center","xref":"paper","y":1.0,"yanchor":"bottom","yref":"paper"},{"font":{"color":"#8E8E93","size":12},"showarrow":false,"text":"Avg 6m excess return of that year's signals","x":0.5,"xanchor":"center","xref":"paper","y":0.46,"yanchor":"bottom","yref":"paper"}],"shapes":[{"line":{"color":"#F4D03F","dash":"dash"},"type":"line","x0":2014.5,"x1":2014.5,"xref":"x","y0":0,"y1":1,"yref":"y domain"},{"line":{"color":"#F4D03F","dash":"dash"},"type":"line","x0":2014.5,"x1":2014.5,"xref":"x2","y0":0,"y1":1,"yref":"y2 domain"}],"title":{"font":{"size":16,"color":"#E5E5EA"},"text":"\u003cb\u003eBuy signal &mdash; US stocks\u003c\u002fb\u003e","x":0.01},"font":{"color":"#E5E5EA","family":"monospace"},"margin":{"l":70,"r":40,"t":70,"b":60},"legend":{"font":{"size":11},"bgcolor":"#3A3A3C","bordercolor":"#3A3A3C"},"paper_bgcolor":"#1C1C1E","plot_bgcolor":"#2C2C2E","height":520,"showlegend":false},                        {"responsive": true}                    )                };            </script>        </div>
+<div class="note">Run time 64s. Definitions: weekly and monthly RSI(14), live (current bar = today's close), compared with every completed bar in the name's history (min 156 weeks / 60 months). Vol spike = 20-day Garman-Klass volatility at or above the percentile of its own history (min 3 years) that the chosen VIX level is of VIX's history since 1990 (96.2th), within the last 20 trading days. Leader = beat SPY over the 5 years ending 63 trading days ago and in the top 33% of its universe on that measure. Research only &mdash; not a recommendation.</div>
+</body>
+</html>
