@@ -1,6 +1,6 @@
 Date,Market gauge,List,Universe,Ticker,Name,Group,Leader,Weekly RSI,Monthly RSI,Vol spike,5Y rel,Weekly pct,Weekly thr,Monthly pct,Monthly thr,Vol 20d,Vol spike level,Days since spike,Drawdown,21d move,Driver,Signal date,Earnings,Base rate
-2026-09-11,38.1000,Setting Up,US Stocks (S&P 500 + Nasdaq-100),TJX,TJX Companies,Consumer Discretionary,True,30.0061,45.5198,False,0.8891,0.0007,39.0957,0.0261,51.5763,0.2193,0.4652,,0.2542,-0.1770,Specific,,Reported 23d ago,
-2026-09-11,38.1000,Setting Up,US Stocks (S&P 500 + Nasdaq-100),DECK,Deckers Brands,Consumer Discretionary,True,33.3605,40.3699,False,0.2489,0.0464,33.8108,0.0392,43.5387,0.2476,0.7725,,0.3252,-0.1052,Specific,,,
-2026-09-11,38.1000,Setting Up,US Stocks (S&P 500 + Nasdaq-100),AZO,AutoZone,Consumer Discretionary,True,37.3369,43.6722,False,0.3523,0.0450,37.8298,0.0327,50.5489,0.2253,0.4025,,0.3281,-0.0394,Specific,,Due in 11d,
-2026-09-11,38.1000,Setting Up,US Stocks (S&P 500 + Nasdaq-100),ODFL,Old Dominion,Industrials,True,37.6702,48.7514,False,0.0826,0.0348,38.8932,0.0915,49.9880,0.3232,0.5965,,0.2824,-0.1602,Specific,,,
-2026-09-11,38.1000,Setting Up,US Stocks (S&P 500 + Nasdaq-100),TDG,TransDigm Group,Industrials,True,39.1301,45.4113,False,0.4051,0.0351,40.3917,0.0216,51.5778,0.1919,0.4789,,0.2199,-0.0844,Sector,,,
+2026-09-11,38.1000,Setting Up,US Stocks (S&P 500 + Nasdaq-100),TJX,TJX Companies,Consumer Discretionary,True,30.4271,45.9931,False,0.8891,0.0015,39.0957,0.0294,51.5763,0.2211,0.4652,,0.2489,-0.1711,Specific,,Reported 23d ago,
+2026-09-11,38.1000,Setting Up,US Stocks (S&P 500 + Nasdaq-100),DECK,Deckers Brands,Consumer Discretionary,True,33.2130,40.3028,False,0.2489,0.0457,33.8108,0.0392,43.5387,0.2479,0.7725,,0.3273,-0.1079,Specific,,,
+2026-09-11,38.1000,Setting Up,US Stocks (S&P 500 + Nasdaq-100),AZO,AutoZone,Consumer Discretionary,True,35.8792,43.0441,False,0.3523,0.0334,37.8298,0.0261,50.5489,0.2311,0.4025,,0.3386,-0.0544,Specific,,Due in 11d,
+2026-09-11,38.1000,Setting Up,US Stocks (S&P 500 + Nasdaq-100),ODFL,Old Dominion,Industrials,True,38.0688,49.0802,False,0.0826,0.0406,38.8932,0.0915,49.9880,0.3251,0.5965,,0.2776,-0.1546,Specific,,,
+2026-09-11,38.1000,Setting Up,US Stocks (S&P 500 + Nasdaq-100),TDG,TransDigm Group,Industrials,True,40.1067,46.0722,False,0.4051,0.0464,40.3917,0.0259,51.5778,0.1946,0.4789,,0.2112,-0.0742,Sector,,,
