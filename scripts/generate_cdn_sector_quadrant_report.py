@@ -1,11 +1,12 @@
 """
-Daily Canadian Sector Quadrant report.
+Daily Canadian & US Sector Quadrant report.
 
 Reuses the momentum z-score / 20-day displacement quadrant from the Regime
-Monitors report, applied to Canadian sector ETFs (XLY stands in for
-Consumer Discretionary; Health Care is excluded). Z-scores are relative to
-the TSX Composite (XIC). Adds a table of each ETF's current quadrant, with
-names in the IMPROVING quadrant highlighted.
+Monitors report, applied to two universes:
+  Canadian sector ETFs  (vs XIC; XLY stands in for Cons. Discret., no Health Care)
+  US SPDR sector ETFs   (vs SPY)
+Each section adds a table of each ETF's current quadrant, with names in the
+IMPROVING quadrant highlighted.
 """
 
 import os
@@ -35,6 +36,21 @@ CDN_SECTOR_UNIVERSE = [
 ]
 CDN_BENCHMARK = "XIC.TO"
 
+US_SECTOR_UNIVERSE = [
+    ("Technology", "XLK", "Technology"),
+    ("Financials", "XLF", "Financials"),
+    ("Energy", "XLE", "Energy"),
+    ("Materials", "XLB", "Materials"),
+    ("Industrials", "XLI", "Industrials"),
+    ("Utilities", "XLU", "Utilities"),
+    ("Real Estate", "XLRE", "Real Estate"),
+    ("Cons. Staples", "XLP", "Cons. Staples"),
+    ("Cons. Discret.", "XLY", "Cons. Discret."),
+    ("Health Care", "XLV", "Health Care"),
+    ("Comm. Services", "XLC", "Comm. Services"),
+]
+US_BENCHMARK = "SPY"
+
 QUADRANT_CLR = {"LEADING": "#2ECC71", "WEAKENING": "#F4D03F", "IMPROVING": "#1F79BE", "LAGGING": "#E74C3C"}
 
 
@@ -44,7 +60,7 @@ def quadrant(z, d):
     return "IMPROVING" if d >= 0 else "LAGGING"
 
 
-def build_quadrant_table(ctx):
+def build_quadrant_table(ctx, region):
     z_comp, z_d20, today, labels = ctx["z_comp"], ctx["z_d20"], ctx["today"], ctx["labels"]
     past_idx = z_comp.index[z_comp.index.get_loc(today) - COMPARE_DAYS]
 
@@ -62,7 +78,7 @@ def build_quadrant_table(ctx):
 
     improving = [r[0] for r in rows if r[3] == "IMPROVING"]
     summary = (f"Currently improving: <b>{', '.join(improving)}</b>" if improving
-               else "No Canadian sector ETFs are currently in the IMPROVING quadrant.")
+               else f"No {region} sector ETFs are currently in the IMPROVING quadrant.")
 
     body = []
     for label, z, d, q, prev in rows:
@@ -90,7 +106,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Canadian Sector Quadrant Report</title>
+<title>Sector Quadrant Report</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
   body {{ background: #1C1C1E; color: #E5E5EA; font-family: Arial, sans-serif; margin: 0; padding: 0 0 40px; }}
@@ -112,8 +128,8 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 </head>
 <body>
 <header>
-  <h1>Canadian Sector Quadrant Report</h1>
-  <div class="meta">Generated {date_str} &middot; Canadian sector ETFs &middot; Momentum z-score relative to {bench} &middot; 20-day displacement quadrant</div>
+  <h1>Canadian &amp; US Sector Quadrant Report</h1>
+  <div class="meta">Generated {date_str} &middot; Canadian sector ETFs (vs XIC) and US sector ETFs (vs SPY) &middot; Momentum z-score &middot; 20-day displacement quadrant</div>
 </header>
 {body}
 </body>
@@ -123,16 +139,22 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    ctx = compute_universe(CDN_SECTOR_UNIVERSE, start="2015-01-01", benchmark=CDN_BENCHMARK)
 
-    parts = [section_header("Canadian Sector Quadrant", f"Momentum z-score relative to {CDN_BENCHMARK} (XLY used for Consumer Discretionary)")]
-    fig = build_quadrant(ctx, ctx["available"], SECTOR_CLR, "Canadian Sectors", benchmark=CDN_BENCHMARK)
-    if fig:
-        parts.append(fig_to_div(fig))
-    parts.append(section_header("Quadrant Table", "Names currently in the IMPROVING quadrant are highlighted"))
-    parts.append(build_quadrant_table(ctx))
+    parts = []
+    for region, universe, bench, sub_note in [
+        ("Canadian", CDN_SECTOR_UNIVERSE, CDN_BENCHMARK, " (XLY used for Consumer Discretionary)"),
+        ("US", US_SECTOR_UNIVERSE, US_BENCHMARK, ""),
+    ]:
+        print(f"=== {region} Sectors ===")
+        ctx = compute_universe(universe, start="2015-01-01", benchmark=bench)
+        parts.append(section_header(f"{region} Sector Quadrant", f"Momentum z-score relative to {bench}{sub_note}"))
+        fig = build_quadrant(ctx, ctx["available"], SECTOR_CLR, f"{region} Sectors", benchmark=bench)
+        if fig:
+            parts.append(fig_to_div(fig))
+        parts.append(section_header(f"{region} Quadrant Table", "Names currently in the IMPROVING quadrant are highlighted"))
+        parts.append(build_quadrant_table(ctx, region))
 
-    html = PAGE_TEMPLATE.format(date_str=datetime.now().strftime("%B %d, %Y"), bench=CDN_BENCHMARK, body="\n".join(parts))
+    html = PAGE_TEMPLATE.format(date_str=datetime.now().strftime("%B %d, %Y"), body="\n".join(parts))
     out_path = os.path.join(OUTPUT_DIR, "CDN_Sector_Quadrant_Report.html")
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(html)

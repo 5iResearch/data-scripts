@@ -1,4 +1,4 @@
-name: Daily Canadian Sector Quadrant Report
+name: Daily Canadian & US Sector Quadrant Report
 
 on:
   schedule:
@@ -27,7 +27,7 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Run Canadian Sector Quadrant report
+      - name: Run Canadian & US Sector Quadrant report
         timeout-minutes: 20
         run: |
           python scripts/generate_cdn_sector_quadrant_report.py
@@ -37,7 +37,7 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add outputs/regime-monitors/CDN_Sector_Quadrant_Report.html
-          git diff --cached --quiet || git commit -m "chore: update canadian sector quadrant report [skip ci]"
+          git diff --cached --quiet || git commit -m "chore: update canadian & us sector quadrant report [skip ci]"
           for i in 1 2 3 4 5; do
             git push && break
             echo "Push rejected, rebasing onto origin/main and retrying ($i)..."
