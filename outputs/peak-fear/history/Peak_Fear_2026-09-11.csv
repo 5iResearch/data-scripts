@@ -1,4 +1,5 @@
 Date,Market gauge,List,Universe,Ticker,Name,Group,Leader,Weekly RSI,Monthly RSI,Vol spike,5Y rel,Weekly pct,Weekly thr,Monthly pct,Monthly thr,Vol 20d,Vol spike level,Days since spike,Drawdown,21d move,Driver,Signal date,Earnings,Base rate
+<<<<<<< HEAD
 2026-09-11,38.1000,Buy Signal,"US Stocks (S&P 500, Nasdaq-100 + screener list)",RBA,RB Global Inc.,Consumer Discretionary,True,32.3059,43.5243,True,0.0719,0.0116,41.8084,0.0294,47.5025,0.2830,0.3711,7.0000,0.2959,-0.0326,Specific,2026-09-11,,"+5.8% 6m xs, 52% hit (n=690)"
 2026-09-11,38.1000,Buy Signal,"US Stocks (S&P 500, Nasdaq-100 + screener list)",AAON,AAON Inc.,Industrials,True,39.4363,47.1210,True,1.2041,0.0624,41.9431,0.0621,49.4274,0.4154,0.5913,19.0000,0.4590,-0.0597,Sector,2026-09-11,,"-2.1% 6m xs, 40% hit (n=105)"
 2026-09-11,38.1000,Buy Signal,"US Stocks (S&P 500, Nasdaq-100 + screener list)",GOLF,Acushnet Holdings Corp.,Consumer Discretionary,True,40.2619,52.1519,True,0.1968,0.0798,42.1891,0.0571,54.6060,0.2471,0.3727,6.0000,0.2778,-0.0393,Specific,2026-09-11,,"+5.8% 6m xs, 52% hit (n=690)"
@@ -14,3 +15,10 @@ Date,Market gauge,List,Universe,Ticker,Name,Group,Leader,Weekly RSI,Monthly RSI,
 2026-09-11,38.1000,Setting Up,"US Stocks (S&P 500, Nasdaq-100 + screener list)",FN,Fabrinet,Utilities,True,39.8346,52.2583,True,4.3480,0.0817,40.8870,0.2486,46.3991,0.4718,0.6396,12.0000,0.4453,-0.2759,Specific,,Reported 25d ago,
 2026-09-11,38.1000,Setting Up,"US Stocks (S&P 500, Nasdaq-100 + screener list)",TDG,TransDigm Group,Industrials,True,39.9483,45.9659,False,0.4051,0.0455,44.6955,0.0259,51.5778,0.1947,0.4010,,0.2125,-0.0758,Sector,,,
 2026-09-11,38.1000,Setting Up,"US Stocks (S&P 500, Nasdaq-100 + screener list)",HLI,Houlihan Lokey Inc.,Financials,True,44.9606,44.8384,True,0.1012,0.1879,40.1402,0.0420,52.6556,0.3324,0.3668,11.0000,0.3327,0.1174,Specific,,,
+=======
+2026-09-11,38.1000,Setting Up,US Stocks (S&P 500 + Nasdaq-100),TJX,TJX Companies,Consumer Discretionary,True,30.4271,45.9931,False,0.8891,0.0015,39.0957,0.0294,51.5763,0.2211,0.4652,,0.2489,-0.1711,Specific,,Reported 23d ago,
+2026-09-11,38.1000,Setting Up,US Stocks (S&P 500 + Nasdaq-100),DECK,Deckers Brands,Consumer Discretionary,True,33.2130,40.3028,False,0.2489,0.0457,33.8108,0.0392,43.5387,0.2479,0.7725,,0.3273,-0.1079,Specific,,,
+2026-09-11,38.1000,Setting Up,US Stocks (S&P 500 + Nasdaq-100),AZO,AutoZone,Consumer Discretionary,True,35.8792,43.0441,False,0.3523,0.0334,37.8298,0.0261,50.5489,0.2311,0.4025,,0.3386,-0.0544,Specific,,Due in 11d,
+2026-09-11,38.1000,Setting Up,US Stocks (S&P 500 + Nasdaq-100),ODFL,Old Dominion,Industrials,True,38.0688,49.0802,False,0.0826,0.0406,38.8932,0.0915,49.9880,0.3251,0.5965,,0.2776,-0.1546,Specific,,,
+2026-09-11,38.1000,Setting Up,US Stocks (S&P 500 + Nasdaq-100),TDG,TransDigm Group,Industrials,True,40.1067,46.0722,False,0.4051,0.0464,40.3917,0.0259,51.5778,0.1946,0.4789,,0.2112,-0.0742,Sector,,,
+>>>>>>> bf9ab3ad96f4276cd83c11942b37b41e8b52b265
