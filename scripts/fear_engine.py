@@ -423,7 +423,7 @@ def scan_pieces(pieces, bench_close, cfg, vol_pct, keep_rows=None, driver_tail=N
         s = compute_signal(panel, bench_close, sector_close, cfg, driver_tail=driver_tail)
         c = conditions(s, cfg, vol_pct)
         if signal_log:
-            log_parts.append({"rel5": s["rel5"].astype("float32"),
+            log_parts.append({"rel5": s["rel5"].astype("float32"), "close": s["close"].astype("float32"),
                               **{k: c[k] for k in ("weekly", "monthly", "vol_spike")}})
         s_parts.append(trim(s))
         c_parts.append(trim(c))
@@ -445,6 +445,14 @@ def scan_pieces(pieces, bench_close, cfg, vol_pct, keep_rows=None, driver_tail=N
     first = (buy & ~buy.shift(1, fill_value=False)).to_numpy()
     rows, cols = np.divmod(np.flatnonzero(first.ravel()), first.shape[1])
     fired = pd.DataFrame({"date": buy.index[rows], "ticker": buy.columns[cols]})
+    # how each signal has done since: entry at the next close, held to the latest close
+    close_full = full["close"]
+    entry = close_full.shift(-1)
+    ret = close_full.ffill().iloc[-1] / entry - 1
+    bench = bench_close.reindex(close_full.index).ffill()
+    b_ret = bench.ffill().iloc[-1] / bench.shift(-1) - 1
+    fired["ret"] = ret.to_numpy()[rows, cols]
+    fired["xs"] = ret.sub(b_ret, axis=0).to_numpy()[rows, cols]
     return s, c, fired
 
 
@@ -537,7 +545,7 @@ def fetch_credit_stress(start):
     return 1 - ratio / ratio.rolling(252, min_periods=63).max(), "HYG/IEF drawdown"
 
 
-def market_gauge(member_close, start, index=None):
+def market_gauge(member_close, start, index=None, breadth=None):
     """0-100 market fear gauge on the trading dates of `member_close` (the
     S&P 500 panel) from VIX level, VIX/VIX3M and credit stress, each a
     percentile of its own 5-year history. Regime: Panic = VIX term structure
@@ -559,16 +567,17 @@ def market_gauge(member_close, start, index=None):
     credit, credit_label = fetch_credit_stress(start)
     comps[f"Credit ({credit_label})"] = credit.reindex(idx).ffill(limit=5)
 
-    live = member_close.notna()
-    n = live.sum(axis=1).where(lambda x: x >= 50)
-    sma50 = member_close.rolling(50, min_periods=40).mean()
-    sma200 = member_close.rolling(200, min_periods=160).mean()
-    at_low = member_close <= member_close.rolling(252, min_periods=200).min()
-    breadth = pd.DataFrame({
-        "% below 50-day": (member_close < sma50).sum(axis=1) / n,
-        "% below 200-day": (member_close < sma200).sum(axis=1) / n,
-        "% at 52-wk lows": (at_low.sum(axis=1) / n).rolling(5, min_periods=1).mean(),
-    })
+    if breadth is None:  # the daily report passes its own, accumulated over the full history
+        live = member_close.notna()
+        n = live.sum(axis=1).where(lambda x: x >= 50)
+        sma50 = member_close.rolling(50, min_periods=40).mean()
+        sma200 = member_close.rolling(200, min_periods=160).mean()
+        at_low = member_close <= member_close.rolling(252, min_periods=200).min()
+        breadth = pd.DataFrame({
+            "% below 50-day": (member_close < sma50).sum(axis=1) / n,
+            "% below 200-day": (member_close < sma200).sum(axis=1) / n,
+            "% at 52-wk lows": (at_low.sum(axis=1) / n).rolling(5, min_periods=1).mean(),
+        })
 
     raw = pd.DataFrame(comps)
     pct = raw.rolling(MKT_PCT_WINDOW, min_periods=MKT_PCT_MIN).rank(pct=True)

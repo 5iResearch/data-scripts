@@ -1,0 +1,7 @@
+# Generated report outputs: never line-merge two machine-written versions of the same
+# file. A pull that conflicts here once interleaved the local and CI copies of
+# Peak_Fear_Report.html and published a page full of "<<<<<<< HEAD" markers. With -merge
+# git keeps our copy and flags the conflict instead; resolve it by regenerating the report
+# (python scripts/generate_peak_fear_report.py) or by taking one side wholesale.
+outputs/** -merge
+data/fear_model_config.json -merge

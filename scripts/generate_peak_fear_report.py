@@ -96,12 +96,26 @@ def load_universes(cfg):
     etfs = fe.subset_panel(base, etf_tickers)
     del base
 
+    # Breadth has to be tallied here, while each piece still holds its full history: only the
+    # last KEEP_ROWS rows survive the scan, which is why the old breadth chart began in 2025.
+    tally = {}
+
+    def add(key, series):
+        tally[key] = series if key not in tally else tally[key].add(series, fill_value=0)
+
     def stock_pieces():
         for i in range(0, len(st_tickers), STOCK_PIECE):
             batch = st_tickers[i : i + STOCK_PIECE]
             print(f"Stocks {i + 1}-{i + len(batch)} of {len(st_tickers)}:")
             p = fe.download_ohlcv(batch, start=fe.HISTORY_START, chunk_size=DOWNLOAD_CHUNK)
             p = {f: df.reindex(spy.index) for f, df in p.items()}  # one calendar for every piece
+            sp_cols = [t for t in p["Close"].columns if t in sp_members]
+            if sp_cols:
+                c = p["Close"][sp_cols]
+                add("below 50-day", (c < c.rolling(50, min_periods=40).mean()).sum(axis=1))
+                add("below 200-day", (c < c.rolling(200, min_periods=160).mean()).sum(axis=1))
+                add("at 52-wk lows", (c <= c.rolling(252, min_periods=200).min()).sum(axis=1))
+                add("n", c.notna().sum(axis=1))
             yield p, fe.sector_close_frame(p["Close"].columns, st_sectors, sec_etf_close)
             del p
             gc.collect()
@@ -127,8 +141,10 @@ def load_universes(cfg):
         universes.append(dict(key=key, label=label, s=s, cond=cond, fired=fired, names=names, groups=groups))
 
     print("Building market fear gauge...")
-    st_close = universes[0]["s"]["close"]
-    gauge = fe.market_gauge(st_close[[t for t in st_close.columns if t in sp_members]], fe.HISTORY_START, index=spy.index)
+    n = tally["n"].where(lambda x: x >= 50)
+    breadth = pd.DataFrame({f"% {k}": tally[k] / n for k in ("below 50-day", "below 200-day")})
+    breadth["% at 52-wk lows"] = (tally["at 52-wk lows"] / n).rolling(5, min_periods=1).mean()
+    gauge = fe.market_gauge(None, fe.HISTORY_START, index=spy.index, breadth=breadth)
     return universes, gauge, spy, vol_pct
 
 
@@ -177,7 +193,9 @@ def build_rows(u, tickers, list_name, cfg, fired_map=None):
         rows.append({
             "List": list_name, "Universe": u["label"], "Ticker": t,
             "Name": u["names"].get(t, t), "Group": u["groups"].get(t, ""),
-            **{label: bool(last(cond[k], t)) for label, k in CONDITIONS},
+            # keyed met_* so they can't collide with the numeric "Weekly RSI" / "Monthly RSI"
+            # columns set below - that clash made every chip render as met
+            **{f"met_{k}": bool(last(cond[k], t)) for _, k in CONDITIONS},
             "5Y rel": last(s["rel5"], t),
             "Weekly RSI": w_live, "Weekly pct": fe.own_percentile(s["w_bars"], s["w_key"], t, w_live),
             "Weekly thr": last(cond["w_thr"], t),
@@ -259,8 +277,12 @@ def list_table(df, kind):
         if kind == "radar":
             o["Days ago"] = r["Days ago"]
         if kind in ("radar", "setup"):
+            met = {label: bool(r[f"met_{k}"]) for label, k in CONDITIONS[1:]}
             o["Conditions still on" if kind == "radar" else "Conditions met"] = " ".join(
-                f'<span class="chip {"on" if r[label] else "off"}">{label}</span>' for label, _ in CONDITIONS[1:])
+                f'<span class="chip {"on" if v else "off"}">{"&#10003;" if v else "&#10007;"} {label}</span>'
+                for label, v in met.items())
+            missing = [label for label, v in met.items() if not v]
+            o["Still needs" if kind == "setup" else "Now missing"] = ", ".join(missing) if missing else "&mdash;"
         o["5Y rel vs SPY"] = pct(r["5Y rel"])
         o["Weekly RSI"] = rsi_cell(r["Weekly RSI"], r["Weekly pct"], r["Weekly RSI"] <= r["Weekly thr"] if pd.notna(r["Weekly thr"]) else False)
         o["Monthly RSI"] = rsi_cell(r["Monthly RSI"], r["Monthly pct"], r["Monthly RSI"] <= r["Monthly thr"] if pd.notna(r["Monthly thr"]) else False)
@@ -278,7 +300,11 @@ def list_table(df, kind):
 
 
 def fig_to_div(fig):
-    return pio.to_html(fig, include_plotlyjs=False, full_html=False, config={"responsive": True})
+    return pio.to_html(fig, include_plotlyjs=False, full_html=False,
+                       config={"responsive": True, "displayModeBar": True, "scrollZoom": True,
+                               "modeBarButtonsToRemove": ["lasso2d", "select2d"]})
+
+
 
 
 def section_header(title, subtitle=""):
@@ -290,7 +316,7 @@ def base_layout(fig, title, height):
     fig.update_layout(
         title=dict(text=f"<b>{title}</b>", font=dict(size=15, color=TEXT), x=0.01),
         paper_bgcolor=DGRAY, plot_bgcolor=MGRAY, font=dict(color=TEXT, family="monospace"),
-        height=height, margin=dict(l=60, r=30, t=60, b=40), hovermode="x unified",
+        height=height, margin=dict(l=60, r=30, t=60, b=40), hovermode="x unified", dragmode="zoom",
         legend=dict(bgcolor=LGRAY, bordercolor=LGRAY, font=dict(size=10), orientation="h", y=1.02, x=0.3),
     )
     fig.update_xaxes(gridcolor=LGRAY, linecolor=LGRAY)
@@ -299,8 +325,12 @@ def base_layout(fig, title, height):
 
 
 def add_time_controls(fig, index, row=None):
-    """Zoom buttons + scrollbar, opening on the last DEFAULT_ZOOM_DAYS."""
-    kw = dict(row=row, col=1) if row else {}
+    """Timeframe buttons only. No rangeslider: it builds after the main plot,
+    then takes vertical space and re-lays-out the panels, so charts render
+    correctly and then visibly squash. Drag-to-zoom covers the same job, and
+    the y-axis stays on autorange so Plotly refits it when the x-range moves.
+    Plotly only accepts row/col on figures built with make_subplots."""
+    top = dict(row=1, col=1) if getattr(fig, "_grid_ref", None) is not None else {}
     fig.update_xaxes(
         rangeselector=dict(
             buttons=[dict(count=1, label="1y", step="year", stepmode="backward"),
@@ -308,10 +338,7 @@ def add_time_controls(fig, index, row=None):
                      dict(count=5, label="5y", step="year", stepmode="backward"),
                      dict(step="all", label="all")],
             bgcolor=LGRAY, activecolor=ORANGE, font=dict(color=TEXT, size=10), x=0.01, y=1.12,
-        ), row=1, col=1)
-    if len(index) > DEFAULT_ZOOM_DAYS:
-        fig.update_xaxes(range=[index[-DEFAULT_ZOOM_DAYS], index[-1]], **kw)
-    fig.update_xaxes(rangeslider=dict(visible=True, thickness=0.04, bgcolor=MGRAY), **kw)
+        ), **top)
     return fig
 
 
@@ -341,11 +368,27 @@ def chart_gauge_history(gauge, spy):
                              hovertemplate=f"{GAUGE_MA_DAYS}-day avg %{{y:.0f}}<extra></extra>"), row=2, col=1)
     base_layout(fig, "Market Fear Gauge &mdash; full history", 600)
     fig.update_layout(showlegend=False, margin=dict(l=60, r=30, t=80, b=40))
-    fig.update_yaxes(range=[0, 100], row=2, col=1)
+    fig.update_yaxes(range=[0, 100], row=2, col=1)  # the gauge is a 0-100 scale; everything else autoscales
     add_time_controls(fig, g.index, row=2)
     for ann in fig["layout"]["annotations"]:
         ann["font"] = dict(size=12, color=SUBTEXT)
     add_logo(fig)
+    return fig
+
+
+def chart_gauge_components(gauge):
+    """Today's reading for each input, as a percentile of its own 5-year history."""
+    comps = list(gauge.attrs["raw"].columns)
+    vals = gauge[comps].iloc[-1]
+    raw = gauge.attrs["raw"].iloc[-1]
+    labels = [f"{c}  ({raw[c]:.2f})" if abs(raw[c]) < 5 else f"{c}  ({raw[c]:.1f})" for c in comps]
+    colors = [RED if v >= 85 else ORANGE if v >= 60 else GREEN for v in vals.fillna(0)]
+    fig = go.Figure(go.Bar(x=vals, y=labels, orientation="h", marker_color=colors,
+                           text=[f"{v:.0f}" if pd.notna(v) else "n/a" for v in vals], textposition="outside",
+                           hovertemplate="%{y}: %{x:.0f}th pct<extra></extra>"))
+    base_layout(fig, "Today's components (percentile vs own 5-year history)", 280)
+    fig.update_layout(hovermode="closest", margin=dict(l=260, r=40, t=60, b=40))
+    fig.update_xaxes(range=[0, 108])
     return fig
 
 
@@ -373,6 +416,8 @@ def chart_components_history(gauge):
         fig.add_trace(go.Scatter(x=[ser.index[-1]], y=[now], mode="markers", showlegend=False,
                                  marker=dict(color=RED if hot else GREEN, size=9),
                                  hovertemplate=f"now {now:,.2f}<extra></extra>"), row=i, col=1)
+        if label.startswith("%") or "drawdown" in label.lower():
+            fig.update_yaxes(tickformat=".0%", row=i, col=1)
     base_layout(fig, "Gauge components &mdash; where each one stands vs its own history", 230 * len(panels))
     fig.update_layout(hovermode="x unified", margin=dict(l=60, r=30, t=90, b=40))
     add_time_controls(fig, raw.index, row=len(panels))
@@ -435,8 +480,14 @@ def time_machine(universes, gauge):
         if f is None or not len(f):
             continue
         short = u["label"].split(" (")[0]
-        for d, t in zip(f["date"], f["ticker"]):
-            signals.setdefault(d.strftime("%Y-%m-%d"), []).append([t, str(names.get(t, t))[:44], short])
+        num = lambda v: None if v is None or pd.isna(v) else round(float(v), 4)
+        has_ret = {"ret", "xs"} <= set(f.columns)
+        for r in f.itertuples(index=False):
+            signals.setdefault(r.date.strftime("%Y-%m-%d"), []).append(
+                [r.ticker, str(names.get(r.ticker, r.ticker))[:44], short,
+                 num(r.ret) if has_ret else None, num(r.xs) if has_ret else None])
+    for day in signals.values():  # best vs SPY first
+        day.sort(key=lambda e: (e[4] is None, -(e[4] or 0)))
     g = gauge.dropna(subset=["gauge"])
     payload = {
         "signals": signals,
@@ -463,6 +514,10 @@ function tmNearest(d) {{
     if (TM_G_DATES[mid] <= d) {{ best = TM_G_DATES[mid]; lo = mid + 1; }} else {{ hi = mid - 1; }} }}
   return best;
 }}
+function tmPct(v) {{
+  if (v === null || v === undefined) return '&ndash;';
+  return '<span class="' + (v >= 0 ? 'pos' : 'neg') + '">' + (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%</span>';
+}}
 function tmShow(d) {{
   const gd = tmNearest(d), g = gd ? TM.gauge[gd] : null, sigs = TM.signals[d] || [];
   const colour = g ? ({{Calm: "#2ECC71", Elevated: "#C67A29", Panic: "#E74C3C"}}[g[1]] || "#8E8E93") : "#8E8E93";
@@ -471,9 +526,12 @@ function tmShow(d) {{
       (gd !== d ? ' <span class="sub">(last close ' + gd + ')</span>' : '') : ' &middot; no gauge data') + '</div>';
   if (!sigs.length) {{ html += '<div class="empty">No buy signals fired on this date.</div>'; }}
   else {{
-    html += '<div class="wrap"><table class="tbl"><thead><tr><th>Ticker</th><th>Name</th><th>Universe</th></tr></thead><tbody>' +
-      sigs.map(r => '<tr><td><b>' + r[0] + '</b></td><td>' + r[1] + '</td><td>' + r[2] + '</td></tr>').join('') +
-      '</tbody></table></div>';
+    html += '<div class="wrap"><table class="tbl"><thead><tr><th>Ticker</th><th>Name</th><th>Universe</th>' +
+      '<th>Since signal</th><th>vs SPY</th></tr></thead><tbody>' +
+      sigs.map(r => '<tr><td><b>' + r[0] + '</b></td><td>' + r[1] + '</td><td>' + r[2] + '</td><td>' +
+        tmPct(r[3]) + '</td><td>' + tmPct(r[4]) + '</td></tr>').join('') +
+      '</tbody></table></div><div class="note">"Since signal" = entry at the next close, held to the latest close; ' +
+      '"vs SPY" is the same period against SPY.</div>';
   }}
   document.getElementById('tmOut').innerHTML = html;
   document.getElementById('tmDate').value = d;
