@@ -1,10 +1,16 @@
 """
 Leader Selloff study - the research companion to generate_peak_fear_report.py.
 
-Tests the simplified buy signal from fear_engine.py: a historic market leader
-whose weekly AND monthly RSI are at statistically low points vs its own
-history, within 20 trading days of a stock-level volatility spike (its own
-equivalent of VIX jumping to 30+).
+Tests the buy signal from fear_engine.py: a historic market leader whose
+weekly AND monthly RSI are at statistically low points vs its own history,
+within 20 trading days of a stock-level volatility spike (its own equivalent
+of VIX jumping to 30+).
+
+Universes: US stocks (the Uptrend Channel Screener list - S&P 500 +
+Nasdaq-100 + data/koyfin_us.csv + data/us_1w_rev_est_screener.csv, ~2,000
+names), BTC/ETH, and the sector/theme ETFs. Stocks are scored in pieces of
+250 names so ~2,000 x 26 years never sits in memory at once; leadership (a
+cross-sectional ranking) is computed once across the whole list first.
 
   1. Pipeline check: forward SPY returns by market gauge / VIX regime.
   2. Event study: every signal (max one per ticker per 63 trading days),
@@ -16,10 +22,10 @@ equivalent of VIX jumping to 30+).
      plus ablations that drop one condition at a time, to show what each adds.
   3. Walk-forward: thresholds chosen on 2005-2014 only, judged on 2015-present.
 
-Survivorship caveat: yfinance only has today's S&P 500 members, so failed
-former leaders are missing and absolute returns are optimistic. Signal-vs-
-baseline comparisons (same biased universe on both sides) are more
-trustworthy than the levels.
+Survivorship caveat: yfinance only has today's listed names, so failed
+former leaders are missing and absolute returns are optimistic - more so for
+mid caps than for the S&P 500. Signal-vs-baseline comparisons (same biased
+universe on both sides) are more trustworthy than the levels.
 
 Usage:
   python scripts/fear_study.py                    # uses data/cache if present
@@ -29,6 +35,7 @@ Usage:
 """
 
 import argparse
+import gc
 import json
 import os
 import sys
@@ -53,12 +60,24 @@ EVENT_START = pd.Timestamp("2005-06-01")  # 5y leadership + 5y of monthly bars n
 IS_END = pd.Timestamp("2014-12-31")
 HORIZONS = {"1m": 21, "3m": 63, "6m": 126, "12m": 252}
 MAE_DAYS = 63
+SPLICE_JUMP = 2.0  # a one-day gain above +200% = a broken/spliced price history (e.g. pre-bankruptcy shares)
+# winsorizing bounds for excess returns (~1st/99th pct of outcomes): a ~2,000-name list has lottery-ticket
+# rebounds that can swamp a plain average, so verdicts use winsorized means (raw means shown alongside)
+TRIM = {"1m": (-0.5, 0.8), "3m": (-0.6, 1.2), "6m": (-0.7, 1.5), "12m": (-0.8, 2.5)}
 GRID_W = [0.05, 0.10, 0.20]
 GRID_M = [0.10, 0.20, 0.30]
 GRID_VIX = [25, 30, 35]
 MIN_IS_EVENTS = 100
 N_BOOT = 1000
+STOCK_PIECE = 250
 PERIODS = {"Full 2005+": None, "In-sample 2005-14": "IS", "Out-of-sample 2015+": "OOS"}
+
+STOCK_NAME = "US stocks (S&P 500, Nasdaq-100 + screener list)"
+CRYPTO_NAME = "Crypto (BTC, ETH)"
+ETF_NAME = "Sector/theme ETFs"
+MAIN_LABEL = "Buy signal: all four conditions (chosen)"
+B_LABEL = "B: RSI + vol conditions, no leader filter"
+SET_LABELS = [MAIN_LABEL, "Without vol spike", "Without monthly RSI", "Without weekly RSI", B_LABEL]
 
 DGRAY, MGRAY, LGRAY = "#1C1C1E", "#2C2C2E", "#3A3A3C"
 TEXT, SUBTEXT = "#E5E5EA", "#8E8E93"
@@ -73,12 +92,21 @@ def forward_frames(close, bench, ppy=252):
     k = ppy / 252
     b = bench.reindex(close.index).ffill()  # crypto weekends carry SPY's last close
     entry, b_entry = close.shift(-1), b.shift(-1)
+    # yfinance sometimes splices an old (e.g. pre-bankruptcy) price series onto a stock's current one,
+    # showing a one-day "gain" of hundreds of percent. No return window may span one. Only upward jumps
+    # are masked, so genuine collapses still count as losses.
+    splice = (close.pct_change(fill_method=None) > SPLICE_JUMP).astype(float)
+
+    def spans(n):  # a splice anywhere in days t+2 .. t+1+n (the holding window)
+        return splice.iloc[::-1].rolling(n, min_periods=1).max().iloc[::-1].shift(-2) > 0
+
     fwd = {}
     for lbl, h in HORIZONS.items():
         h = round(h * k)
-        fwd[lbl] = (close.shift(-1 - h) / entry - 1).sub(b.shift(-1 - h) / b_entry - 1, axis=0)
-    path_min = close.shift(-2).iloc[::-1].rolling(round(MAE_DAYS * k), min_periods=1).min().iloc[::-1]
-    mae = (path_min / entry - 1).clip(upper=0)
+        fwd[lbl] = (close.shift(-1 - h) / entry - 1).sub(b.shift(-1 - h) / b_entry - 1, axis=0).mask(spans(h))
+    m_days = round(MAE_DAYS * k)
+    path_min = close.shift(-2).iloc[::-1].rolling(m_days, min_periods=1).min().iloc[::-1]
+    mae = (path_min / entry - 1).clip(upper=0).mask(spans(m_days))
     return fwd, mae
 
 
@@ -132,6 +160,11 @@ def build_events(ctx, signal, label, gauge=None, cooldown=63, enrich=True):
     return ev
 
 
+def make_sets(L, W, M, V):
+    """The full signal and the one-condition-dropped ablations."""
+    return dict(zip(SET_LABELS, [L & W & M & V, L & W & M, L & W & V, L & M & V, W & M & V]))
+
+
 # ── Statistics ────────────────────────────────────────────────────────────────
 def boot_ci(ev, col):
     """90% CI of the mean, resampling whole calendar months - events cluster
@@ -151,6 +184,7 @@ def summarize(ev, label, period=None):
     for lbl in HORIZONS:
         x = ev[f"xs_{lbl}"].dropna() if len(ev) else pd.Series(dtype=float)
         row[f"{lbl} mean"] = x.mean() if len(x) else np.nan
+        row[f"{lbl} trim"] = x.clip(*TRIM[lbl]).mean() if len(x) else np.nan
         row[f"{lbl} hit"] = (x > 0).mean() if len(x) else np.nan
     row["6m median"] = ev["xs_6m"].median() if len(ev) else np.nan
     row["6m CI"] = boot_ci(ev, "xs_6m") if len(ev) else (np.nan, np.nan)
@@ -158,27 +192,94 @@ def summarize(ev, label, period=None):
     return row
 
 
-def cell_summary(ctx, mask, label, period=None):
-    """Base rate over every (day, ticker) cell in `mask` - no cooldown, no CI."""
-    dates = ctx["s"]["close"].index
-    m = mask.to_numpy(bool) & period_mask(dates, period)[:, None]
-    row = {"Signal": label, "Basis": "stock-days", "N": int(m.sum()), "Dates": None}
-    for lbl in HORIZONS:
-        v = ctx["fwd"][lbl].to_numpy()[m]
-        v = v[np.isfinite(v)]
-        row[f"{lbl} mean"] = v.mean() if len(v) else np.nan
-        row[f"{lbl} hit"] = (v > 0).mean() if len(v) else np.nan
-        if lbl == "6m":
-            row["6m median"] = np.median(v) if len(v) else np.nan
-    row["6m CI"] = (np.nan, np.nan)
-    mae = ctx["mae"].to_numpy()[m]
-    row["MAE"] = np.nanmean(mae) if len(mae) else np.nan
-    return row
+class CellAcc:
+    """Base rate over every (day, ticker) cell of a mask - no cooldown, no CI,
+    no median - accumulated piece by piece so it works on a split universe."""
+    KEYS = ["n", "mae_s", "mae_c"] + [f"{l}_{k}" for l in HORIZONS for k in ("s", "c", "p", "t")]
+
+    def __init__(self):
+        self.acc = {p: dict.fromkeys(self.KEYS, 0.0) for p in PERIODS.values()}
+
+    def add(self, ctx, mask):
+        dates = ctx["s"]["close"].index
+        m_all = mask.to_numpy(bool)
+        fwd = {l: ctx["fwd"][l].to_numpy() for l in HORIZONS}
+        mae = ctx["mae"].to_numpy()
+        for p, a in self.acc.items():
+            m = m_all & period_mask(dates, p)[:, None]
+            a["n"] += m.sum()
+            for l in HORIZONS:
+                v = fwd[l][m]
+                v = v[np.isfinite(v)]
+                a[f"{l}_s"] += v.sum()
+                a[f"{l}_c"] += len(v)
+                a[f"{l}_p"] += (v > 0).sum()
+                a[f"{l}_t"] += np.clip(v, *TRIM[l]).sum()
+            x = mae[m]
+            x = x[np.isfinite(x)]
+            a["mae_s"] += x.sum()
+            a["mae_c"] += len(x)
+
+    def row(self, label, period=None):
+        a = self.acc[period]
+        row = {"Signal": label, "Basis": "stock-days", "N": int(a["n"]), "Dates": None}
+        for l in HORIZONS:
+            row[f"{l} mean"] = a[f"{l}_s"] / a[f"{l}_c"] if a[f"{l}_c"] else np.nan
+            row[f"{l} hit"] = a[f"{l}_p"] / a[f"{l}_c"] if a[f"{l}_c"] else np.nan
+            row[f"{l} trim"] = a[f"{l}_t"] / a[f"{l}_c"] if a[f"{l}_c"] else np.nan
+        row["6m median"] = np.nan
+        row["6m CI"] = (np.nan, np.nan)
+        row["MAE"] = a["mae_s"] / a["mae_c"] if a["mae_c"] else np.nan
+        return row
 
 
 def split_rows(ev, col, order=None):
     groups = order or sorted(ev[col].dropna().unique())
     return [summarize(ev[ev[col] == g], str(g)) for g in groups if (ev[col] == g).any()]
+
+
+# ── Passes over a (possibly split) universe ───────────────────────────────────
+def grid_pass(stocks, sec_close, spy, cfg, vol_pcts, leader_all):
+    """Events for every threshold combination, piece by piece (unenriched)."""
+    cells = {(w, m, v): [] for w in GRID_W for m in GRID_M for v in GRID_VIX}
+    for k, (sub, sec) in enumerate(fe.column_pieces(stocks, sec_close, STOCK_PIECE), 1):
+        s = fe.compute_signal(sub, spy, sec, cfg)
+        L = leader_all[sub["Close"].columns]
+        ctx = universe_ctx(STOCK_NAME, s, spy)
+        idx = s["close"].index
+        wk = {q: s["w_rsi"] <= fe.own_quantile(s["w_bars"], s["w_key"], idx, q, fe.W_MIN_BARS) for q in GRID_W}
+        mo = {q: s["m_rsi"] <= fe.own_quantile(s["m_bars"], s["m_key"], idx, q, fe.M_MIN_BARS) for q in GRID_M}
+        vs = {}
+        for lvl in GRID_VIX:
+            thr = s["rv"].expanding(min_periods=fe.VOL_MIN_DAYS).quantile(vol_pcts[lvl])
+            vs[lvl] = (s["rv"] >= thr).astype(float).rolling(cfg["vol_lookback"], min_periods=1).max() > 0
+        for w, m, v in cells:
+            cells[(w, m, v)].append(build_events(ctx, L & wk[w] & mo[m] & vs[v], "", cooldown=cfg["cooldown"], enrich=False))
+        print(f"  grid piece {k}: {sub['Close'].shape[1]} names")
+        del s, ctx, wk, mo, vs
+        gc.collect()
+    return {key: pd.concat(evs, ignore_index=True) for key, evs in cells.items()}
+
+
+def event_pass(pieces, spy, ucfg, vol_pct, name, gauge, ppy=252, leader_all=None):
+    """Signal + ablation event sets and the A / D base rates for one universe,
+    piece by piece. leader_all: precomputed leadership for a split universe."""
+    sets, cells = {k: [] for k in SET_LABELS}, {"A": CellAcc(), "D": CellAcc()}
+    for sub, sec in pieces:
+        if sub["Close"].empty:
+            continue
+        s = fe.compute_signal(sub, spy, sec, ucfg)
+        c = fe.conditions(s, ucfg, vol_pct)
+        L = leader_all[sub["Close"].columns] if leader_all is not None else c["leader"]
+        ctx = universe_ctx(name, s, spy, ppy)
+        for label, sig in make_sets(L, c["weekly"], c["monthly"], c["vol_spike"]).items():
+            sets[label].append(build_events(ctx, sig, label, gauge, ucfg["cooldown"]))
+        live = s["close"].notna()
+        cells["A"].add(ctx, L & live)
+        cells["D"].add(ctx, live)
+        del s, c, ctx
+        gc.collect()
+    return {k: pd.concat(v, ignore_index=True) for k, v in sets.items()}, cells
 
 
 # ── Pipeline check: market gauge vs forward SPY ───────────────────────────────
@@ -266,6 +367,8 @@ def summary_table(rows):
              "Dates": f"{r['Dates']:,}" if r["Dates"] is not None else "&ndash;"}
         for lbl in HORIZONS:
             o[f"{lbl} excess"] = colored(r[f"{lbl} mean"])
+            if lbl in ("3m", "6m"):
+                o[f"{lbl} winsorized"] = colored(r[f"{lbl} trim"])
             o[f"{lbl} hit"] = plain_pct(r[f"{lbl} hit"])
         o["6m median"] = colored(r["6m median"])
         lo, hi = r["6m CI"]
@@ -368,7 +471,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <body>
 <header>
   <h1>Leader Selloff &mdash; Event Study</h1>
-  <div class="meta">Generated {date_str} &middot; S&amp;P 500 + Nasdaq-100 members, BTC/ETH, sector/theme ETFs &middot; prices since 2000, signals since mid-2005 &middot; excess returns vs SPY from next-day close</div>
+  <div class="meta">Generated {date_str} &middot; US stocks (S&amp;P 500, Nasdaq-100 + screener list, ~2,000), BTC/ETH, sector/theme ETFs &middot; prices since 2000, signals since mid-2005 &middot; excess returns vs SPY from next-day close</div>
 </header>
 {body}
 </body>
@@ -389,18 +492,24 @@ def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     print("Loading universes...")
-    sp_tickers, sp_names, sp_sectors = fe.us_stock_universe()  # S&P 500 + Nasdaq-100
-    etf_tickers, etf_names, etf_groups = fe.etf_universe()
+    st_tickers, st_names, st_sectors = fe.us_stock_universe()
+    sp_members = set(fe.sp500_universe()[0])
+    etf_tickers, etf_names, _ = fe.etf_universe()
     crypto_tickers, crypto_names, _ = fe.crypto_universe()
     sector_etfs = sorted(set(fe.SECTOR_ETF_BY_GICS.values()))
-    panel = fe.load_panel(sp_tickers + etf_tickers + sector_etfs + [fe.BENCH], fe.HISTORY_START,
+    panel = fe.load_panel(st_tickers + etf_tickers + sector_etfs + [fe.BENCH], fe.HISTORY_START,
                           cache_name="fear_study", refresh=args.refresh)
     # separate panel: crypto's 7-day calendar must not add weekend rows to the stocks
     crypto = fe.load_panel(crypto_tickers, fe.HISTORY_START, cache_name="fear_study_crypto", refresh=args.refresh)
-    spy = panel["Close"][fe.BENCH]
-    stocks = fe.subset_panel(panel, sp_tickers)
-    sec_close = fe.sector_close_frame(stocks["Close"].columns, sp_sectors,
-                                      panel["Close"][[e for e in sector_etfs if e in panel["Close"].columns]])
+    spy = panel["Close"][fe.BENCH].copy()
+    # ~2,000 names x 26 years: float32 halves the memory of the biggest objects
+    stocks = {f: df.astype("float32") for f, df in fe.subset_panel(panel, st_tickers).items()}
+    etfs = fe.subset_panel(panel, etf_tickers)
+    sec_close = fe.sector_close_frame(stocks["Close"].columns, st_sectors,
+                                      panel["Close"][[e for e in sector_etfs if e in panel["Close"].columns]]).astype("float32")
+    del panel
+    gc.collect()
+    print(f"  {stocks['Close'].shape[1]} stocks, {etfs['Close'].shape[1]} ETFs, {crypto['Close'].shape[1]} coins")
 
     vol_pcts = {lvl: fe.vol_percentile(lvl) for lvl in GRID_VIX}
     for lvl, p in vol_pcts.items():
@@ -410,44 +519,28 @@ def main():
         check_lookahead(stocks, spy, sec_close, cfg, vol_pcts[cfg["vix_equiv_level"]])
         return
 
-    print(f"Computing inputs for {stocks['Close'].shape[1]} stocks...")
-    s_s = fe.compute_signal(stocks, spy, sec_close, cfg)
-    etfs = fe.subset_panel(panel, etf_tickers)
-    print(f"Computing inputs for {etfs['Close'].shape[1]} ETFs...")
-    s_e = fe.compute_signal(etfs, spy, None, cfg)
+    print("Leadership across the whole stock universe...")
+    leader_all = fe.leaders(fe.rel_strength(stocks["Close"], spy, cfg), cfg)
     print("Building market fear gauge...")
-    gauge = fe.market_gauge(stocks["Close"], fe.HISTORY_START)
-    print("Computing inputs for crypto...")
-    s_c = fe.compute_signal(crypto, spy, None, fe.crypto_config(cfg))
-    ctx_s = universe_ctx("US stocks (S&P 500 + Nasdaq-100)", s_s, spy)
-    ctx_c = universe_ctx("Crypto (BTC, ETH)", s_c, spy, fe.CRYPTO_PPY)
-    ctx_e = universe_ctx("Sector/theme ETFs", s_e, spy)
-    ctxs = {c["name"]: c for c in (ctx_s, ctx_c, ctx_e)}
+    sp_cols = [t for t in stocks["Close"].columns if t in sp_members]
+    gauge = fe.market_gauge(stocks["Close"][sp_cols], fe.HISTORY_START)
     print(f"  ready in {time.time() - t0:.0f}s")
 
     # ── walk-forward grid (stocks), thresholds picked on in-sample only ──
     print("Walk-forward grid...")
-    idx = s_s["close"].index
-    wk = {q: s_s["w_rsi"] <= fe.own_quantile(s_s["w_bars"], s_s["w_key"], idx, q, fe.W_MIN_BARS) for q in GRID_W}
-    mo = {q: s_s["m_rsi"] <= fe.own_quantile(s_s["m_bars"], s_s["m_key"], idx, q, fe.M_MIN_BARS) for q in GRID_M}
-    vs = {}
-    for lvl in GRID_VIX:
-        thr = s_s["rv"].expanding(min_periods=fe.VOL_MIN_DAYS).quantile(vol_pcts[lvl])
-        vs[lvl] = (s_s["rv"] >= thr).astype(float).rolling(cfg["vol_lookback"], min_periods=1).max() > 0
+    grid_ev = grid_pass(stocks, sec_close, spy, cfg, vol_pcts, leader_all)
     grid = []
-    for w in GRID_W:
-        for m in GRID_M:
-            for lvl in GRID_VIX:
-                ev = build_events(ctx_s, s_s["leader"] & wk[w] & mo[m] & vs[lvl], "", cooldown=cfg["cooldown"], enrich=False)
-                r = {"weekly_pct": w, "monthly_pct": m, "vix_equiv": lvl}
-                for p, key in (("IS", "is"), ("OOS", "oos")):
-                    s = summarize(ev, "", p)
-                    r[f"{key}_n"] = s["N"]
-                    for lbl in ("3m", "6m", "12m"):
-                        r[f"{key}_{lbl}"] = s[f"{lbl} mean"]
-                    r[f"{key}_6m_hit"] = s["6m hit"]
-                r["is_obj"] = np.nanmean([r["is_3m"], r["is_6m"]])
-                grid.append(r)
+    for (w, m, lvl), ev in grid_ev.items():
+        r = {"weekly_pct": w, "monthly_pct": m, "vix_equiv": lvl}
+        for p, key in (("IS", "is"), ("OOS", "oos")):
+            s = summarize(ev, "", p)
+            r[f"{key}_n"] = s["N"]
+            for lbl in ("3m", "6m", "12m"):
+                r[f"{key}_{lbl}"] = s[f"{lbl} trim"]  # winsorized, so a few lottery tickets can't pick the thresholds
+            r[f"{key}_6m_hit"] = s["6m hit"]
+        r["is_obj"] = np.nanmean([r["is_3m"], r["is_6m"]])
+        grid.append(r)
+    del grid_ev
     grid = pd.DataFrame(grid)
     eligible = grid[grid["is_n"] >= MIN_IS_EVENTS]
     best = (eligible if len(eligible) else grid).sort_values("is_obj", ascending=False).iloc[0]
@@ -456,46 +549,38 @@ def main():
     vol_star = vol_pcts[chosen["vix_equiv_level"]]
     print(f"  chosen on 2005-14: weekly <= {chosen['w_rsi_pct']:.0%} pct, monthly <= {chosen['m_rsi_pct']:.0%} pct, "
           f"vol spike = VIX {chosen['vix_equiv_level']} equivalent")
-    del wk, mo, vs
 
     # ── event sets at the chosen thresholds, with ablations ──
-    print("Building event sets...")
-    main_label = "Buy signal: all four conditions (chosen)"
-    b_label = "B: RSI + vol conditions, no leader filter"
     events, headline = [], {}
-    for ctx in (ctx_s, ctx_c, ctx_e):
-        s = ctx["s"]
-        ucfg = fe.crypto_config(chosen) if ctx is ctx_c else chosen
-        c = fe.conditions(s, ucfg, vol_star)
-        L, W, M, V = c["leader"], c["weekly"], c["monthly"], c["vol_spike"]
-        sets = {
-            main_label: L & W & M & V,
-            "Without vol spike": L & W & M,
-            "Without monthly RSI": L & W & V,
-            "Without weekly RSI": L & M & V,
-            b_label: W & M & V,
-        }
-        ev_sets = {k: build_events(ctx, v, k, gauge, ucfg["cooldown"]) for k, v in sets.items()}
-        events.extend(ev_sets.values())
-        live = s["close"].notna()
-        headline[ctx["name"]] = {"sets": ev_sets, "A": L & live, "D": live}
+    specs = [
+        (STOCK_NAME, "stocks", fe.column_pieces(stocks, sec_close, STOCK_PIECE), chosen, 252, leader_all),
+        (CRYPTO_NAME, "crypto", [(crypto, None)], fe.crypto_config(chosen), fe.CRYPTO_PPY, None),
+        (ETF_NAME, "etfs", [(etfs, None)], chosen, 252, None),
+    ]
+    for name, key, pieces, ucfg, ppy, la in specs:
+        print(f"Event sets: {name}...")
+        sets, cells = event_pass(pieces, spy, ucfg, vol_star, name, gauge, ppy, la)
+        headline[name] = {"sets": sets, "cells": cells, "key": key}
+        events.extend(sets.values())
 
     gtable = gauge_study(gauge, spy)
 
     def headline_rows(name, period):
-        h, ctx = headline[name], ctxs[name]
+        h = headline[name]
         rows = [summarize(ev, k, period) for k, ev in h["sets"].items()]
-        rows += [cell_summary(ctx, h["A"], "A: leaders, any day", period),
-                 cell_summary(ctx, h["D"], "D: whole universe, any day", period)]
+        rows += [h["cells"]["A"].row("A: leaders, any day", period), h["cells"]["D"].row("D: whole universe, any day", period)]
         return rows
 
     # ── verdict: chosen signal vs baselines A and B, out-of-sample, stocks ──
     parts = []
-    oos = {r["Signal"]: r for r in headline_rows(ctx_s["name"], "OOS")}
-    m, A, B = oos[main_label], oos["A: leaders, any day"], oos[b_label]
-    checks = [(h, m[f"{h} mean"], A[f"{h} mean"], B[f"{h} mean"]) for h in ("3m", "6m")]
+    oos = {r["Signal"]: r for r in headline_rows(STOCK_NAME, "OOS")}
+    m, A, B = oos[MAIN_LABEL], oos["A: leaders, any day"], oos[B_LABEL]
+    checks = [(h, m[f"{h} trim"], A[f"{h} trim"], B[f"{h} trim"]) for h in ("3m", "6m")]
     passed = all(pd.notna(x) and x > a and x > b for _, x, a, b in checks)
-    detail = "; ".join(f"{h}: signal {x * 100:+.1f}% vs A {a * 100:+.1f}% / B {b * 100:+.1f}%" for h, x, a, b in checks)
+    detail = ("; ".join(f"{h}: signal {x * 100:+.1f}% vs A {a * 100:+.1f}% / B {b * 100:+.1f}%" for h, x, a, b in checks)
+              + " (winsorized means; raw means "
+              + "; ".join(f"{h} {m[f'{h} mean'] * 100:+.1f}% vs {A[f'{h} mean'] * 100:+.1f}% / {B[f'{h} mean'] * 100:+.1f}%"
+                          for h in ("3m", "6m")) + ")")
     lo, hi = m["6m CI"]
     parts.append(
         f'<div class="verdict {"pass" if passed else "fail"}"><b>{"PASS" if passed else "NOT PROVEN"}</b> &mdash; '
@@ -504,15 +589,20 @@ def main():
         f"vol spike = VIX {chosen['vix_equiv_level']} equivalent, historic leader) "
         f"{'beats' if passed else 'does not beat'} both baselines (A: leaders on any day, B: same conditions without "
         f"the leader filter) on 3m and 6m excess return. {detail}. 6m mean 90% CI "
-        f"{'n/a' if pd.isna(lo) else f'{lo * 100:+.1f}% to {hi * 100:+.1f}%'}.</div>"
+        f"{'n/a' if pd.isna(lo) else f'{lo * 100:+.1f}% to {hi * 100:+.1f}%'}."
+        '<br><span style="color:#AEAEB2">Disclosure: when the universe was widened to ~2,000 names the verdict was '
+        "switched from plain to winsorized means (returns clipped at roughly the 1st/99th percentile), after finding "
+        "spliced price histories (e.g. Chord/Oasis 2020, +59,000%) and lottery-ticket rebounds that dominated plain "
+        "averages. Return windows spanning a one-day +200% jump are also excluded. Raw means are shown in every table.</span></div>"
     )
     parts.append(note(
         "<b>How to read this.</b> Every number is an average <i>excess</i> return vs SPY, entered at the close the day "
         "<i>after</i> the signal. Signals are capped at one per ticker per 63 trading days. \"Hit\" = share that beat SPY. "
         "MAE = average worst drawdown from entry within 3 months (how much pain came first). The 90% CI resamples whole "
-        "months, because signals cluster in crises. <b>Survivorship caveat:</b> the universe is today's S&amp;P 500, so "
-        "former leaders that failed are missing; absolute levels are optimistic, and the comparisons against baselines "
-        "are the part to trust."))
+        "months, because signals cluster in crises. Baselines A and D are averages over every stock-day, so they show no "
+        "median or CI. <b>Survivorship caveat:</b> the universe is today's listed names, so former leaders that failed are "
+        "missing; absolute levels are optimistic (more so for mid caps), and the comparisons against baselines are the "
+        "part to trust."))
 
     parts.append(section_header("1. Market regime check: forward SPY returns",
                                 "Context for the stock signal &mdash; Panic = VIX term structure inverted (VIX above VIX3M)"))
@@ -524,25 +614,21 @@ def main():
     gt["Days"] = gt["Days"].map(lambda v: f"{v:,}")
     parts.append('<div class="wrap">' + gt.to_html(escape=False, index=False, classes="tbl", border=0) + "</div>")
 
-    for name in (ctx_s["name"], ctx_c["name"], ctx_e["name"]):
-        if name == ctx_c["name"]:
-            parts.append(section_header(f"2. Signal vs baselines &mdash; {name}",
-                                        "Only two coins with short histories (BTC 2014+, ETH 2017+; 5 years of monthly "
-                                        "bars needed first) &mdash; a handful of signals, illustrative rather than proof. "
-                                        "Same rules on a 7-day calendar; leader = beat SPY over 5 years."))
-            for pname, p in PERIODS.items():
-                parts.append(f"<h3>{pname}</h3>")
-                parts.append(summary_table(headline_rows(name, p)))
-            continue
-        parts.append(section_header(f"2. Signal vs baselines &mdash; {name}",
-                                    "The \"Without ...\" rows drop one condition at a time: if a row does as well as the full "
-                                    "signal, that condition isn't pulling its weight"))
+    for name in (STOCK_NAME, CRYPTO_NAME, ETF_NAME):
+        if name == CRYPTO_NAME:
+            sub = ("Only two coins with short histories (BTC 2014+, ETH 2017+; 5 years of monthly bars needed first) "
+                   "&mdash; a handful of signals, illustrative rather than proof. Same rules on a 7-day calendar; "
+                   "leader = beat SPY over 5 years.")
+        else:
+            sub = ("The \"Without ...\" rows drop one condition at a time: if a row does as well as the full signal, "
+                   "that condition isn't pulling its weight")
+        parts.append(section_header(f"2. Signal vs baselines &mdash; {name}", sub))
         for pname, p in PERIODS.items():
             parts.append(f"<h3>{pname}</h3>")
             parts.append(summary_table(headline_rows(name, p)))
 
     parts.append(section_header("3. Walk-forward threshold grid (US stocks)",
-                                f"Chosen on 2005-14 only (highest avg of 3m and 6m excess, min {MIN_IS_EVENTS} signals); "
+                                f"Chosen on 2005-14 only (highest avg of 3m and 6m winsorized excess, min {MIN_IS_EVENTS} signals); "
                                 f"2015+ shown untouched. Percentiles are vs each stock's own history."))
     g = grid.copy()
     g["weekly_pct"] = g["weekly_pct"].map(lambda v: f"&le; {v:.0%}")
@@ -564,16 +650,19 @@ def main():
     parts.append(note("Highlighted row = chosen. A robust signal shows a broad plateau of similar results across nearby "
                       "thresholds; one isolated winner is a sign of overfitting."))
 
-    ev_main = headline[ctx_s["name"]]["sets"][main_label].copy()
+    ev_main = headline[STOCK_NAME]["sets"][MAIN_LABEL].copy()
     parts.append(section_header("4. Diagnostics (US stocks, chosen signal)"))
     parts.append("<h3>What drove the 21-day drop? (market / sector / stock-specific, betas from the prior year)</h3>")
     for pname, p in PERIODS.items():
         parts.append(f'<div class="note"><b>{pname}</b></div>')
-        parts.append(summary_table(split_rows(in_period(ev_main, p), "driver", ["Market", "Sector", "Specific"])))
+        parts.append(summary_table(split_rows(in_period(ev_main, p), "driver", ["Market", "Sector", "Specific", "n/a"])))
     parts.append("<h3>Market regime on the signal date</h3>")
     ev_main["regime_x_credit"] = ev_main["regime"].astype(str) + np.where(ev_main["credit_stress"] == True, " + credit stress", "")
     order = ["Calm", "Elevated", "Panic", "Calm + credit stress", "Elevated + credit stress", "Panic + credit stress"]
     parts.append(summary_table(split_rows(ev_main, "regime_x_credit", order)))
+    ev_main["in_sp500"] = np.where(ev_main["ticker"].isin(sp_members), "S&P 500 member", "Not in S&P 500 (mid caps etc.)")
+    parts.append("<h3>S&amp;P 500 members vs the rest of the list</h3>")
+    parts.append(summary_table(split_rows(ev_main, "in_sp500", ["S&P 500 member", "Not in S&P 500 (mid caps etc.)"])))
 
     parts.append(section_header("5. When did the signals happen?", "Clustering check &mdash; yellow line = in-sample / out-of-sample split"))
     parts.append(fig_to_div(chart_by_year(ev_main, "Buy signal &mdash; US stocks")))
@@ -594,7 +683,7 @@ def main():
     print(f"Saved: {out_html}")
 
     all_ev = pd.concat([e for e in events if len(e)], ignore_index=True).drop(columns=["i"])
-    all_ev.insert(2, "name", all_ev["ticker"].map({**sp_names, **etf_names, **crypto_names}))
+    all_ev.insert(2, "name", all_ev["ticker"].map({**st_names, **etf_names, **crypto_names}))
     out_csv = os.path.join(OUTPUT_DIR, "fear_events.csv")
     all_ev.to_csv(out_csv, index=False, float_format="%.5f")
     print(f"Saved: {out_csv} ({len(all_ev):,} events)")
@@ -607,8 +696,7 @@ def main():
             return {"n": int(r["N"]), "3m_mean": r["3m mean"], "6m_mean": r["6m mean"],
                     "3m_hit": r["3m hit"], "6m_hit": r["6m hit"], "mae": r["MAE"]}
 
-        base_rates = {key: {"signal": rate(headline[name]["sets"][main_label])}
-                      for key, name in (("stocks", ctx_s["name"]), ("crypto", ctx_c["name"]), ("etfs", ctx_e["name"]))}
+        base_rates = {h["key"]: {"signal": rate(h["sets"][MAIN_LABEL])} for h in headline.values()}
         base_rates["stocks"]["by_driver"] = {
             d: rate(ev_main[ev_main["driver"] == d]) for d in ("Market", "Sector", "Specific") if (ev_main["driver"] == d).sum() >= 20
         }

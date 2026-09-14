@@ -39,7 +39,7 @@ import requests
 import yfinance as yf
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common_screening import load_nasdaq100_table, load_sp500_sectors
+from common_screening import load_nasdaq100_table, load_nasdaq_screener, load_sp500_sectors
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CACHE_DIR = os.path.join(REPO_ROOT, "data", "cache")
@@ -67,13 +67,19 @@ SECTOR_ETF_BY_GICS = {
     "Industrials": "XLI", "Materials": "XLB", "Utilities": "XLU",
     "Real Estate": "IYR", "Communication Services": "VOX",
 }
-# Nasdaq-100-only names come with ICB industries; map them onto the GICS names above
-ICB_TO_GICS = {
+# Nasdaq-100 (ICB), Koyfin and Nasdaq-screener sector names -> the GICS names above
+SECTOR_ALIASES = {
     "Technology": "Information Technology", "Telecommunications": "Communication Services",
-    "Basic Materials": "Materials", "Health Care": "Health Care", "Financials": "Financials",
-    "Consumer Discretionary": "Consumer Discretionary", "Consumer Staples": "Consumer Staples",
-    "Industrials": "Industrials", "Energy": "Energy", "Utilities": "Utilities", "Real Estate": "Real Estate",
+    "Communication": "Communication Services", "Communications": "Communication Services",
+    "Basic Materials": "Materials", "Finance": "Financials", "Financial Services": "Financials",
+    "Consumer Cyclical": "Consumer Discretionary", "Consumer Defensive": "Consumer Staples",
+    "Healthcare": "Health Care",
 }
+
+
+def _gics(sector):
+    sector = str(sector).strip()
+    return SECTOR_ALIASES.get(sector, sector)
 
 CRYPTO = {"BTC-USD": "Bitcoin", "ETH-USD": "Ethereum"}
 CRYPTO_PPY = 365  # crypto trades every calendar day
@@ -118,20 +124,39 @@ def etf_universe():
 
 
 def us_stock_universe():
-    """S&P 500 + Nasdaq-100 (union), ranked together as one universe."""
-    tickers, names, sectors = sp500_universe()
+    """The same US stock list the Uptrend Channel Screener scans - S&P 500 +
+    Nasdaq-100 + every ticker in data/koyfin_us.csv and
+    data/us_1w_rev_est_screener.csv (~2,000 names) - ranked as one universe.
+    Sectors (only used for the market/sector/specific diagnostic): S&P GICS,
+    then the Nasdaq-100 page, then the Koyfin export, then Nasdaq's screener."""
+    from generate_uptrend_channel_screener import KOYFIN_US_PATH, load_universe
+
+    tickers, raw_names = load_universe()
+    names = {str(t).strip().upper().replace(".", "-"): n for t, n in raw_names.items()}
+    _, sp_names, sectors = sp500_universe()
+    names.update(sp_names)
     try:
-        ndx = load_nasdaq100_table()
+        for _, r in load_nasdaq100_table().iterrows():
+            t = str(r["Ticker"]).strip().upper().replace(".", "-")
+            names.setdefault(t, r["Company"])
+            sectors.setdefault(t, _gics(r["Sector"]))
     except Exception as exc:
-        print(f"  Nasdaq-100 list unavailable ({exc}); using S&P 500 only")
-        return tickers, names, sectors
-    for _, r in ndx.iterrows():
-        t = str(r["Ticker"]).strip().upper().replace(".", "-")
-        if t and t not in names:
-            tickers.append(t)
-            names[t] = r["Company"]
-            industry = str(r["Sector"]).strip()
-            sectors[t] = ICB_TO_GICS.get(industry, industry)
+        print(f"  Nasdaq-100 table unavailable ({exc})")
+    if os.path.exists(KOYFIN_US_PATH):
+        k = pd.read_csv(KOYFIN_US_PATH)
+        for t, sec in zip(k["Ticker"].astype(str).str.strip().str.upper().str.replace(".", "-", regex=False), k["Sector"]):
+            if pd.notna(sec):
+                sectors.setdefault(t, _gics(sec))
+    missing = [t for t in tickers if t not in sectors]
+    if missing:
+        try:
+            scr = load_nasdaq_screener()
+            smap = dict(zip(scr["symbol"], scr["sector"]))
+            for t in missing:
+                if smap.get(t):
+                    sectors[t] = _gics(smap[t])
+        except Exception as exc:
+            print(f"  Nasdaq screener unavailable ({exc}); {len(missing)} names have no sector")
     return tickers, names, sectors
 
 
@@ -300,6 +325,19 @@ def vol_percentile(level):
 
 
 # ── Signal ────────────────────────────────────────────────────────────────────
+def rel_strength(close, bench_close, cfg):
+    """Return vs the benchmark over `lead_years`, ending `lead_lag` bars ago."""
+    ppy = cfg.get("periods_per_year", 252)
+    bench = bench_close.reindex(close.index).ffill()
+    lag, span = cfg["lead_lag"], int(cfg["lead_years"] * ppy)
+    return (close.shift(lag) / close.shift(lag + span) - 1).sub(bench.shift(lag) / bench.shift(lag + span) - 1, axis=0)
+
+
+def leaders(rel5, cfg):
+    """Beat the benchmark AND in the top `lead_top_pct` of the universe that day."""
+    return (rel5 > 0) & (rel5.rank(axis=1, pct=True) >= 1 - cfg["lead_top_pct"])
+
+
 def compute_signal(panel, bench_close, sector_close=None, cfg=None, driver_tail=None):
     """Inputs for the four conditions (dates x tickers frames). Threshold-
     dependent pieces live in conditions() so the study can grid-search them.
@@ -313,9 +351,8 @@ def compute_signal(panel, bench_close, sector_close=None, cfg=None, driver_tail=
     m_rsi, m_bars, m_key = live_rsi(c, "M")
 
     ppy = cfg.get("periods_per_year", 252)
-    lag, span = cfg["lead_lag"], int(cfg["lead_years"] * ppy)
-    rel5 = (c.shift(lag) / c.shift(lag + span) - 1).sub(bench.shift(lag) / bench.shift(lag + span) - 1, axis=0)
-    leader = (rel5 > 0) & (rel5.rank(axis=1, pct=True) >= 1 - cfg["lead_top_pct"])
+    rel5 = rel_strength(c, bench, cfg)
+    leader = leaders(rel5, cfg)
 
     return {
         "close": c, "rel5": rel5, "leader": leader,
@@ -346,6 +383,69 @@ def conditions(s, cfg, vol_pct):
     }
     cond["buy"] = cond["leader"] & cond["weekly"] & cond["monthly"] & cond["vol_spike"]
     return cond
+
+
+def column_pieces(panel, sector_close, size):
+    """Split a panel into (sub-panel, sector-close) pieces of `size` tickers."""
+    cols = list(panel["Close"].columns)
+    for i in range(0, len(cols), size):
+        sub = cols[i : i + size]
+        yield {f: panel[f][sub] for f in FIELDS}, (sector_close[sub] if sector_close is not None else None)
+
+
+def relead(s, cond, cfg):
+    """Leadership ranks the whole universe, so after merging pieces it has to
+    be recomputed on the full cross-section (and the buy signal with it)."""
+    leader = leaders(s["rel5"], cfg)
+    s["leader"] = cond["leader"] = leader
+    cond["buy"] = leader & cond["weekly"] & cond["monthly"] & cond["vol_spike"]
+
+
+def scan_pieces(pieces, bench_close, cfg, vol_pct, keep_rows=None, driver_tail=None, signal_log=True):
+    """compute_signal + conditions over an iterable of (panel, sector_close)
+    pieces, keeping only the last `keep_rows` rows of each daily result, then
+    merged. A 2,000-name universe x 26 years doesn't fit in memory at once;
+    everything is per-name except the leadership ranking, redone at the end.
+
+    Returns (signal inputs, conditions, fired) where `fired` lists every
+    (date, ticker) the buy signal FIRST fired over the whole history - the
+    three condition frames are cheap booleans, so the log survives the trim
+    that keeps the heavy price/RSI frames small."""
+    def trim(d):
+        return {k: v.iloc[-keep_rows:] if keep_rows and isinstance(v, pd.DataFrame)
+                and isinstance(v.index, pd.DatetimeIndex) else v for k, v in d.items()}
+
+    empty_log = pd.DataFrame({"date": pd.to_datetime([]), "ticker": pd.Series(dtype=str)})
+    s_parts, c_parts, log_parts = [], [], []
+    for panel, sector_close in pieces:
+        if panel["Close"].empty:
+            continue
+        s = compute_signal(panel, bench_close, sector_close, cfg, driver_tail=driver_tail)
+        c = conditions(s, cfg, vol_pct)
+        if signal_log:
+            log_parts.append({"rel5": s["rel5"].astype("float32"),
+                              **{k: c[k] for k in ("weekly", "monthly", "vol_spike")}})
+        s_parts.append(trim(s))
+        c_parts.append(trim(c))
+        del s, c
+    if not s_parts:
+        return None, None, empty_log
+
+    def merge(parts):
+        return {k: pd.concat([p[k] for p in parts], axis=1) if isinstance(v, pd.DataFrame) else v
+                for k, v in parts[0].items()}
+
+    s, c = merge(s_parts), merge(c_parts)
+    relead(s, c, cfg)
+    if not signal_log:
+        return s, c, empty_log
+
+    full = merge(log_parts)
+    buy = leaders(full["rel5"], cfg) & full["weekly"] & full["monthly"] & full["vol_spike"]
+    first = (buy & ~buy.shift(1, fill_value=False)).to_numpy()
+    rows, cols = np.divmod(np.flatnonzero(first.ravel()), first.shape[1])
+    fired = pd.DataFrame({"date": buy.index[rows], "ticker": buy.columns[cols]})
+    return s, c, fired
 
 
 def extract_events(signal, cooldown):
@@ -437,15 +537,16 @@ def fetch_credit_stress(start):
     return 1 - ratio / ratio.rolling(252, min_periods=63).max(), "HYG/IEF drawdown"
 
 
-def market_gauge(member_close, start):
+def market_gauge(member_close, start, index=None):
     """0-100 market fear gauge on the trading dates of `member_close` (the
     S&P 500 panel) from VIX level, VIX/VIX3M and credit stress, each a
     percentile of its own 5-year history. Regime: Panic = VIX term structure
     inverted (VIX > VIX3M), Elevated = gauge >= 70, else Calm. Breadth is
-    returned separately in .attrs["breadth"] as trend context."""
+    returned separately in .attrs["breadth"] as trend context. `index` sets the
+    gauge's dates when member_close is only a recent slice (daily report)."""
     from generate_vix_structure_report import fetch_cboe_index
 
-    idx = member_close.index
+    idx = member_close.index if index is None else index
     comps = {}
     try:
         vix = fetch_cboe_index("VIX").reindex(idx).ffill()

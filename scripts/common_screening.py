@@ -136,6 +136,23 @@ def load_nasdaq100_table():
     raise ValueError("Could not find a ticker/company/industry table on the Nasdaq-100 page")
 
 
+def load_nasdaq_screener():
+    """Every US-listed stock from Nasdaq's public screener (symbol, name,
+    sector, marketCap, country, ...)."""
+    url = "https://api.nasdaq.com/api/screener/stocks?tableonly=true&limit=10000&download=true"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                      "Chrome/124.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Origin": "https://www.nasdaq.com", "Referer": "https://www.nasdaq.com/",
+    }
+    response = requests.get(url, headers=headers, timeout=60)
+    response.raise_for_status()
+    df = pd.DataFrame(response.json()["data"]["rows"])
+    df["symbol"] = df["symbol"].astype(str).str.strip().str.upper().str.replace(r"[./]", "-", regex=True)
+    return df
+
+
 def close_series(ticker, start, end):
     data = yf.download(ticker, start=start, end=end, progress=False)
     if isinstance(data.columns, pd.MultiIndex):
