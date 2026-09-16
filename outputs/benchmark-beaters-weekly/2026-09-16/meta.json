@@ -1,21 +1,21 @@
 {
   "as_of": "2026-09-16",
-  "blog_title": "Benchmark Beaters Weekly: 42 Stocks Beating Their Benchmarks (September 16, 2026)",
-  "email_subject": "Benchmark Beaters: MATR & DELL lead 42 stocks beating the market",
-  "preview_text": "21 Canadian and 21 U.S. names at six-month relative highs. Full table and charts inside.",
+  "blog_title": "Benchmark Beaters Weekly: 44 Stocks Beating Their Benchmarks (September 16, 2026)",
+  "email_subject": "Benchmark Beaters: MATR & DELL lead 44 stocks beating the market",
+  "preview_text": "23 Canadian and 21 U.S. names at six-month relative highs. Full table and charts inside.",
   "intro": [
-    "The latest Benchmark Beaters screen (as of September 16, 2026) found 42 Canadian and U.S. stocks outperforming their benchmarks, each hitting a new six-month relative high in the last five trading days.",
-    "In Canada, 21 stocks made a fresh six-month high relative to the TSX Composite, 15 of them new to the list this week. Mattr Corp. (MATR) leads with a +128% six-month return, and Energy is the most represented sector with 7 names.",
-    "In the U.S., 21 stocks made a fresh six-month high relative to the S&P 500, 12 of them new to the list this week. Dell Technologies Inc. (DELL) leads with a +262% six-month return, and Information Technology is the most represented sector with 8 names.",
+    "The latest Benchmark Beaters screen (as of September 16, 2026) found 44 Canadian and U.S. stocks outperforming their benchmarks, each hitting a new six-month relative high in the last five trading days.",
+    "In Canada, 23 stocks made a fresh six-month high relative to the TSX Composite, 17 of them new to the list this week. Mattr Corp. (MATR) leads with a +134% six-month return, and Energy is the most represented sector with 8 names.",
+    "In the U.S., 21 stocks made a fresh six-month high relative to the S&P 500, 12 of them new to the list this week. Dell Technologies Inc. (DELL) leads with a +260% six-month return, and Information Technology is the most represented sector with 8 names.",
     "Download the full table for every name, and the chart pack to see how each one's relative strength has built over six months and ten years."
   ],
   "stats": {
     "cdn": {
-      "count": 21,
-      "new": 15,
+      "count": 23,
+      "new": 17,
       "streak": 2,
       "top_sector": "Energy",
-      "top_sector_n": 7
+      "top_sector_n": 8
     },
     "us": {
       "count": 21,
