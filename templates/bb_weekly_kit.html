@@ -30,7 +30,7 @@ ol { margin:6px 0 0 18px; padding:0; }
 <div class="step">Step 1</div><h2>Blog post</h2>
 <ol><li>Copy the title into the post title field.</li>
 <li>In the Post Body editor, click the <b>HTML</b> button (top toolbar), paste the body, then click <b>Update</b>.</li>
-<li>Near the top of the post are two bold lines ending in <b>click here</b>. Highlight each <b>click here</b>, click the link button and upload the matching PDF, as you do now: the table PDF on the first line, the chart pack PDF on the second.</li>
+<li>Under the teaser image is a <b>Get the full reports</b> box with two buttons. Click inside the <b>Full Table (PDF)</b> button text, click the link button and upload the table PDF (it replaces the placeholder link). Do the same for <b>Chart Pack (PDF)</b> with the chart pack.</li>
 <li>Preview, then publish.</li></ol>
 <div class="row"><code id="blogTitle"></code><button data-copy="blogTitle">Copy title</button></div>
 <div class="row"><code>Blog post body (HTML)</code><button data-copy="post">Copy body HTML</button></div>
@@ -40,11 +40,11 @@ ol { margin:6px 0 0 18px; padding:0; }
 <section>
 <div class="step">Step 2</div><h2>Mailchimp email</h2>
 <p class="help">Mailchimp can't attach files; the download buttons link to the PDFs online. Pick one way to set the links:</p>
-<p><b>Option A (quickest): reuse the blog's PDFs.</b> On the published post, right-click each <b>click here</b> &rarr; <b>Copy link address</b> and paste it below. The copied email will already have working buttons.</p>
+<p><b>Option A (quickest): reuse the blog's PDFs.</b> On the published post, right-click each download button &rarr; <b>Copy link address</b> and paste it below. The copied email will already have working buttons.</p>
 <label for="t">Benchmark Beaters table PDF link</label>
-<input id="t" placeholder="Optional: right-click the first click here, then Copy link address" value="%%TABLE_URL%%">
+<input id="t" placeholder="Optional: right-click the Full Table button, then Copy link address" value="%%TABLE_URL%%">
 <label for="c">Chart pack PDF link</label>
-<input id="c" placeholder="Optional: right-click the second click here, then Copy link address" value="%%CHARTS_URL%%">
+<input id="c" placeholder="Optional: right-click the Chart Pack button, then Copy link address" value="%%CHARTS_URL%%">
 <p><b>Option B: upload from your computer in Mailchimp.</b> Leave the boxes blank. After pasting the email, click into the email body in Mailchimp, select each download button, choose the link option &rarr; <b>File</b>, and upload the matching PDF.</p>
 <ol><li>Create &rarr; Email &rarr; <b>Code your own</b> &rarr; <b>Paste in code</b>, then paste the email HTML.</li>
 <li>Copy the subject and preview text into the campaign and choose the Benchmark Beaters audience or tag.</li>

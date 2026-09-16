@@ -7,8 +7,8 @@ ready-to-paste kit to outputs/benchmark-beaters-weekly/<date>/:
 
   teaser.png   - top names from each table in 5i colours, rest of the list
                  teased as "+N more in the full report"
-  post.html    - blog body: intro, teaser image, unlinked "click here" lines
-                 to link to the PDFs in the blog editor, top-name HTML
+  post.html    - blog body: intro, teaser image, a download box whose two
+                 buttons get linked to the PDFs in the blog editor, top-name HTML
                  tables (real text, for SEO), Mailchimp signup form and
                  disclosure
   email.html   - full Mailchimp "code your own" email (inline styles, merge
@@ -296,13 +296,29 @@ def _table(rows, title, color):
     )
 
 
+BLOG_TABLE_ANCHOR = "#link-table-pdf"
+BLOG_CHARTS_ANCHOR = "#link-charts-pdf"
+
+
+def _blog_button(anchor, label, bg):
+    return (f'<a href="{anchor}" target="_blank" style="display:inline-block;background:{bg};color:#ffffff;'
+            f'font-family:{FONT};font-size:16px;font-weight:bold;text-decoration:none;padding:13px 24px;'
+            f'border-radius:5px;margin:6px 8px;">{label}</a>')
+
+
 BLOG_DOWNLOADS = (
-    # Plain unlinked "click here" text: the PDFs are uploaded and linked inside
-    # the blog editor (highlight "click here" -> link button -> upload PDF).
-    f'<p style="font-family:{FONT};font-size:16px;line-height:1.55;color:{INK};margin:18px 0 6px;">'
-    f'<strong>Download the full Benchmark Beaters table (PDF): click here</strong></p>'
-    f'<p style="font-family:{FONT};font-size:16px;line-height:1.55;color:{INK};margin:0 0 18px;">'
-    f'<strong>Download the relative performance chart pack (PDF): click here</strong></p>'
+    # Download box with two button-style links, no tables (the blog editor draws
+    # resize outlines around tables). The placeholder hrefs are replaced in the
+    # blog editor: click a button's text -> link button -> upload the PDF.
+    f'<div style="background:{BAND};border:1px solid {RULE};border-top:4px solid {BLUE};border-radius:6px;'
+    f'padding:18px 16px 14px;margin:20px 0 24px;text-align:center;">'
+    f'<p style="font-family:{FONT};font-size:19px;font-weight:bold;color:{INK};margin:0 0 4px;">'
+    f'Get the full reports</p>'
+    f'<p style="font-family:{FONT};font-size:14px;color:{MUTED};margin:0 0 8px;">'
+    f'Every name, sector and signal, plus six-month and ten-year relative performance charts.</p>'
+    f'{_blog_button(BLOG_TABLE_ANCHOR, "&#128202;&nbsp; Full Table (PDF)", BLUE)}'
+    f'{_blog_button(BLOG_CHARTS_ANCHOR, "&#128200;&nbsp; Chart Pack (PDF)", ORANGE)}'
+    f'</div>'
 )
 
 
