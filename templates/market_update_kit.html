@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Market Update Kit</title>
+<style>
+:root { --blue:#1F79BE; --orange:#C67A29; --ink:#363636; --muted:#6b6b6b; --bg:#F2F4F6; --card:#fff; --rule:#dde1e5; --good:#2e8b57; --bad:#a22a2a; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 Arial,Helvetica,sans-serif; }
+main { max-width:1000px; margin:0 auto; padding:24px 16px 60px; }
+h1 { margin:0 0 4px; font-size:24px; } h2 { margin:0 0 4px; font-size:18px; }
+.sub { color:var(--muted); margin:0 0 20px; }
+section { background:var(--card); border:1px solid var(--rule); border-radius:8px; padding:18px; margin:0 0 16px; }
+.step { color:var(--orange); font-weight:bold; text-transform:uppercase; font-size:12px; letter-spacing:.05em; }
+.row { display:flex; gap:8px; align-items:center; margin:6px 0; flex-wrap:wrap; }
+.row code { flex:1 1 300px; background:var(--bg); padding:8px 10px; border-radius:5px; font:14px Arial,sans-serif; overflow-wrap:anywhere; }
+button { background:var(--blue); color:#fff; border:0; border-radius:5px; padding:9px 14px; font:bold 14px Arial,sans-serif; cursor:pointer; white-space:nowrap; }
+button.done { background:var(--good); }
+.tabs button { background:#e4e8ec; color:var(--ink); }
+.tabs button.on { background:var(--ink); color:#fff; }
+iframe { width:100%; height:760px; border:1px solid var(--rule); border-radius:5px; margin-top:10px; background:#fff; }
+ol { margin:6px 0 10px 18px; padding:0; }
+.status { padding:10px 12px; border-radius:6px; font-weight:bold; margin:0 0 8px; }
+.status.good { background:#e8f5ee; color:var(--good); }
+.status.bad { background:#fbeaea; color:var(--bad); }
+.status.wait { background:#f1f1f1; color:var(--muted); }
+ul.warn { margin:6px 0 0 18px; padding:0; color:var(--bad); }
+</style></head>
+<body><main>
+<h1>Market Update Kit</h1>
+<p class="sub">%%DATE%% &middot; %%TITLE%%</p>
+
+<section>
+<div class="step">Before you start</div><h2>Checks</h2>
+<p id="imgStatus" class="status wait">Checking whether the images are online&hellip;</p>
+<ul id="warnings" class="warn"></ul>
+</section>
+
+<section>
+<div class="step">Step 1</div><h2>Mailchimp email</h2>
+<ol><li>Create &rarr; Email &rarr; <b>Code your own</b> &rarr; <b>Paste in code</b>, then paste the email HTML.</li>
+<li>Paste the subject and preview text, choose the members audience, and send yourself a test.</li></ol>
+<div class="row"><code id="subject"></code><button data-copy="subject">Copy subject</button></div>
+<div class="row"><code id="preview"></code><button data-copy="preview">Copy preview text</button></div>
+<div class="row"><code>Email (HTML)</code><button data-copy="email">Copy email HTML</button></div>
+</section>
+
+<section>
+<div class="step">Step 2</div><h2>Blog post</h2>
+<ol><li>Paste the title into the post title field.</li>
+<li>In Post Body, click the <b>HTML</b> button, paste the body, then click <b>Update</b>. Preview before publishing.</li></ol>
+<div class="row"><code id="blogTitle"></code><button data-copy="blogTitle">Copy title</button></div>
+<div class="row"><code>Blog post body (HTML)</code><button data-copy="post">Copy body HTML</button></div>
+</section>
+
+<section>
+<h2>Preview</h2>
+<div class="row tabs"><button data-view="email" class="on">Email</button><button data-view="post">Blog post</button></div>
+<iframe id="frame" title="Preview"></iframe>
+</section>
+</main>
+<script>
+const DATA = %%DATA_JSON%%;
+const $ = id => document.getElementById(id);
+$("subject").textContent = DATA.subject;
+$("preview").textContent = DATA.preview;
+$("blogTitle").textContent = DATA.blog_title;
+DATA.warnings.forEach(w => { const li = document.createElement("li"); li.textContent = w; $("warnings").appendChild(li); });
+
+// Previews load images from the local _build folder so they work before the push.
+const local = s => s.split(DATA.pages_prefix).join("");
+function show(view) {
+  $("frame").srcdoc = local(view === "post" ? DATA.post : DATA.email);
+  document.querySelectorAll("[data-view]").forEach(b => b.classList.toggle("on", b.dataset.view === view));
+}
+document.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click", () => show(b.dataset.view)));
+show("email");
+
+function checkImages() {
+  const el = $("imgStatus");
+  if (!DATA.check_image) { el.className = "status wait"; el.textContent = "No images in this issue."; return; }
+  const img = new Image();
+  img.onload = () => { el.className = "status good"; el.textContent = "Images are online. Safe to paste into Mailchimp and the blog."; };
+  img.onerror = () => {
+    el.className = "status bad";
+    el.textContent = "Images aren't online yet: commit and push in GitHub Desktop (data-scripts), then wait a minute. Rechecking every 20 seconds.";
+    setTimeout(checkImages, 20000);
+  };
+  img.src = DATA.check_image + "?t=" + Date.now();
+}
+checkImages();
+
+async function copyText(txt) {
+  try { await navigator.clipboard.writeText(txt); return; } catch (e) {}
+  const ta = document.createElement("textarea");
+  ta.value = txt; document.body.appendChild(ta); ta.select();
+  document.execCommand("copy"); ta.remove();
+}
+const texts = { subject: DATA.subject, preview: DATA.preview, blogTitle: DATA.blog_title, email: DATA.email, post: DATA.post };
+document.querySelectorAll("button[data-copy]").forEach(b => b.addEventListener("click", async () => {
+  await copyText(texts[b.dataset.copy]);
+  const label = b.textContent;
+  b.textContent = "Copied"; b.classList.add("done");
+  setTimeout(() => { b.textContent = label; b.classList.remove("done"); }, 1500);
+}));
+</script>
+</body></html>
