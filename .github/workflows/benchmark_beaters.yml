@@ -62,6 +62,8 @@ jobs:
             git push && break
             echo "Push rejected, rebasing onto origin/main and retrying ($i)..."
             git fetch origin main
-            git rebase origin/main
+            # Only generated outputs are committed here; if another run pushed the
+            # same kit/PDF files meanwhile, keep this run's (newer) copies.
+            git rebase -X theirs origin/main
             sleep $((RANDOM % 10 + 1))
           done
