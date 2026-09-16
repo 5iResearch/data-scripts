@@ -392,8 +392,8 @@ def build_email(copy, cdn, us, img_src, table_url, charts_url):
 
 
 def build_welcome_email(table_url, charts_url):
-    """Static-ish welcome email for the Mailchimp signup automation. The teaser
-    points at latest/teaser.png so it stays current between re-pastes."""
+    """One-time welcome email (text, PDF buttons, signal legend) in the same look
+    as the weekly email. Buttons point at the always-current *_latest.pdf files."""
     para = f'font-family:{FONT};font-size:16px;line-height:1.55;color:{INK};margin:0 0 14px;'
     legend = "".join(
         f'<tr><td style="padding:4px 10px 4px 0;"><span style="display:inline-block;min-width:44px;text-align:center;'
@@ -406,7 +406,6 @@ def build_welcome_email(table_url, charts_url):
         f'<p style="{para}">Each week you’ll get the latest list of Canadian and U.S. stocks outperforming their '
         f'benchmarks, with key stats, sectors, and whether each name is new, repeating or on a streak. '
         f'Your first report is ready below.</p>'
-        f'<p style="margin:18px 0;"><a href="{html.escape(table_url)}">{_img(f"{PAGES_BASE}/latest/teaser.png")}</a></p>'
         + _pdf_buttons(table_url, charts_url)
         + f'<p style="font-family:{FONT};font-size:13px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;'
           f'color:{MUTED};margin:18px 0 6px;">How to read the signals</p>'
