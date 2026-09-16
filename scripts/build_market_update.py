@@ -110,6 +110,7 @@ DISCLAIMER = (
 
 ISSUE_TEMPLATE = """Subject: Market, Model Portfolio, and Report Updates!
 Preview: One line that shows next to the subject in the inbox
+Header:
 Blog title:
 Date:
 
@@ -413,32 +414,35 @@ def analytics_plug():
 
 # --------------------------------------------------------------------------- assemble
 
-SECTION_EYEBROWS = {  # key: (eyebrow, title, card accent)
-    "report updates": ("Research", "Report Updates", BLUE),
-    "new coverage": ("Research", "New Coverage", GREEN),
-    "dropping coverage": ("Research", "Dropping Coverage", MUTED),
-}
+RESEARCH_ACCENTS = [  # (heading keywords, card accent) - boxed "Research" sections, kept in file order
+    (("report update", "updated report"), BLUE),
+    (("new report", "new coverage", "initiat", "adding coverage"), GREEN),
+    (("drop",), MUTED),
+]
+
+
+def research_accent(title):
+    tl = title.lower()
+    return next((accent for words, accent in RESEARCH_ACCENTS if any(w in tl for w in words)), None)
 
 
 def build_rows(meta, sections, mu_title, mu_html, report_card_src, warnings):
     rows = []
     by_key = {t.lower(): c for t, c in sections}
 
-    research = [k for k in ("report updates", "new coverage", "dropping coverage") if by_key.get(k)]
-    for i, key in enumerate(research):
-        eyebrow, title, accent = SECTION_EYEBROWS[key]
-        body = card(md_blocks(by_key[key]), left=accent)
+    research = [(t, c, research_accent(t)) for t, c in sections if c and research_accent(t)]
+    for i, (title, content, accent) in enumerate(research):
+        body = card(md_blocks(content), left=accent)
         if i == len(research) - 1:
             body += button(REPORTS_URL, "Read the latest reports", BLUE)
-        rows.append(section(eyebrow, title, body))
+        rows.append(section("Research", html.escape(title), body))
         rows.append(divider())
     if not research:
         warnings.append("No Report Updates / Coverage sections in issue.md.")
 
-    known = set(SECTION_EYEBROWS) | {"market intro"}
     for t, c in sections:
         tl = t.lower()
-        if tl in known or tl.startswith(("model portfolio", "call to action")):
+        if tl == "market intro" or research_accent(t) or tl.startswith(("model portfolio", "call to action")):
             continue
         rows.append(section("", html.escape(t), md_blocks(c)))
         rows.append(divider())
@@ -483,7 +487,25 @@ def build_rows(meta, sections, mu_title, mu_html, report_card_src, warnings):
     return "".join(rows)
 
 
-def build_email(meta, rows, date_label):
+def header_label(meta, sections, has_market_update):
+    """'Header:' from issue.md, else the Subject line, else built from what's in
+    the issue, e.g. 'Market & Report Updates' when there are no trades."""
+    if meta.get("header") or meta.get("subject"):
+        return html.escape(meta.get("header") or meta["subject"])
+    parts = []
+    if has_market_update:
+        parts.append("Market")
+    if any(t.lower().startswith("model portfolio") and re.search(r"^###", c, flags=re.M) for t, c in sections):
+        parts.append("Portfolio")
+    if any(c and research_accent(t) for t, c in sections):
+        parts.append("Report")
+    if not parts:
+        return "Updates from 5i Research"
+    joined = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " & " + parts[-1]
+    return html.escape(f"{joined} Updates")
+
+
+def build_email(meta, rows, date_label, header):
     social = "".join(
         f'<a href="{u}" target="_blank" style="display:inline-block;margin:0 6px;">'
         f'<img src="{SOCIAL_ICON.format(icon)}" width="32" height="32" alt="{name}" style="border:0;"></a>'
@@ -505,7 +527,7 @@ a[x-apple-data-detectors]{{color:inherit!important;text-decoration:none!importan
 <tr><td style="height:6px;background:{BLUE};font-size:0;line-height:0;">&nbsp;</td></tr>
 <tr><td align="center" style="padding:28px 32px 18px;border-bottom:3px solid {ORANGE};">
 <img src="{LOGO_URL}" width="240" alt="5i Research" style="display:block;width:240px;max-width:70%;height:auto;border:0;margin:0 auto 12px;">
-<p style="margin:0;font-family:{FONT};font-size:13px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:{BLUE};">Market, Portfolio &amp; Report Updates</p>
+<p style="margin:0;font-family:{FONT};font-size:13px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:{BLUE};">{header}</p>
 <p style="margin:4px 0 0;font-family:{FONT};font-size:14px;color:{MUTED};">{date_label}</p>
 </td></tr>
 <tr><td mc:edit="body" style="padding:0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
@@ -529,7 +551,9 @@ def build_post(rows):
     return f'<div class="market-update" style="max-width:660px;margin:0 auto;">\n{rows}\n</div>\n'
 
 
-def issue_date(folder, meta):
+def issue_date(folder, meta, warnings):
+    """'Date:' from issue.md, else the leading 'Sep 15' of the folder name
+    (extra words like 'Sep 30 podcast' are fine) plus the year folder above it."""
     if meta.get("date"):
         return datetime.strptime(meta["date"], "%Y-%m-%d")
     name, parent_year = os.path.basename(folder), None
@@ -537,12 +561,16 @@ def issue_date(folder, meta):
         if re.fullmatch(r"20\d\d", part):
             parent_year = int(part)
             break
-    for fmt in ("%b %d", "%B %d"):
-        try:
-            d = datetime.strptime(name.replace("Sept", "Sep"), fmt)
-            return d.replace(year=parent_year or datetime.now().year)
-        except ValueError:
-            pass
+    m = re.match(r"([A-Za-z]{3,9})\.?\s+(\d{1,2})\b", name)
+    if m:
+        for fmt in ("%b %d", "%B %d"):
+            try:
+                d = datetime.strptime(f"{m.group(1)[:3]} {m.group(2)}", fmt)
+                return d.replace(year=parent_year or datetime.now().year)
+            except ValueError:
+                pass
+    warnings.append(f"Couldn't read a date from the folder name '{name}'; used today. "
+                    "Name the folder like 'Sep 29' or add 'Date: 2026-09-29' to issue.md.")
     return datetime.now()
 
 
@@ -559,14 +587,14 @@ def main():
         return
 
     meta, sections = parse_issue(issue_md)
-    when = issue_date(folder, meta)
+    warnings = []
+    when = issue_date(folder, meta, warnings)
     date_str = when.strftime("%Y-%m-%d")
     date_label = f"{when:%B} {when.day}, {when.year}"
     build_dir = os.path.join(folder, "_build")
     shutil.rmtree(build_dir, ignore_errors=True)
     os.makedirs(build_dir, exist_ok=True)
     img_prefix = f"{PAGES_BASE}/{date_str}"
-    warnings = []
 
     docs = [d for d in glob.glob(os.path.join(folder, "Market Update*.docx"))
             if not os.path.basename(d).startswith("~$")]
@@ -587,7 +615,8 @@ def main():
         report_card_src = f"{img_prefix}/report-card.png"
 
     rows = build_rows(meta, sections, mu_title, mu_html, report_card_src, warnings)
-    email_html = build_email(meta, rows, date_label)
+    has_mu = bool(mu_html or any(t.lower() == "market intro" and c for t, c in sections))
+    email_html = build_email(meta, rows, date_label, header_label(meta, sections, has_mu))
     LAYOUT["web"] = True
     try:
         post_html = build_post(build_rows(meta, sections, mu_title, mu_html, report_card_src, []))

@@ -131,7 +131,7 @@ def long_date(d):
 
 def market_sentence(label, bench, s):
     if not s["count"]:
-        return f"No {label} stocks made a fresh six-month high relative to the {bench} this week."
+        return f"No {label} stocks made a fresh six-month high relative to the {bench} in the latest screen."
     lead = s["leader"]
     parts = [
         f"In {label}, {s['count']} stocks made a fresh six-month high relative to the {bench}"
@@ -150,7 +150,7 @@ def build_copy(cdn, us, as_of):
     total = c["count"] + u["count"]
     leaders = [s["leader"]["ticker"] for s in (c, u) if s["leader"]]
     intro = [
-        f"This week's Benchmark Beaters screen found {total} Canadian and U.S. stocks outperforming "
+        f"The latest Benchmark Beaters screen (as of {long_date(as_of)}) found {total} Canadian and U.S. stocks outperforming "
         f"their benchmarks, each hitting a new six-month relative high in the last five trading days.",
         market_sentence("Canada", "TSX Composite", c),
         market_sentence("the U.S.", "S&P 500", u),
@@ -232,7 +232,7 @@ def render_teaser(cdn, us, as_of, path):
         lax.imshow(logo)
         lax.axis("off")
     fig.text(0.95, 0.965, "BENCHMARK BEATERS", fontsize=26, fontweight="bold", color=INK, ha="right", va="top")
-    fig.text(0.95, 0.928, f"Stocks at 6-month relative highs  ·  Week of {long_date(as_of)}",
+    fig.text(0.95, 0.928, f"Stocks at 6-month relative highs  ·  As of {long_date(as_of)}",
              fontsize=13, color=MUTED, ha="right", va="top")
     fig.add_artist(plt.Line2D([0.05, 0.95], [0.905, 0.905], color=ORANGE, lw=3))
 

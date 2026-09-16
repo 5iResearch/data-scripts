@@ -46,11 +46,17 @@ jobs:
         run: |
           python scripts/generate_benchmark_beaters.py
 
+      # Same run as the PDF, so the blog/email kit (teaser, intro, tables) always
+      # matches the Benchmark_Beaters_latest.pdf it links to.
+      - name: Build blog/email kit
+        run: |
+          python scripts/generate_bb_weekly_kit.py
+
       - name: Commit outputs
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add outputs/benchmark-beaters/
+          git add outputs/benchmark-beaters/ outputs/benchmark-beaters-weekly/
           git diff --cached --quiet || git commit -m "chore: update benchmark beaters output [skip ci]"
           for i in 1 2 3 4 5; do
             git push && break
