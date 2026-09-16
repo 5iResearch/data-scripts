@@ -1,0 +1,73 @@
+name: Weekly Benchmark Beaters Blog/Email Kit
+
+on:
+  schedule:
+    - cron: "0 13 * * 5"   # Fridays 13:00 UTC, after the daily Benchmark Beaters run (11:00 UTC)
+  workflow_dispatch:
+    inputs:
+      table_url:
+        description: "Link to the hosted Benchmark Beaters PDF (blank = placeholder)"
+        required: false
+      charts_url:
+        description: "Link to the hosted chart pack PDF (blank = placeholder)"
+        required: false
+      create_draft:
+        description: "Create a Mailchimp draft campaign"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-kit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Build weekly kit
+        env:
+          TABLE_URL: ${{ inputs.table_url }}
+          CHARTS_URL: ${{ inputs.charts_url }}
+        run: |
+          args=()
+          [ -n "$TABLE_URL" ] && args+=(--table-url "$TABLE_URL")
+          [ -n "$CHARTS_URL" ] && args+=(--charts-url "$CHARTS_URL")
+          python scripts/generate_bb_weekly_kit.py "${args[@]}"
+
+      - name: Commit outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add outputs/benchmark-beaters-weekly/
+          git diff --cached --quiet || git commit -m "chore: update benchmark beaters weekly kit [skip ci]"
+          for i in 1 2 3 4 5; do
+            git push && break
+            echo "Push rejected, rebasing onto origin/main and retrying ($i)..."
+            git fetch origin main
+            git rebase origin/main
+            sleep $((RANDOM % 10 + 1))
+          done
+
+      - name: Create Mailchimp draft
+        if: github.event_name == 'schedule' || inputs.create_draft
+        env:
+          MAILCHIMP_API_KEY: ${{ secrets.MAILCHIMP_API_KEY }}
+          MAILCHIMP_LIST_ID: ${{ secrets.MAILCHIMP_LIST_ID }}
+          MAILCHIMP_REPLY_TO: ${{ secrets.MAILCHIMP_REPLY_TO }}
+          MAILCHIMP_SEGMENT_ID: ${{ secrets.MAILCHIMP_SEGMENT_ID }}
+        run: |
+          python scripts/mailchimp_bb_draft.py

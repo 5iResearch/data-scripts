@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Benchmark Beaters Kit</title>
+<style>
+:root { --blue:#1F79BE; --orange:#C67A29; --ink:#363636; --muted:#6b6b6b; --bg:#F2F4F6; --card:#fff; --rule:#dde1e5; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 Arial,Helvetica,sans-serif; }
+main { max-width:980px; margin:0 auto; padding:24px 16px 60px; }
+h1 { margin:0 0 4px; font-size:24px; } h2 { margin:0 0 4px; font-size:18px; }
+.sub { color:var(--muted); margin:0 0 20px; }
+section { background:var(--card); border:1px solid var(--rule); border-radius:8px; padding:18px; margin:0 0 16px; }
+.step { color:var(--orange); font-weight:bold; text-transform:uppercase; font-size:12px; letter-spacing:.05em; }
+.help { color:var(--muted); margin:2px 0 12px; }
+label { display:block; font-weight:bold; margin:10px 0 4px; }
+input { width:100%; padding:9px 10px; border:1px solid var(--rule); border-radius:5px; font:inherit; }
+.row { display:flex; gap:8px; align-items:center; margin:6px 0; flex-wrap:wrap; }
+.row code { flex:1 1 300px; background:var(--bg); padding:8px 10px; border-radius:5px; font:14px Arial,sans-serif; overflow-wrap:anywhere; }
+button, .btn { background:var(--blue); color:#fff; border:0; border-radius:5px; padding:9px 14px; font:bold 14px Arial,sans-serif; cursor:pointer; text-decoration:none; white-space:nowrap; }
+button.done { background:#2e8b57; }
+.btn.alt { background:var(--orange); }
+iframe { width:100%; height:560px; border:1px solid var(--rule); border-radius:5px; margin-top:10px; background:#fff; }
+.warn { color:#a22a2a; font-weight:bold; }
+ol { margin:6px 0 0 18px; padding:0; }
+</style></head>
+<body><main>
+<h1>Benchmark Beaters Weekly Kit</h1>
+<p class="sub">Data as of %%AS_OF%% &middot; %%N_CDN%% Canadian, %%N_US%% U.S. names</p>
+
+<section>
+<div class="step">Step 1</div><h2>Paste your PDF links</h2>
+<p class="help">After uploading this week's two PDFs, paste their links here. Every copy button below includes them.</p>
+<label for="t">Benchmark Beaters table PDF</label>
+<input id="t" placeholder="https://www.5iresearch.ca/..." value="%%TABLE_URL%%">
+<label for="c">Relative performance chart pack PDF</label>
+<input id="c" placeholder="https://www.5iresearch.ca/..." value="%%CHARTS_URL%%">
+<p id="linkwarn" class="warn" hidden>Paste both links before copying the HTML.</p>
+</section>
+
+<section>
+<div class="step">Step 2</div><h2>Blog post</h2>
+<ol><li>Copy the title into the post title field.</li>
+<li>In the Post Body editor, click the <b>HTML</b> button (top toolbar), paste the body, then click <b>Update</b>.</li></ol>
+<div class="row"><code id="blogTitle"></code><button data-copy="blogTitle">Copy title</button></div>
+<div class="row"><code>Blog post body (HTML)</code><button data-copy="post">Copy body HTML</button></div>
+<iframe id="postPreview" title="Blog post preview"></iframe>
+</section>
+
+<section>
+<div class="step">Step 3</div><h2>Mailchimp email</h2>
+<ol><li>Create &rarr; Email &rarr; <b>Code your own</b> &rarr; <b>Paste in code</b>, then paste the email HTML.</li>
+<li>Copy the subject and preview text into the campaign, choose the Benchmark Beaters audience or tag, and send yourself a test.</li></ol>
+<div class="row"><code id="subject"></code><button data-copy="subject">Copy subject</button></div>
+<div class="row"><code id="preview"></code><button data-copy="preview">Copy preview text</button></div>
+<div class="row"><code>Email (HTML)</code><button data-copy="email">Copy email HTML</button></div>
+<iframe id="emailPreview" title="Email preview"></iframe>
+</section>
+
+<section>
+<h2>Teaser image</h2>
+<p class="help">Already included in both HTML versions. Download it if you want to post it on social media or upload it to the blog.</p>
+<div class="row"><a class="btn alt" href="teaser.png" download="Benchmark_Beaters_Teaser_%%AS_OF%%.png">Download teaser.png</a></div>
+</section>
+</main>
+<script>
+const DATA = %%DATA_JSON%%;
+const [PH_T, PH_C] = DATA.placeholders;
+const $ = id => document.getElementById(id);
+const escAttr = u => u.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+
+function fill(s) {
+  const t = $("t").value.trim() || PH_T, c = $("c").value.trim() || PH_C;
+  return s.split(PH_T).join(escAttr(t)).split(PH_C).join(escAttr(c));
+}
+function texts() {
+  return { blogTitle: DATA.blog_title, subject: DATA.email_subject, preview: DATA.preview_text,
+           post: fill(DATA.post), email: fill(DATA.email) };
+}
+function render() {
+  const x = texts();
+  $("blogTitle").textContent = x.blogTitle;
+  $("subject").textContent = x.subject;
+  $("preview").textContent = x.preview;
+  $("postPreview").srcdoc = x.post;
+  $("emailPreview").srcdoc = x.email;
+}
+["t", "c"].forEach(id => $(id).addEventListener("input", render));
+
+async function copyText(txt) {
+  try { await navigator.clipboard.writeText(txt); return; } catch (e) {}
+  const ta = document.createElement("textarea");
+  ta.value = txt; document.body.appendChild(ta); ta.select();
+  document.execCommand("copy"); ta.remove();
+}
+document.querySelectorAll("button[data-copy]").forEach(b => b.addEventListener("click", async () => {
+  const key = b.dataset.copy;
+  if ((key === "post" || key === "email") && (!$("t").value.trim() || !$("c").value.trim())) {
+    $("linkwarn").hidden = false; $("t").focus(); return;
+  }
+  $("linkwarn").hidden = true;
+  await copyText(texts()[key]);
+  const label = b.textContent;
+  b.textContent = "Copied"; b.classList.add("done");
+  setTimeout(() => { b.textContent = label; b.classList.remove("done"); }, 1500);
+}));
+render();
+</script>
+</body></html>
