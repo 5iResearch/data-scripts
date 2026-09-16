@@ -9,7 +9,8 @@ ready-to-paste kit to outputs/benchmark-beaters-weekly/<date>/:
                  teased as "+N more in the full report"
   post.html    - blog body: intro, teaser image, unlinked "click here" lines
                  to link to the PDFs in the blog editor, top-name HTML
-                 tables (real text, for SEO) and disclosure
+                 tables (real text, for SEO), Mailchimp signup form and
+                 disclosure
   email.html   - full Mailchimp "code your own" email (inline styles, merge
                  tags for preview text / unsubscribe / address)
   meta.json    - blog title, email subject, preview text, headline stats
@@ -296,7 +297,34 @@ BLOG_DOWNLOADS = (
 )
 
 
-def _body(copy, cdn, us, img, downloads):
+# Mailchimp embedded form from the original weekly posts, trimmed to the parts
+# that matter: the form action, EMAIL field, hidden tag 487875 (puts signups on
+# the recurring Benchmark Beaters email path) and the bot honeypot field. The
+# SMS/validation scripts are dropped; without them Mailchimp's own confirmation
+# page opens in a new tab.
+MC_FORM_ACTION = ("https://5iresearch.us2.list-manage.com/subscribe/post"
+                  "?u=70a01e3dae2f947876a36d9c2&amp;id=b9dc6cf862&amp;f_id=006a80e1f0")
+MC_TAG_ID = "487875"
+MC_HONEYPOT = "b_70a01e3dae2f947876a36d9c2_b9dc6cf862"
+
+BLOG_SIGNUP = f"""
+<hr style="border:0;border-top:1px solid {RULE};margin:28px 0 20px;">
+<h2 style="font-family:{FONT};color:{INK};margin:0 0 8px;">&#128236; Get Benchmark Beaters in your inbox every week</h2>
+<p style="font-family:{FONT};font-size:16px;line-height:1.55;color:{INK};margin:0 0 14px;">Enter your email and we'll send you the full Benchmark Beaters table and chart pack each week, so you always know which Canadian and U.S. stocks are beating their benchmarks.</p>
+<div id="mc_embed_signup" style="background:{BAND};border:1px solid {RULE};border-radius:6px;padding:18px;max-width:560px;">
+<form id="mc-embedded-subscribe-form" name="mc-embedded-subscribe-form" action="{MC_FORM_ACTION}" method="post" target="_blank">
+<label for="mce-EMAIL" style="display:block;font-family:{FONT};font-weight:bold;color:{INK};margin:0 0 6px;">Email Address *</label>
+<input id="mce-EMAIL" type="email" name="EMAIL" value="" required="required" placeholder="you@example.com" style="width:100%;max-width:360px;padding:10px;border:1px solid #c9ced3;border-radius:4px;font-size:15px;box-sizing:border-box;">
+<input type="hidden" name="tags" value="{MC_TAG_ID}">
+<div style="position:absolute;left:-5000px;" aria-hidden="true"><input type="text" name="{MC_HONEYPOT}" tabindex="-1" value=""></div>
+<input id="mc-embedded-subscribe" type="submit" name="subscribe" value="Subscribe" style="margin-top:10px;background:{ORANGE};color:#ffffff;border:0;border-radius:4px;padding:11px 24px;font-family:{FONT};font-size:15px;font-weight:bold;cursor:pointer;">
+</form>
+</div>
+<p style="font-family:{FONT};font-size:13px;color:{MUTED};margin:8px 0 0;"><em>After clicking Subscribe, a Mailchimp confirmation page opens. Watch your inbox for the next report.</em></p>
+"""
+
+
+def _body(copy, cdn, us, img, downloads, signup=""):
     paras = "".join(
         f'<p style="font-family:{FONT};font-size:16px;line-height:1.55;color:{INK};margin:0 0 14px;">'
         f'{html.escape(p)}</p>' for p in copy["intro"]
@@ -307,6 +335,7 @@ def _body(copy, cdn, us, img, downloads):
         + downloads
         + _table(cdn, "Top Canadian Benchmark Beaters", BLUE)
         + _table(us, "Top U.S. Benchmark Beaters", ORANGE)
+        + signup
         + f'<p style="font-family:{FONT};font-size:16px;line-height:1.55;color:{INK};margin:22px 0 14px;">'
           f'Want to know which of these we would actually buy? '
           f'<a href="{TRIAL_URL}" style="color:{BLUE};font-weight:bold;">Start your 14-day free trial of 5i Research</a>.</p>'
@@ -321,7 +350,7 @@ def _img(img_src):
 
 
 def build_post(copy, cdn, us, img_src):
-    return f'<div class="bb-weekly">\n{_body(copy, cdn, us, _img(img_src), BLOG_DOWNLOADS)}\n</div>\n'
+    return f'<div class="bb-weekly">\n{_body(copy, cdn, us, _img(img_src), BLOG_DOWNLOADS, BLOG_SIGNUP)}\n</div>\n'
 
 
 def build_kit_page(copy, post_html, email_html, table_url, charts_url, n_cdn, n_us):
