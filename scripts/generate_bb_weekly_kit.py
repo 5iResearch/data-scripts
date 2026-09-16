@@ -17,6 +17,10 @@ ready-to-paste kit to outputs/benchmark-beaters-weekly/<date>/:
   kit.html     - open this each week: paste the two PDF links once, then
                  one-click copy of title / body / subject / email HTML
 
+--welcome PATH writes the one-time welcome email for the Mailchimp signup
+automation instead: same look, buttons pointing at the always-current
+*_latest.pdf files, so it never needs re-editing.
+
 The PDFs are uploaded through the blog editor, so their links only exist once
 the post is up. The email's links come from --table-url / --charts-url or
 the boxes in kit.html; otherwise it keeps {{TABLE_PDF_URL}} /
@@ -46,8 +50,13 @@ OUTPUT_ROOT = os.path.join(REPO_ROOT, "outputs", "benchmark-beaters-weekly")
 LOGO_PATH = os.path.join(REPO_ROOT, "assets", "Logo_Transparent_1200px.png")
 KIT_TEMPLATE = os.path.join(REPO_ROOT, "templates", "bb_weekly_kit.html")
 PAGES_BASE = "https://5iresearch.github.io/data-scripts/outputs/benchmark-beaters-weekly"
+LATEST_TABLE_PDF = "https://5iresearch.github.io/data-scripts/outputs/benchmark-beaters/Benchmark_Beaters_latest.pdf"
+LATEST_CHARTS_PDF = ("https://5iresearch.github.io/data-scripts/outputs/relative-performance-charts/"
+                     "Relative_Performance_Charts_latest.pdf")
 
 TRIAL_URL = "https://www.5iresearch.ca/bb"
+# trial link used by the existing Mailchimp welcome automation
+WELCOME_TRIAL_URL = "https://www.5iresearch.ca/index.php?p=qt_redeem_code.NewAccount&amp;code=BenchmarkBeaters"
 TABLE_PLACEHOLDER = "{{TABLE_PDF_URL}}"
 CHARTS_PLACEHOLDER = "{{CHARTS_PDF_URL}}"
 
@@ -369,11 +378,52 @@ def build_kit_page(copy, post_html, email_html, table_url, charts_url, n_cdn, n_
     return page
 
 
+def _pdf_buttons(table_url, charts_url):
+    return (f'<p style="text-align:center;margin:22px 0;">'
+            f'{_button(table_url, "Download the Full Table (PDF)", BLUE)}'
+            f'{_button(charts_url, "Download the Chart Pack (PDF)", ORANGE)}</p>')
+
+
 def build_email(copy, cdn, us, img_src, table_url, charts_url):
     img = f'<a href="{html.escape(table_url)}">{_img(img_src)}</a>'
-    buttons = (f'<p style="text-align:center;margin:22px 0;">'
-               f'{_button(table_url, "Download the Full Table (PDF)", BLUE)}'
-               f'{_button(charts_url, "Download the Chart Pack (PDF)", ORANGE)}</p>')
+    subtitle = f"{long_date(datetime.strptime(copy['as_of'], '%Y-%m-%d'))} &middot; 5i Research"
+    return _email_shell("Benchmark Beaters Weekly", subtitle,
+                        _body(copy, cdn, us, img, _pdf_buttons(table_url, charts_url)))
+
+
+def build_welcome_email(table_url, charts_url):
+    """Static-ish welcome email for the Mailchimp signup automation. The teaser
+    points at latest/teaser.png so it stays current between re-pastes."""
+    para = f'font-family:{FONT};font-size:16px;line-height:1.55;color:{INK};margin:0 0 14px;'
+    legend = "".join(
+        f'<tr><td style="padding:4px 10px 4px 0;"><span style="display:inline-block;min-width:44px;text-align:center;'
+        f'background:{BADGE[k]};color:#ffffff;font-family:{FONT};font-size:11px;font-weight:bold;padding:3px 6px;'
+        f'border-radius:3px;">{k}</span></td><td style="font-family:{FONT};font-size:14px;color:{INK};">{v}</td></tr>'
+        for k, v in (("NEW", "New to the list this week"), ("RPT", "Repeat: on the list 2–3 weeks"),
+                     ("STRK", "Streak: on the list 4+ weeks")))
+    body = (
+        f'<h2 style="font-family:{FONT};font-size:26px;color:{INK};margin:0 0 12px;">Welcome to Benchmark Beaters!</h2>'
+        f'<p style="{para}">Each week you’ll get the latest list of Canadian and U.S. stocks outperforming their '
+        f'benchmarks, with key stats, sectors, and whether each name is new, repeating or on a streak. '
+        f'Your first report is ready below.</p>'
+        f'<p style="margin:18px 0;"><a href="{html.escape(table_url)}">{_img(f"{PAGES_BASE}/latest/teaser.png")}</a></p>'
+        + _pdf_buttons(table_url, charts_url)
+        + f'<p style="font-family:{FONT};font-size:13px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;'
+          f'color:{MUTED};margin:18px 0 6px;">How to read the signals</p>'
+          f'<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 18px;">{legend}</table>'
+          f'<p style="{para}">Look out for the next report in your inbox each week.</p>'
+          f'<p style="{para}">Want to know which of these we would actually buy? '
+          f'<a href="{WELCOME_TRIAL_URL}" style="color:{BLUE};font-weight:bold;">Start your 14-day free trial of 5i Research</a>.</p>'
+          f'<p style="font-family:{FONT};font-size:17px;color:{INK};margin:22px 0 0;">With precision and insight,<br>'
+          f'<strong style="font-size:20px;color:{BLUE};">The 5i Research Team</strong></p>'
+          f'<p style="font-family:{FONT};font-size:12px;line-height:1.5;color:{MUTED};font-style:italic;margin:18px 0 0;">'
+          f'{html.escape(DISCLOSURE)}</p>'
+    )
+    return _email_shell("Benchmark Beaters", "Canadian &amp; U.S. stocks beating their benchmarks &middot; 5i Research",
+                        body)
+
+
+def _email_shell(title, subtitle, body):
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>*|MC:SUBJECT|*</title></head>
@@ -383,11 +433,11 @@ def build_email(copy, cdn, us, img_src, table_url, charts_url):
 <tr><td align="center" style="padding:24px 12px;">
 <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:#ffffff;">
 <tr><td style="padding:18px 20px;border-bottom:3px solid {ORANGE};font-family:{FONT};">
-<span style="font-size:22px;font-weight:bold;color:{INK};">Benchmark Beaters Weekly</span><br>
-<span style="font-size:13px;color:{MUTED};">{html.escape(long_date(datetime.strptime(copy['as_of'], '%Y-%m-%d')))} &middot; 5i Research</span>
+<span style="font-size:22px;font-weight:bold;color:{INK};">{title}</span><br>
+<span style="font-size:13px;color:{MUTED};">{subtitle}</span>
 </td></tr>
 <tr><td style="padding:22px 20px;" mc:edit="body">
-{_body(copy, cdn, us, img, buttons)}
+{body}
 </td></tr>
 <tr><td style="padding:16px 20px;background:#F6F8FA;font-family:{FONT};font-size:11px;line-height:1.5;color:{MUTED};text-align:center;">
 You're receiving this because you subscribed to Benchmark Beaters at 5iresearch.ca.<br>
@@ -409,7 +459,14 @@ def main():
     ap.add_argument("--table-url", default=TABLE_PLACEHOLDER, help="Link for the Benchmark Beaters PDF")
     ap.add_argument("--charts-url", default=CHARTS_PLACEHOLDER, help="Link for the chart pack PDF")
     ap.add_argument("--image-url", help="Hosted teaser.png URL (default: GitHub Pages copy)")
+    ap.add_argument("--welcome", metavar="PATH", help="Write the one-time welcome email to PATH and exit")
     args = ap.parse_args()
+
+    if args.welcome:
+        with open(args.welcome, "w", encoding="utf-8") as f:
+            f.write(build_welcome_email(LATEST_TABLE_PDF, LATEST_CHARTS_PDF))
+        print(f"Saved welcome email: {args.welcome}")
+        return
 
     xlsx, date_str = latest_workbook(args.date)
     as_of = datetime.strptime(date_str, "%Y-%m-%d")
