@@ -7,10 +7,9 @@ ready-to-paste kit to outputs/benchmark-beaters-weekly/<date>/:
 
   teaser.png   - top names from each table in 5i colours, rest of the list
                  teased as "+N more in the full report"
-  post.html    - blog body: intro, teaser image, a download box whose two
-                 buttons get linked to the PDFs in the blog editor, top-name HTML
-                 tables (real text, for SEO), Mailchimp signup form and
-                 disclosure
+  post.html    - blog body: intro, teaser image, top-name HTML tables (real
+                 text, for SEO) and the Mailchimp signup form. No PDF links:
+                 signing up is how readers get the reports.
   email.html   - full Mailchimp "code your own" email (inline styles, merge
                  tags for preview text / unsubscribe / address)
   meta.json    - blog title, email subject, preview text, headline stats
@@ -21,8 +20,7 @@ ready-to-paste kit to outputs/benchmark-beaters-weekly/<date>/:
 automation instead: same look, buttons pointing at the always-current
 *_latest.pdf files, so it never needs re-editing.
 
-The PDFs are uploaded through the blog editor, so their links only exist once
-the post is up. The email's links come from --table-url / --charts-url or
+The email's PDF links (subscribers only) come from --table-url / --charts-url or
 the boxes in kit.html; otherwise it keeps {{TABLE_PDF_URL}} /
 {{CHARTS_PDF_URL}} placeholders to replace before sending.
 """
@@ -163,8 +161,6 @@ def build_copy(cdn, us, as_of):
         f"their benchmarks, each hitting a new six-month relative high in the last five trading days.",
         market_sentence("Canada", "TSX Composite", c),
         market_sentence("the U.S.", "S&P 500", u),
-        "Download the full table for every name, and the chart pack to see how each one's "
-        "relative strength has built over six months and ten years.",
     ]
     return {
         "as_of": as_of.strftime("%Y-%m-%d"),
@@ -173,6 +169,7 @@ def build_copy(cdn, us, as_of):
         "preview_text": (f"{c['count']} Canadian and {u['count']} U.S. names at six-month relative highs. "
                          f"Full table and charts inside."),
         "intro": intro,
+        "total": total,
         "stats": {"cdn": {k: v for k, v in c.items() if k != "leader"},
                   "us": {k: v for k, v in u.items() if k != "leader"}},
     }
@@ -268,7 +265,7 @@ def _button(url, label, bg):
             f'padding:12px 22px;border-radius:4px;margin:4px 6px;">{label}</a>')
 
 
-def _table(rows, title, color):
+def _table(rows, title, color, gated=False):
     head_cells = "".join(
         f'<th style="text-align:{a};padding:8px 10px;border-bottom:2px solid {color};font-size:12px;'
         f'color:{MUTED};text-transform:uppercase;">{h}</th>'
@@ -286,8 +283,10 @@ def _table(rows, title, color):
             f'</tr>'
         )
     more = len(rows) - min(len(rows), TOP_N)
-    more_line = (f'<p style="margin:6px 0 0;font-size:13px;color:{ORANGE};font-style:italic;">'
-                 f'+ {more} more in the full report</p>' if more > 0 else "")
+    signup_link = (f', <a href="#{SIGNUP_ANCHOR}" style="color:{ORANGE};font-weight:bold;">'
+                   f'sign up free to get it</a>') if gated else ""
+    more_line = (f'<p style="margin:6px 0 0;font-family:{FONT};font-size:13px;color:{ORANGE};font-style:italic;">'
+                 f'+ {more} more in the full report{signup_link}</p>' if more > 0 else "")
     return (
         f'<h3 style="font-family:{FONT};color:{INK};margin:24px 0 8px;">{title}</h3>'
         f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
@@ -296,30 +295,25 @@ def _table(rows, title, color):
     )
 
 
-BLOG_TABLE_ANCHOR = "#link-table-pdf"
-BLOG_CHARTS_ANCHOR = "#link-charts-pdf"
+SIGNUP_ANCHOR = "bb-signup"
 
 
-def _blog_button(anchor, label, bg):
-    return (f'<a href="{anchor}" target="_blank" style="display:inline-block;background:{bg};color:#ffffff;'
-            f'font-family:{FONT};font-size:16px;font-weight:bold;text-decoration:none;padding:13px 24px;'
-            f'border-radius:5px;margin:6px 8px;">{label}</a>')
-
-
-BLOG_DOWNLOADS = (
-    # Download box with two button-style links, no tables (the blog editor draws
-    # resize outlines around tables). The placeholder hrefs are replaced in the
-    # blog editor: click a button's text -> link button -> upload the PDF.
-    f'<div style="background:{BAND};border:1px solid {RULE};border-top:4px solid {BLUE};border-radius:6px;'
-    f'padding:18px 16px 14px;margin:20px 0 24px;text-align:center;">'
-    f'<p style="font-family:{FONT};font-size:19px;font-weight:bold;color:{INK};margin:0 0 4px;">'
-    f'Get the full reports</p>'
-    f'<p style="font-family:{FONT};font-size:14px;color:{MUTED};margin:0 0 8px;">'
-    f'Every name, sector and signal, plus six-month and ten-year relative performance charts.</p>'
-    f'{_blog_button(BLOG_TABLE_ANCHOR, "&#128202;&nbsp; Full Table (PDF)", BLUE)}'
-    f'{_blog_button(BLOG_CHARTS_ANCHOR, "&#128200;&nbsp; Chart Pack (PDF)", ORANGE)}'
-    f'</div>'
-)
+def blog_teaser_cta(total):
+    """The blog doesn't give the PDFs away: this box sends readers to the signup
+    form at the bottom, which triggers the welcome email with the reports."""
+    return (
+        f'<div style="background:{BAND};border:1px solid {RULE};border-top:4px solid {ORANGE};border-radius:6px;'
+        f'padding:18px 16px 16px;margin:20px 0 24px;text-align:center;">'
+        f'<p style="font-family:{FONT};font-size:19px;font-weight:bold;color:{INK};margin:0 0 4px;">'
+        f'&#128274; Get the full report, free</p>'
+        f'<p style="font-family:{FONT};font-size:15px;line-height:1.5;color:{MUTED};margin:0 0 12px;">'
+        f'All {total} names with sectors, market caps, returns and New / Repeat / Streak signals, '
+        f'plus the relative performance chart pack, sent straight to your inbox.</p>'
+        f'<a href="#{SIGNUP_ANCHOR}" style="display:inline-block;background:{ORANGE};color:#ffffff;'
+        f'font-family:{FONT};font-size:16px;font-weight:bold;text-decoration:none;padding:13px 26px;'
+        f'border-radius:5px;">Sign up to get the reports</a>'
+        f'</div>'
+    )
 
 
 # Mailchimp embedded form from the original weekly posts, trimmed to the parts
@@ -334,8 +328,8 @@ MC_HONEYPOT = "b_70a01e3dae2f947876a36d9c2_b9dc6cf862"
 
 BLOG_SIGNUP = f"""
 <hr style="border:0;border-top:1px solid {RULE};margin:28px 0 20px;">
-<h2 style="font-family:{FONT};color:{INK};margin:0 0 8px;">&#128236; Get Benchmark Beaters in your inbox every week</h2>
-<p style="font-family:{FONT};font-size:16px;line-height:1.55;color:{INK};margin:0 0 14px;">Enter your email and we'll send you the full Benchmark Beaters table and chart pack each week, so you always know which Canadian and U.S. stocks are beating their benchmarks.</p>
+<h2 id="{SIGNUP_ANCHOR}" style="font-family:{FONT};color:{INK};margin:0 0 8px;"><a name="{SIGNUP_ANCHOR}"></a>&#128236; Get the full Benchmark Beaters report, free</h2>
+<p style="font-family:{FONT};font-size:16px;line-height:1.55;color:{INK};margin:0 0 14px;">Enter your email and we'll send you this week's full Benchmark Beaters table and relative performance chart pack right away, then a fresh report every week, so you always know which Canadian and U.S. stocks are beating their benchmarks.</p>
 <div id="mc_embed_signup" style="background:{BAND};border:1px solid {RULE};border-radius:6px;padding:18px;max-width:560px;">
 <form id="mc-embedded-subscribe-form" name="mc-embedded-subscribe-form" action="{MC_FORM_ACTION}" method="post" target="_blank">
 <label for="mce-EMAIL" style="display:block;font-family:{FONT};font-weight:bold;color:{INK};margin:0 0 6px;">Email Address *</label>
@@ -345,22 +339,28 @@ BLOG_SIGNUP = f"""
 <input id="mc-embedded-subscribe" type="submit" name="subscribe" value="Subscribe" style="margin-top:10px;background:{ORANGE};color:#ffffff;border:0;border-radius:4px;padding:11px 24px;font-family:{FONT};font-size:15px;font-weight:bold;cursor:pointer;">
 </form>
 </div>
-<p style="font-family:{FONT};font-size:13px;color:{MUTED};margin:8px 0 0;"><em>After clicking Subscribe, a Mailchimp confirmation page opens. Watch your inbox for the next report.</em></p>
+<p style="font-family:{FONT};font-size:13px;color:{MUTED};margin:8px 0 0;"><em>After clicking Subscribe, a Mailchimp confirmation page opens. Check your inbox for the full report.</em></p>
 """
 
 
-def _body(copy, cdn, us, img, downloads, signup=""):
+EMAIL_CLOSING = ("Download the full table for every name, and the chart pack to see how each one's "
+                 "relative strength has built over six months and ten years.")
+
+
+def _body(copy, cdn, us, img, downloads, blog=False):
+    closing = (f"Want the full list? Sign up below and we'll email you the complete table of all "
+               f"{copy['total']} names, plus the chart pack, free." if blog else EMAIL_CLOSING)
     paras = "".join(
         f'<p style="font-family:{FONT};font-size:16px;line-height:1.55;color:{INK};margin:0 0 14px;">'
-        f'{html.escape(p)}</p>' for p in copy["intro"]
+        f'{html.escape(p)}</p>' for p in copy["intro"] + [closing]
     )
     return (
         paras
         + f'<p style="margin:18px 0;">{img}</p>'
         + downloads
-        + _table(cdn, "Top Canadian Benchmark Beaters", BLUE)
-        + _table(us, "Top U.S. Benchmark Beaters", ORANGE)
-        + signup
+        + _table(cdn, "Top Canadian Benchmark Beaters", BLUE, gated=blog)
+        + _table(us, "Top U.S. Benchmark Beaters", ORANGE, gated=blog)
+        + (BLOG_SIGNUP if blog else "")
         + f'<p style="font-family:{FONT};font-size:16px;line-height:1.55;color:{INK};margin:22px 0 14px;">'
           f'Want to know which of these we would actually buy? '
           f'<a href="{TRIAL_URL}" style="color:{BLUE};font-weight:bold;">Start your 14-day free trial of 5i Research</a>.</p>'
@@ -375,7 +375,8 @@ def _img(img_src):
 
 
 def build_post(copy, cdn, us, img_src):
-    return f'<div class="bb-weekly">\n{_body(copy, cdn, us, _img(img_src), BLOG_DOWNLOADS, BLOG_SIGNUP)}\n</div>\n'
+    body = _body(copy, cdn, us, _img(img_src), blog_teaser_cta(copy["total"]), blog=True)
+    return f'<div class="bb-weekly">\n{body}\n</div>\n'
 
 
 def build_kit_page(copy, post_html, email_html, table_url, charts_url, n_cdn, n_us):
