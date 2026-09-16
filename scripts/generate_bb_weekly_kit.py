@@ -357,7 +357,7 @@ def build_email(copy, cdn, us, img_src, table_url, charts_url):
 <span style="font-size:22px;font-weight:bold;color:{INK};">Benchmark Beaters Weekly</span><br>
 <span style="font-size:13px;color:{MUTED};">{html.escape(long_date(datetime.strptime(copy['as_of'], '%Y-%m-%d')))} &middot; 5i Research</span>
 </td></tr>
-<tr><td style="padding:22px 20px;">
+<tr><td style="padding:22px 20px;" mc:edit="body">
 {_body(copy, cdn, us, img, buttons)}
 </td></tr>
 <tr><td style="padding:16px 20px;background:#F6F8FA;font-family:{FONT};font-size:11px;line-height:1.5;color:{MUTED};text-align:center;">
@@ -415,7 +415,8 @@ def main():
 
     latest_dir = os.path.join(OUTPUT_ROOT, "latest")
     shutil.rmtree(latest_dir, ignore_errors=True)
-    shutil.copytree(out_dir, latest_dir)
+    # dirs_exist_ok: on Windows rmtree can't remove a folder that's open elsewhere
+    shutil.copytree(out_dir, latest_dir, dirs_exist_ok=True)
     print(f"Saved kit: {out_dir}")
 
 

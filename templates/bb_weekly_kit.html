@@ -38,19 +38,18 @@ ol { margin:6px 0 0 18px; padding:0; }
 </section>
 
 <section>
-<div class="step">Step 2</div><h2>Grab the PDF links from the live post</h2>
-<p class="help">On the published blog post, right-click each <b>click here</b> &rarr; <b>Copy link address</b>, and paste it below. The email's buttons use these links.</p>
-<label for="t">Benchmark Beaters table PDF</label>
-<input id="t" placeholder="Right-click the first click here, then Copy link address" value="%%TABLE_URL%%">
-<label for="c">Relative performance chart pack PDF</label>
-<input id="c" placeholder="Right-click the second click here, then Copy link address" value="%%CHARTS_URL%%">
-<p id="linkwarn" class="warn" hidden>Paste both links before copying the email HTML.</p>
-</section>
-
-<section>
-<div class="step">Step 3</div><h2>Mailchimp email</h2>
+<div class="step">Step 2</div><h2>Mailchimp email</h2>
+<p class="help">Mailchimp can't attach files; the download buttons link to the PDFs online. Pick one way to set the links:</p>
+<p><b>Option A (quickest): reuse the blog's PDFs.</b> On the published post, right-click each <b>click here</b> &rarr; <b>Copy link address</b> and paste it below. The copied email will already have working buttons.</p>
+<label for="t">Benchmark Beaters table PDF link</label>
+<input id="t" placeholder="Optional: right-click the first click here, then Copy link address" value="%%TABLE_URL%%">
+<label for="c">Chart pack PDF link</label>
+<input id="c" placeholder="Optional: right-click the second click here, then Copy link address" value="%%CHARTS_URL%%">
+<p><b>Option B: upload from your computer in Mailchimp.</b> Leave the boxes blank. After pasting the email, click into the email body in Mailchimp, select each download button, choose the link option &rarr; <b>File</b>, and upload the matching PDF.</p>
 <ol><li>Create &rarr; Email &rarr; <b>Code your own</b> &rarr; <b>Paste in code</b>, then paste the email HTML.</li>
-<li>Copy the subject and preview text into the campaign, choose the Benchmark Beaters audience or tag, and send yourself a test. Click both download buttons in the test to make sure the PDFs open.</li></ol>
+<li>Copy the subject and preview text into the campaign and choose the Benchmark Beaters audience or tag.</li>
+<li>Send yourself a test and click both download buttons to make sure the PDFs open.</li></ol>
+<p id="linkwarn" class="warn" hidden>Copied without PDF links: link both download buttons in Mailchimp (Option B).</p>
 <div class="row"><code id="subject"></code><button data-copy="subject">Copy subject</button></div>
 <div class="row"><code id="preview"></code><button data-copy="preview">Copy preview text</button></div>
 <div class="row"><code>Email (HTML)</code><button data-copy="email">Copy email HTML</button></div>
@@ -95,10 +94,7 @@ async function copyText(txt) {
 }
 document.querySelectorAll("button[data-copy]").forEach(b => b.addEventListener("click", async () => {
   const key = b.dataset.copy;
-  if (key === "email" &&(!$("t").value.trim() || !$("c").value.trim())) {
-    $("linkwarn").hidden = false; $("t").focus(); return;
-  }
-  $("linkwarn").hidden = true;
+  if (key === "email") $("linkwarn").hidden = !!($("t").value.trim() && $("c").value.trim());
   await copyText(texts()[key]);
   const label = b.textContent;
   b.textContent = "Copied"; b.classList.add("done");
