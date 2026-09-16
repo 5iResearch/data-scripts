@@ -7,7 +7,8 @@ ready-to-paste kit to outputs/benchmark-beaters-weekly/<date>/:
 
   teaser.png   - top names from each table in 5i colours, rest of the list
                  teased as "+N more in the full report"
-  post.html    - blog body: intro, teaser image, PDF buttons, top-name HTML
+  post.html    - blog body: intro, teaser image, unlinked "click here" lines
+                 to link to the PDFs in the blog editor, top-name HTML
                  tables (real text, for SEO) and disclosure
   email.html   - full Mailchimp "code your own" email (inline styles, merge
                  tags for preview text / unsubscribe / address)
@@ -15,9 +16,10 @@ ready-to-paste kit to outputs/benchmark-beaters-weekly/<date>/:
   kit.html     - open this each week: paste the two PDF links once, then
                  one-click copy of title / body / subject / email HTML
 
-The two PDFs are downloaded and hosted by hand, so their links are passed in
-with --table-url / --charts-url. Without them the HTML keeps the
-{{TABLE_PDF_URL}} / {{CHARTS_PDF_URL}} placeholders to replace before sending.
+The PDFs are uploaded through the blog editor, so their links only exist once
+the post is up. The email's links come from --table-url / --charts-url or
+the boxes in kit.html; otherwise it keeps {{TABLE_PDF_URL}} /
+{{CHARTS_PDF_URL}} placeholders to replace before sending.
 """
 
 import argparse
@@ -284,23 +286,27 @@ def _table(rows, title, color):
     )
 
 
-def _body(copy, cdn, us, img_src, table_url, charts_url):
+BLOG_DOWNLOADS = (
+    # Plain unlinked "click here" text: the PDFs are uploaded and linked inside
+    # the blog editor (highlight "click here" -> link button -> upload PDF).
+    f'<p style="font-family:{FONT};font-size:16px;line-height:1.55;color:{INK};margin:18px 0 6px;">'
+    f'<strong>Download the full Benchmark Beaters table (PDF): click here</strong></p>'
+    f'<p style="font-family:{FONT};font-size:16px;line-height:1.55;color:{INK};margin:0 0 18px;">'
+    f'<strong>Download the relative performance chart pack (PDF): click here</strong></p>'
+)
+
+
+def _body(copy, cdn, us, img, downloads):
     paras = "".join(
         f'<p style="font-family:{FONT};font-size:16px;line-height:1.55;color:{INK};margin:0 0 14px;">'
         f'{html.escape(p)}</p>' for p in copy["intro"]
     )
-    buttons = (f'<p style="text-align:center;margin:22px 0;">'
-               f'{_button(table_url, "Download the Full Table (PDF)", BLUE)}'
-               f'{_button(charts_url, "Download the Chart Pack (PDF)", ORANGE)}</p>')
     return (
         paras
-        + f'<p style="margin:18px 0;"><a href="{html.escape(table_url)}"><img src="{html.escape(img_src)}" '
-          f'alt="Benchmark Beaters: top Canadian and U.S. stocks this week" width="600" '
-          f'style="width:100%;max-width:600px;height:auto;border:0;display:block;margin:0 auto;"></a></p>'
-        + buttons
+        + f'<p style="margin:18px 0;">{img}</p>'
+        + downloads
         + _table(cdn, "Top Canadian Benchmark Beaters", BLUE)
         + _table(us, "Top U.S. Benchmark Beaters", ORANGE)
-        + buttons
         + f'<p style="font-family:{FONT};font-size:16px;line-height:1.55;color:{INK};margin:22px 0 14px;">'
           f'Want to know which of these we would actually buy? '
           f'<a href="{TRIAL_URL}" style="color:{BLUE};font-weight:bold;">Start your 14-day free trial of 5i Research</a>.</p>'
@@ -309,8 +315,13 @@ def _body(copy, cdn, us, img_src, table_url, charts_url):
     )
 
 
-def build_post(copy, cdn, us, img_src, table_url, charts_url):
-    return f'<div class="bb-weekly">\n{_body(copy, cdn, us, img_src, table_url, charts_url)}\n</div>\n'
+def _img(img_src):
+    return (f'<img src="{html.escape(img_src)}" alt="Benchmark Beaters: top Canadian and U.S. stocks this week" '
+            f'width="600" style="width:100%;max-width:600px;height:auto;border:0;display:block;margin:0 auto;">')
+
+
+def build_post(copy, cdn, us, img_src):
+    return f'<div class="bb-weekly">\n{_body(copy, cdn, us, _img(img_src), BLOG_DOWNLOADS)}\n</div>\n'
 
 
 def build_kit_page(copy, post_html, email_html, table_url, charts_url, n_cdn, n_us):
@@ -330,6 +341,10 @@ def build_kit_page(copy, post_html, email_html, table_url, charts_url, n_cdn, n_
 
 
 def build_email(copy, cdn, us, img_src, table_url, charts_url):
+    img = f'<a href="{html.escape(table_url)}">{_img(img_src)}</a>'
+    buttons = (f'<p style="text-align:center;margin:22px 0;">'
+               f'{_button(table_url, "Download the Full Table (PDF)", BLUE)}'
+               f'{_button(charts_url, "Download the Chart Pack (PDF)", ORANGE)}</p>')
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>*|MC:SUBJECT|*</title></head>
@@ -343,7 +358,7 @@ def build_email(copy, cdn, us, img_src, table_url, charts_url):
 <span style="font-size:13px;color:{MUTED};">{html.escape(long_date(datetime.strptime(copy['as_of'], '%Y-%m-%d')))} &middot; 5i Research</span>
 </td></tr>
 <tr><td style="padding:22px 20px;">
-{_body(copy, cdn, us, img_src, table_url, charts_url)}
+{_body(copy, cdn, us, img, buttons)}
 </td></tr>
 <tr><td style="padding:16px 20px;background:#F6F8FA;font-family:{FONT};font-size:11px;line-height:1.5;color:{MUTED};text-align:center;">
 You're receiving this because you subscribed to Benchmark Beaters at 5iresearch.ca.<br>
@@ -381,7 +396,7 @@ def main():
 
     render_teaser(cdn, us, as_of, os.path.join(out_dir, "teaser.png"))
     # built with placeholders so kit.html can swap in the links typed there
-    post_tpl = build_post(copy, cdn, us, img_src, TABLE_PLACEHOLDER, CHARTS_PLACEHOLDER)
+    post_tpl = build_post(copy, cdn, us, img_src)
     email_tpl = build_email(copy, cdn, us, img_src, TABLE_PLACEHOLDER, CHARTS_PLACEHOLDER)
 
     def with_links(s):
