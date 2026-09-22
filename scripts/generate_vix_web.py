@@ -200,6 +200,69 @@ def build_report(spx_mode: str = SPX_MODE) -> str:
     ])
 
 
+# Page script shared with generate_offense_defense_web.py: refits each y axis to the visible x range.
+# Inserted into PAGE_TEMPLATE via format(), so it's kept out of the template to avoid doubled braces.
+FIT_AXES_JS = """<script>
+// Refit each y axis to the visible x range after timeframe buttons, drag-zoom or double-click.
+// Which traces feed which axis comes from layout.meta.fit (set in base_layout()).
+function niceTicks(lo, hi) {
+  if (hi / lo > 3) {
+    var t = [];
+    for (var e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)); e++)
+      [1, 2, 5].forEach(function (m) { var v = m * Math.pow(10, e); if (v >= lo && v <= hi) t.push(v); });
+    return t;
+  }
+  var raw = (hi - lo) / 5, mag = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / mag;
+  var step = (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * mag, ticks = [];
+  for (var v = Math.ceil(lo / step) * step; v <= hi; v += step) ticks.push(v);
+  return ticks;
+}
+function fitAxes(id) {
+  var gd = document.getElementById(id), meta = gd.layout.meta;
+  var toMs = function (v) { return typeof v === "number" ? v : Date.parse(String(v).replace(" ", "T")); };
+  var xs = gd.data.map(function (t) { return t.x.map(toMs); });
+  function fit() {
+    var r = gd.layout.xaxis.range, a = toMs(r[0]), b = toMs(r[1]), upd = {};
+    meta.fit.forEach(function (f) {
+      var lo = Infinity, hi = -Infinity;
+      f.tr.forEach(function (t) {
+        for (var i = 0; i < xs[t].length; i++) {
+          if (xs[t][i] < a || xs[t][i] > b) continue;
+          var y = gd.data[t].y[i];
+          if (y < lo) lo = y; if (y > hi) hi = y;
+        }
+      });
+      if (!isFinite(lo)) return;
+      if (f.log) {
+        var lpad = (Math.log10(hi) - Math.log10(lo)) * 0.05 || 0.01;
+        upd[f.ax + ".range"] = [Math.log10(lo) - lpad, Math.log10(hi) + lpad];
+        upd[f.ax + ".tickvals"] = niceTicks(lo, hi);
+        return;
+      }
+      (f.inc || []).forEach(function (v) { lo = Math.min(lo, v); hi = Math.max(hi, v); });
+      var pad = (hi - lo) * 0.07, s = f.step;
+      lo = Math.floor((lo - pad) / s) * s; hi = Math.ceil((hi + pad) / s) * s;
+      if (f.floor !== undefined && f.floor !== null) lo = Math.max(lo, f.floor);
+      upd[f.ax + ".range"] = [lo, hi];
+    });
+    // Only y keys here, so the handler below ignores the event this fires
+    Plotly.relayout(gd, upd);
+  }
+  gd.on("plotly_relayout", function (ev) {
+    if (meta.xaxes.some(function (ax) { return ev[ax + ".autorange"]; })) {
+      // Deferred: relayouting inside this event gets overwritten when Plotly finishes the autorange.
+      var reset = {};
+      meta.xaxes.forEach(function (ax) { reset[ax + ".autorange"] = false; reset[ax + ".range"] = meta.full_range.slice(); });
+      setTimeout(function () { Plotly.relayout(gd, reset); }, 0);
+      return;
+    }
+    if (Object.keys(ev).some(function (k) { return k.indexOf("xaxis") === 0; })) fit();
+  });
+  fit();
+}
+</script>"""
+
+
 PAGE_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -207,65 +270,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VIX Report</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-<script>
-// Refit each y axis to the visible x range after timeframe buttons, drag-zoom or double-click.
-// Which traces feed which axis comes from layout.meta.fit (set in base_layout()).
-function niceTicks(lo, hi) {{
-  if (hi / lo > 3) {{
-    var t = [];
-    for (var e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)); e++)
-      [1, 2, 5].forEach(function (m) {{ var v = m * Math.pow(10, e); if (v >= lo && v <= hi) t.push(v); }});
-    return t;
-  }}
-  var raw = (hi - lo) / 5, mag = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / mag;
-  var step = (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * mag, ticks = [];
-  for (var v = Math.ceil(lo / step) * step; v <= hi; v += step) ticks.push(v);
-  return ticks;
-}}
-function fitAxes(id) {{
-  var gd = document.getElementById(id), meta = gd.layout.meta;
-  var toMs = function (v) {{ return typeof v === "number" ? v : Date.parse(String(v).replace(" ", "T")); }};
-  var xs = gd.data.map(function (t) {{ return t.x.map(toMs); }});
-  function fit() {{
-    var r = gd.layout.xaxis.range, a = toMs(r[0]), b = toMs(r[1]), upd = {{}};
-    meta.fit.forEach(function (f) {{
-      var lo = Infinity, hi = -Infinity;
-      f.tr.forEach(function (t) {{
-        for (var i = 0; i < xs[t].length; i++) {{
-          if (xs[t][i] < a || xs[t][i] > b) continue;
-          var y = gd.data[t].y[i];
-          if (y < lo) lo = y; if (y > hi) hi = y;
-        }}
-      }});
-      if (!isFinite(lo)) return;
-      if (f.log) {{
-        var lpad = (Math.log10(hi) - Math.log10(lo)) * 0.05 || 0.01;
-        upd[f.ax + ".range"] = [Math.log10(lo) - lpad, Math.log10(hi) + lpad];
-        upd[f.ax + ".tickvals"] = niceTicks(lo, hi);
-        return;
-      }}
-      (f.inc || []).forEach(function (v) {{ lo = Math.min(lo, v); hi = Math.max(hi, v); }});
-      var pad = (hi - lo) * 0.07, s = f.step;
-      lo = Math.floor((lo - pad) / s) * s; hi = Math.ceil((hi + pad) / s) * s;
-      if (f.floor !== undefined && f.floor !== null) lo = Math.max(lo, f.floor);
-      upd[f.ax + ".range"] = [lo, hi];
-    }});
-    // Only y keys here, so the handler below ignores the event this fires
-    Plotly.relayout(gd, upd);
-  }}
-  gd.on("plotly_relayout", function (ev) {{
-    if (meta.xaxes.some(function (ax) {{ return ev[ax + ".autorange"]; }})) {{
-      // Deferred: relayouting inside this event gets overwritten when Plotly finishes the autorange.
-      var reset = {{}};
-      meta.xaxes.forEach(function (ax) {{ reset[ax + ".autorange"] = false; reset[ax + ".range"] = meta.full_range.slice(); }});
-      setTimeout(function () {{ Plotly.relayout(gd, reset); }}, 0);
-      return;
-    }}
-    if (Object.keys(ev).some(function (k) {{ return k.indexOf("xaxis") === 0; }})) fit();
-  }});
-  fit();
-}}
-</script>
+{fit_js}
 <style>
   body {{ background: #FFFFFF; color: #363636; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.55; margin: 0; padding: 0 0 32px; }}
   header {{ padding: 24px 16px 18px; border-bottom: 1px solid #E6E6E6; }}
@@ -313,7 +318,7 @@ function fitAxes(id) {{
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     charts = build_report()
-    html = PAGE_TEMPLATE.format(date_str=datetime.now().strftime("%B %d, %Y"), charts=charts)
+    html = PAGE_TEMPLATE.format(fit_js=FIT_AXES_JS, date_str=datetime.now().strftime("%B %d, %Y"), charts=charts)
 
     out_path = os.path.join(OUTPUT_DIR, "VIX_Report.html")
     with open(out_path, "w", encoding="utf-8") as f:

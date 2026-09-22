@@ -1,0 +1,47 @@
+name: Daily Offense vs Defense (Website)
+
+on:
+  schedule:
+    - cron: "30 7 * * 1-5"   # 7:30 AM UTC, weekdays — after the VIX website report (7:15)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-offense-defense-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Offense vs Defense website report
+        timeout-minutes: 15
+        run: |
+          python scripts/generate_offense_defense_web.py
+
+      - name: Commit outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add outputs/offense-defense/
+          git diff --cached --quiet || git commit -m "chore: update offense vs defense website report [skip ci]"
+          for i in 1 2 3 4 5; do
+            git push && break
+            echo "Push rejected, rebasing onto origin/main and retrying ($i)..."
+            git fetch origin main
+            git rebase origin/main
+            sleep $((RANDOM % 10 + 1))
+          done
