@@ -1,0 +1,32 @@
+{
+  "as_of": "2026-09-21",
+  "blog_title": "Benchmark Beaters Weekly: 47 Stocks Beating Their Benchmarks (September 21, 2026)",
+  "email_subject": "Benchmark Beaters: MATR & DELL lead 47 stocks beating the market",
+  "preview_text": "28 Canadian and 19 U.S. names at six-month relative highs. Full table and charts inside.",
+  "intro": [
+    "The latest Benchmark Beaters screen (as of September 21, 2026) found 47 Canadian and U.S. stocks outperforming their benchmarks, each hitting a new six-month relative high in the last five trading days.",
+    "In Canada, 28 stocks made a fresh six-month high relative to the TSX Composite, 14 of them new to the list this week. Mattr Corp. (MATR) leads with a +131% six-month return, and Materials is the most represented sector with 10 names.",
+    "In the U.S., 19 stocks made a fresh six-month high relative to the S&P 500, 11 of them new to the list this week. Dell Technologies Inc. (DELL) leads with a +212% six-month return, and Information Technology is the most represented sector with 6 names."
+  ],
+  "total": 47,
+  "stats": {
+    "cdn": {
+      "count": 28,
+      "new": 14,
+      "streak": 2,
+      "top_sector": "Materials",
+      "top_sector_n": 10
+    },
+    "us": {
+      "count": 19,
+      "new": 11,
+      "streak": 4,
+      "top_sector": "Information Technology",
+      "top_sector_n": 6
+    }
+  },
+  "workbook": "Benchmark_Beaters_2026-09-21.xlsx",
+  "image_url": "https://5iresearch.github.io/data-scripts/outputs/benchmark-beaters-weekly/2026-09-21/teaser.png",
+  "table_url": "{{TABLE_PDF_URL}}",
+  "charts_url": "{{CHARTS_PDF_URL}}"
+}
