@@ -47,7 +47,7 @@ def fit_range(values, include=(), step: float = 5, pad_frac: float = 0.07, floor
     return [max(lo, floor) if floor is not None else lo, hi]
 
 
-def base_layout(fig: go.Figure, title: str, windows, fit, xaxes, height: int, top: int = 104):
+def base_layout(fig: go.Figure, title: str, windows, fit, xaxes, height: int, top: int = 104, bottom: int = 44):
     """Shared styling, timeframe buttons and logo. `fit` / `xaxes` are read by fitAxes() in the page."""
     fig.update_layout(
         height=height, autosize=True,
@@ -55,7 +55,7 @@ def base_layout(fig: go.Figure, title: str, windows, fit, xaxes, height: int, to
         font=dict(family="Arial, sans-serif", color=INK, size=14),
         title=dict(text=title, font=dict(size=20, color=INK), x=0.02, y=1 - 16 / height),
         showlegend=False,
-        margin=dict(t=top, b=44, l=72, r=30),
+        margin=dict(t=top, b=bottom, l=72, r=30),
         meta=dict(full_range=windows[-1][1], fit=fit, xaxes=xaxes),
         hovermode="x unified",
         hoverlabel=dict(bgcolor="#FFFFFF", bordercolor=GRID, font=dict(color=INK, size=14)),
@@ -69,7 +69,7 @@ def base_layout(fig: go.Figure, title: str, windows, fit, xaxes, height: int, to
                  for lbl, rng in windows],
     )])
     # Logo top-right, level with the title, whatever the plot height
-    plot_h = height - top - 44
+    plot_h = height - top - bottom
     fig.add_layout_image(dict(
         source=LOGO_B64, xref="paper", yref="paper", x=1.0, y=1 + (top - 10) / plot_h,
         sizex=0.16, sizey=34 / plot_h, xanchor="right", yanchor="top", layer="above",

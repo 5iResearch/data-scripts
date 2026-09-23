@@ -296,9 +296,17 @@ def model_chart(df: pd.DataFrame, cfg: dict) -> go.Figure:
     windows = timeframe_ranges(df.index)
     base_layout(fig, f"<b>{cfg['name']}</b>  ·  Macro Market Model", windows,
                 fit=[dict(ax="yaxis", tr=[0], step=50), dict(ax="yaxis2", tr=[score_path], step=0.25)],
-                xaxes=["xaxis", "xaxis2"], height=660)
+                xaxes=["xaxis", "xaxis2"], height=680, bottom=84)
+    # Current signal as a badge inside the price panel, top-left: on the full history that corner is always
+    # empty (index levels were far lower in the 1990s); slightly see-through for zoomed views
+    now = int(df["signal"].iloc[-1])
+    fig.add_annotation(text=f"<b>Current signal: {SIGNAL_LABELS[now]}</b>", xref="x domain", yref="y domain",
+                       x=0.015, y=0.97, xanchor="left", yanchor="top", showarrow=False,
+                       font=dict(size=15, color="#FFFFFF"), bgcolor=SIGNAL_COLORS[now], opacity=0.92,
+                       bordercolor=SIGNAL_COLORS[now], borderwidth=1, borderpad=6)
+    # Legend under the chart: in the button row it collided with the timeframe buttons on narrow screens
     fig.update_layout(showlegend=True, legend=dict(
-        orientation="h", x=1.0, xanchor="right", y=1.02, yanchor="bottom", font=dict(size=12),
+        orientation="h", x=0, xanchor="left", y=-0.09, yanchor="top", font=dict(size=12),
         itemsizing="constant", bgcolor="rgba(255,255,255,0.85)"))
     fig.update_yaxes(title_text=cfg["name"], tickformat=",.0f", row=1, col=1, **AXIS_STYLE)
     fig.update_yaxes(title_text="Model score (21-day avg)", tickformat=".2f", row=2, col=1, **AXIS_STYLE)
@@ -352,7 +360,6 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   <div class="meta">Updated {date_str} &middot; {index_name} &middot; daily since 1997</div>
 </header>
 <div class="intro">
-  <p class="status">Current signal: <span class="pill" style="background:{signal_color}">{signal_label}</span></p>
   <p>The Macro Market Model combines five indicators of market conditions, covering momentum, fear, the economy,
   speculation and breadth, into a single reading of how favourable the backdrop is for {index_name} investors. Each
   indicator is scored from 1 to 5, and the scores are averaged into one of five signals, from <b>Trim</b> (conditions
@@ -419,7 +426,6 @@ def build_market(market: str):
     html = PAGE_TEMPLATE.format(
         title=f"Macro Market Model: {cfg['country']}", fit_js=FIT_AXES_JS,
         date_str=datetime.now().strftime("%B %d, %Y"), index_name=cfg["name"],
-        signal_color=SIGNAL_COLORS[signal], signal_label=SIGNAL_LABELS[signal],
         weights_note=weights_note, legend=legend, charts="\n".join(body))
     with open(os.path.join(OUTPUT_DIR, cfg["page"]), "w", encoding="utf-8") as f:
         f.write(html)
