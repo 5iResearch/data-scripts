@@ -229,6 +229,7 @@ function fitAxes(id) {
         for (var i = 0; i < xs[t].length; i++) {
           if (xs[t][i] < a || xs[t][i] > b) continue;
           var y = gd.data[t].y[i];
+          if (y === null || y === undefined || isNaN(y)) continue;   // gaps in the series
           if (y < lo) lo = y; if (y > hi) hi = y;
         }
       });
