@@ -233,13 +233,16 @@ function fitAxes(id) {
         }
       });
       if (!isFinite(lo)) return;
+      (f.inc || []).forEach(function (v) { lo = Math.min(lo, v); hi = Math.max(hi, v); });
       if (f.log) {
         var lpad = (Math.log10(hi) - Math.log10(lo)) * 0.05 || 0.01;
         upd[f.ax + ".range"] = [Math.log10(lo) - lpad, Math.log10(hi) + lpad];
-        upd[f.ax + ".tickvals"] = niceTicks(lo, hi);
+        var ticks = niceTicks(lo, hi);
+        upd[f.ax + ".tickvals"] = ticks;
+        // Plotly drops ticksuffix on log axes with explicit tickvals, so write the labels when one is wanted
+        if (f.suffix) upd[f.ax + ".ticktext"] = ticks.map(function (v) { return v.toLocaleString("en-US") + f.suffix; });
         return;
       }
-      (f.inc || []).forEach(function (v) { lo = Math.min(lo, v); hi = Math.max(hi, v); });
       var pad = (hi - lo) * 0.07, s = f.step;
       lo = Math.floor((lo - pad) / s) * s; hi = Math.ceil((hi + pad) / s) * s;
       if (f.floor !== undefined && f.floor !== null) lo = Math.max(lo, f.floor);
