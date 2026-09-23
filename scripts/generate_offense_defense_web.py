@@ -141,18 +141,18 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 {fit_js}
 <style>
   body {{ background: #FFFFFF; color: #363636; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.55; margin: 0; padding: 0 0 32px; }}
-  header {{ padding: 24px 16px 18px; border-bottom: 1px solid #E6E6E6; }}
+  header {{ padding: 18px 16px 12px; border-bottom: 1px solid #E6E6E6; }}
   header h1 {{ margin: 0 0 6px; font-size: 28px; color: #363636; }}
   header .meta {{ color: #555555; font-size: 15px; }}
-  .intro {{ padding: 18px 16px 4px; max-width: 900px; }}
-  .intro p {{ margin: 0 0 12px; }}
-  .intro .legend {{ font-size: 15px; color: #555555; }}
+  .intro {{ padding: 12px 16px 0; }}
+  .intro p {{ margin: 0 0 8px; }}
+  .intro .legend {{ font-size: 15px; color: #555555; margin-top: 16px; }}
   .status {{ font-size: 17px; }}
   .pill {{ display: inline-block; padding: 1px 10px; border-radius: 12px; font-size: 15px; font-weight: bold; color: #FFFFFF; }}
   .pill.on {{ background: #44A660; }} .pill.off {{ background: #1F79BE; }}
   .bar {{ display: inline-block; width: 22px; height: 4px; border-radius: 2px; margin: 0 6px 0 2px; vertical-align: middle; }}
   .bar.dotted {{ height: 0; border-top: 3px dotted #9A9A9A; border-radius: 0; }}
-  .section {{ padding: 28px 16px 0; }}
+  .section {{ padding: 16px 16px 0; }}
   .section h2 {{ margin: 0; font-size: 23px; color: #363636; border-bottom: 3px solid #C67A29; display: inline-block; padding-bottom: 4px; }}
   .source {{ color: #555555; font-size: 14px; padding: 20px 16px 0; border-top: 1px solid #E6E6E6; margin-top: 24px; }}
 </style>
