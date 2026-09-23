@@ -1,0 +1,47 @@
+name: Daily Revenue Revision Screener (Website)
+
+on:
+  schedule:
+    - cron: "50 7 * * 1-5"   # 7:50 AM UTC, weekdays — after the Revenue Revision Screener (7:35), same revision CSVs
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-rev-revision-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Revenue Revision Screener website report
+        timeout-minutes: 15
+        run: |
+          python scripts/generate_rev_revision_web.py
+
+      - name: Commit outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add outputs/rev-revision-web/
+          git diff --cached --quiet || git commit -m "chore: update revenue revision website report [skip ci]"
+          for i in 1 2 3 4 5; do
+            git push && break
+            echo "Push rejected, rebasing onto origin/main and retrying ($i)..."
+            git fetch origin main
+            git rebase origin/main
+            sleep $((RANDOM % 10 + 1))
+          done
