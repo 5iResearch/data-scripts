@@ -8,7 +8,8 @@ side-by-side columns that read top-to-bottom, left-to-right, followed by a spotl
 (3-year price and the revenue revision bars by fiscal year).
 
 Scoring, gates and data (the manually refreshed revision CSVs in data/) all come from
-generate_rev_revision_screener.py, so both pages always rank the same names.
+generate_rev_revision_screener.py, so both pages always rank the same names. Sector / industry labels come from
+the revision CSVs' own Sector and Industry columns (not data/koyfin_*.csv).
 Output: outputs/rev-revision-web/Rev_Revision_Screener.html
 """
 
@@ -26,9 +27,9 @@ from plotly.subplots import make_subplots
 from common_screening import CAP_FILTER_CONTROL_HTML, CAP_FILTER_JS, load_sp500_symbols
 from generate_index_rsi_web import BLUE, GREEN, GRID, INK, MUTED, ORANGE, RED
 from generate_rev_revision_screener import (
-    ALL_WIN_KEYS, ALL_WIN_LABELS, CDN_CSV_PATH, CHART_CUTOFF, KOYFIN_CDN_PATH, KOYFIN_US_PATH, PRICE_YEARS,
-    SPOTLIGHT_TOP_N, US_CSV_PATH, compute_vs_bench_10y, download_bench_series, download_spotlight_prices,
-    load_koyfin_sector_map, load_rev_csv, rank_by_revisions, score_row,
+    ALL_WIN_KEYS, ALL_WIN_LABELS, CDN_CSV_PATH, CHART_CUTOFF, PRICE_YEARS, SPOTLIGHT_TOP_N, US_CSV_PATH,
+    compute_vs_bench_10y, download_bench_series, download_spotlight_prices, load_rev_csv, rank_by_revisions,
+    score_row,
 )
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -37,6 +38,18 @@ OUTPUT_DIR = os.path.join(REPO_ROOT, "outputs", "rev-revision-web")
 TABLE_COLUMNS = 3          # a full top 40 is split into up to this many side-by-side tables...
 ROWS_PER_TABLE = 14        # ...of about this many rows, so a short list (e.g. 8 Canadian names) stays one table
 FY_COLORS = [BLUE, "#4B8EA9", ORANGE]
+
+
+def load_sector_map(path: str) -> dict:
+    """Ticker -> (Sector, Industry) from the revision CSV itself (Sector / Industry columns added Sep 2026), so this
+    page no longer needs data/koyfin_*.csv. Every name on the page comes from these same files, so coverage is total.
+    The Ticker converter keeps National Bank's "NA" from being read as missing."""
+    df = pd.read_csv(path, converters={"Ticker": lambda v: str(v).strip()})
+    if not {"Sector", "Industry"} <= set(df.columns):
+        print(f"  {os.path.basename(path)} has no Sector/Industry columns; labels will be blank")
+        return {}
+    df = df.fillna({"Sector": "", "Industry": ""})
+    return {t.upper(): (sec, ind) for t, sec, ind in zip(df["Ticker"], df["Sector"], df["Industry"])}
 
 
 def with_revisions(df: pd.DataFrame) -> pd.DataFrame:
@@ -189,7 +202,7 @@ def build_section(ranked, title, bench_series, bench_label, sector_map, fetch_pr
 def build_report() -> str:
     print("=== Benchmarks ===")
     qqq, spy, xic = (download_bench_series(t) for t in ("QQQ", "SPY", "XIC.TO"))
-    us_sectors, cdn_sectors = load_koyfin_sector_map(KOYFIN_US_PATH), load_koyfin_sector_map(KOYFIN_CDN_PATH)
+    us_sectors, cdn_sectors = load_sector_map(US_CSV_PATH), load_sector_map(CDN_CSV_PATH)
 
     # Same universes and gates as generate_rev_revision_screener.main()
     print("=== Canada ===")

@@ -42,8 +42,10 @@ AXIS_QUANTILES = (0.01, 0.99)   # axes fit this share of the dots (plus top 25 a
 SHARPE_SCALE = [[0, RED], [0.5, "#E8C46A"], [1, GREEN]]
 
 
-def make_frontier_chart(signals, returns, universe, extra_tickers, title) -> go.Figure:
-    """Same selection logic as generate_stock_screener.make_scatter_frontier(), light theme."""
+def compute_frontier(signals, returns, universe, extra_tickers=()):
+    """The universe's plottable stocks, its top-Sharpe basket and the efficient (upper) half of its frontier.
+    Shared with generate_stock_lookup_web.py so both pages draw the same frontier.
+    Returns (d, top, custom, ef_vol, ef_ret); ef_vol / ef_ret are None if the optimisation fails."""
     members = [t for t in universe if t in signals.index]
     d = signals.loc[members].dropna(subset=["Vol%", "AnnRet%", "Sharpe"])
     eligible = d[d["NObs"] >= FULL_HISTORY_SHARE * signals["NObs"].max()]
@@ -51,6 +53,21 @@ def make_frontier_chart(signals, returns, universe, extra_tickers, title) -> go.
     custom = [t for t in extra_tickers if t in signals.index]
     custom_frontier = [t for t in custom if signals.loc[t, "NObs"] >= MIN_FRONTIER_HISTORY]
     ef_vol = ef_ret = None
+    basket = [t for t in dict.fromkeys(top + custom_frontier) if t in returns.columns]
+    if len(basket) >= 2:
+        ef_vol, ef_ret = efficient_frontier(returns, basket)
+        if ef_vol:
+            # Keep only the efficient (upper) half: from the minimum-volatility point up
+            i_min = ef_vol.index(min(ef_vol))
+            ef_vol, ef_ret = ef_vol[i_min:], ef_ret[i_min:]
+        else:
+            ef_vol = ef_ret = None
+    return d, top, custom, ef_vol, ef_ret
+
+
+def make_frontier_chart(signals, returns, universe, extra_tickers, title) -> go.Figure:
+    """Same selection logic as generate_stock_screener.make_scatter_frontier(), light theme."""
+    d, top, custom, ef_vol, ef_ret = compute_frontier(signals, returns, universe, extra_tickers)
 
     d_all, d_top = d.reset_index(), d.loc[[t for t in top if t not in custom]].reset_index()
     fig = go.Figure()
@@ -86,20 +103,14 @@ def make_frontier_chart(signals, returns, universe, extra_tickers, title) -> go.
                           "<br>Sharpe: %{customdata:.2f}<extra></extra>",
         ))
 
-    basket = [t for t in dict.fromkeys(top + custom_frontier) if t in returns.columns]
-    if len(basket) >= 2:
-        ef_vol, ef_ret = efficient_frontier(returns, basket)
-        if ef_vol:
-            # Keep only the efficient (upper) half: from the minimum-volatility point up
-            i_min = ef_vol.index(min(ef_vol))
-            ef_vol, ef_ret = ef_vol[i_min:], ef_ret[i_min:]
-            fig.add_trace(go.Scatter(
-                x=ef_vol, y=ef_ret, mode="lines", line=dict(color=ORANGE, width=3),
-                name="Efficient frontier",
-                hovertemplate="Efficient frontier<br>Volatility: %{x:.1f}%<br>Return: %{y:.1f}%/yr<extra></extra>",
-            ))
-        else:
-            print(f"  [{title}] frontier optimisation returned no points")
+    if ef_vol:
+        fig.add_trace(go.Scatter(
+            x=ef_vol, y=ef_ret, mode="lines", line=dict(color=ORANGE, width=3),
+            name="Efficient frontier",
+            hovertemplate="Efficient frontier<br>Volatility: %{x:.1f}%<br>Return: %{y:.1f}%/yr<extra></extra>",
+        ))
+    else:
+        print(f"  [{title}] frontier optimisation returned no points")
 
     fig.add_hline(y=0, line_color="#9A9A9A", line_width=1)
     fig.add_hline(y=RISK_FREE * 100, line_dash="dot", line_color=BLUE, line_width=1.4,

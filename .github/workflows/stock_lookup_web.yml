@@ -1,0 +1,47 @@
+name: Daily Stock Lookup (Website)
+
+on:
+  schedule:
+    - cron: "30 9 * * 1-5"   # 9:30 AM UTC, weekdays — after the Efficient Frontier (8:40) and MMM (9:00) pages
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-stock-lookup-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Stock Lookup website report
+        timeout-minutes: 40
+        run: |
+          python scripts/generate_stock_lookup_web.py
+
+      - name: Commit outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add outputs/stock-lookup/
+          git diff --cached --quiet || git commit -m "chore: update stock lookup website report [skip ci]"
+          for i in 1 2 3 4 5; do
+            git push && break
+            echo "Push rejected, rebasing onto origin/main and retrying ($i)..."
+            git fetch origin main
+            git rebase origin/main
+            sleep $((RANDOM % 10 + 1))
+          done
