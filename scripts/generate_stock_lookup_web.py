@@ -135,6 +135,16 @@ def weekly(series: pd.Series) -> pd.Series:
     return w.dropna()
 
 
+# Windows device names: a file called PRN.TO.json (Parkland) can't be read or deleted normally on Windows, which
+# hangs GitHub Desktop for anyone pulling the repo. Such stocks get a leading underscore; the page applies the
+# same rule in dataFile().
+WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+
+
+def data_filename(sym: str) -> str:
+    return ("_" if sym.split(".")[0].upper() in WINDOWS_RESERVED else "") + f"{sym}.json"
+
+
 def compact(values) -> list:
     return [float(f"{v:.5g}") for v in values]
 
@@ -184,7 +194,7 @@ def build():
             rev=meta.get("rev"),
         )
         n_rev += doc["rev"] is not None
-        with open(os.path.join(DATA_DIR, f"{sym}.json"), "w", encoding="utf-8") as f:
+        with open(os.path.join(DATA_DIR, data_filename(sym)), "w", encoding="utf-8") as f:
             json.dump(doc, f, separators=(",", ":"))
         index.append([sym, name, m])
     index.sort(key=lambda r: (r[2] != "cdn", r[0]))   # Canada first in the type-ahead list
@@ -279,6 +289,9 @@ const BLUE = "#1F79BE", ORANGE = "#C67A29", GREEN = "#44A660", RED = "#A22A2A", 
       GRID = "#E6E6E6", GOLD = "#E8B84B";
 const CFG = { responsive: true, displaylogo: false };
 const AX = { gridcolor: GRID, zeroline: false, linecolor: "#CFCFCF", tickfont: { size: 12, color: MUTED } };
+// Same rule as data_filename() in the script: Windows device names (PRN, CON, AUX, NUL, COM1-9, LPT1-9) get "_"
+const RESERVED = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/;
+function dataFile(t) { return "data/" + (RESERVED.test(t.split(".")[0]) ? "_" : "") + encodeURIComponent(t) + ".json"; }
 const BY_SYM = {};
 META.index.forEach(function (r) { BY_SYM[r[0]] = r; });
 
@@ -343,7 +356,7 @@ function lookup(sym) {
     return;
   }
   st.textContent = "Loading " + t + "…";
-  fetch("data/" + encodeURIComponent(t) + ".json").then(function (r) {
+  fetch(dataFile(t)).then(function (r) {
     if (!r.ok) throw new Error(r.status);
     return r.json();
   }).then(function (d) {

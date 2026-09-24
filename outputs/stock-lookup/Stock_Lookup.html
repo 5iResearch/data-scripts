@@ -84,6 +84,9 @@ const BLUE = "#1F79BE", ORANGE = "#C67A29", GREEN = "#44A660", RED = "#A22A2A", 
       GRID = "#E6E6E6", GOLD = "#E8B84B";
 const CFG = { responsive: true, displaylogo: false };
 const AX = { gridcolor: GRID, zeroline: false, linecolor: "#CFCFCF", tickfont: { size: 12, color: MUTED } };
+// Same rule as data_filename() in the script: Windows device names (PRN, CON, AUX, NUL, COM1-9, LPT1-9) get "_"
+const RESERVED = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/;
+function dataFile(t) { return "data/" + (RESERVED.test(t.split(".")[0]) ? "_" : "") + encodeURIComponent(t) + ".json"; }
 const BY_SYM = {};
 META.index.forEach(function (r) { BY_SYM[r[0]] = r; });
 
@@ -148,7 +151,7 @@ function lookup(sym) {
     return;
   }
   st.textContent = "Loading " + t + "…";
-  fetch("data/" + encodeURIComponent(t) + ".json").then(function (r) {
+  fetch(dataFile(t)).then(function (r) {
     if (!r.ok) throw new Error(r.status);
     return r.json();
   }).then(function (d) {
