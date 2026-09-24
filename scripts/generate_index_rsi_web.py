@@ -15,14 +15,45 @@ they fit the site's content column. Output: outputs/index-rsi/Index_RSI_Report.h
 
 import math
 import os
+import time
 from datetime import datetime
 
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
+import yfinance as yf
 from plotly.subplots import make_subplots
 
-from generate_industry_rsi_report import LOGO_B64, fetch_all, get_weekly_rsi
+import generate_industry_rsi_report as _industry
+from generate_industry_rsi_report import LOGO_B64, get_weekly_rsi
+
+
+def fetch_all(tickers: list, attempts: int = 3) -> dict:
+    """generate_industry_rsi_report.fetch_all, with retries. yfinance's threaded multi-ticker download sometimes
+    drops a ticker ("OperationalError('database is locked')" on its time-zone cache), leaving an empty frame that
+    later crashes the chart code. Empty tickers are re-downloaded one at a time (no threads), and if any are still
+    empty the run stops with an error naming them. Shared by every *_web.py page that imports fetch_all from here."""
+    data = _industry.fetch_all(tickers)
+    missing = [t for t in tickers if data[t].empty]
+    for attempt in range(1, attempts + 1):
+        if not missing:
+            break
+        time.sleep(3 * attempt)
+        print(f"  retrying {', '.join(missing)} (attempt {attempt}/{attempts})")
+        for t in missing:
+            try:
+                df = yf.download(t, period="max", auto_adjust=True, progress=False, threads=False,
+                                 multi_level_index=False).dropna(how="all")
+                if not df.empty:
+                    _industry._cache[t] = df   # get_weekly_rsi() reads the same cache
+            except Exception as e:
+                print(f"    {t}: {e}")
+        data = {t: _industry._cache[t] for t in tickers}
+        missing = [t for t in tickers if data[t].empty]
+    if missing:
+        raise RuntimeError(f"No price data from Yahoo for {', '.join(missing)} after {attempts} retries")
+    return data
+
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT_DIR = os.path.join(REPO_ROOT, "outputs", "index-rsi")
