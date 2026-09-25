@@ -1,6 +1,7 @@
 """
 Weekly: complements for every stock on the Stock Lookup page, using complement_engine (the Complement Finder
-notebook's method; up to 5 per stock, drawn from both the TSX and the S&P 500).
+notebook's method; up to 5 per stock, drawn from the stock's own index: TSX candidates for Canadian stocks, S&P 500
+candidates for US stocks, including Nasdaq 100 names outside the S&P 500).
 
 Reads the covered stocks from outputs/stock-lookup/data/*.json and writes outputs/stock-lookup/complements.json,
 which the daily generate_stock_lookup_web.py build folds into each stock's data file. Complements barely move day to
@@ -28,7 +29,13 @@ def pct(v, d=4):
 
 def main():
     t0 = time.time()
-    anchors = sorted({json.load(open(f, encoding="utf-8"))["t"] for f in glob.glob(os.path.join(LOOKUP_DIR, "data", "*.json"))})
+    # Each stock's market ("cdn" / "us") decides which index its complements come from
+    market = {}
+    for f in glob.glob(os.path.join(LOOKUP_DIR, "data", "*.json")):
+        with open(f, encoding="utf-8") as fh:
+            d = json.load(fh)
+        market[d["t"]] = d["m"]
+    anchors = sorted(market)
     sp500 = {s.replace(".", "-") for s in load_sp500_symbols()}
     universe = ce.load_universe(sp500)
     print(f"{len(anchors)} stocks to screen; {len(universe)} candidate complements "
@@ -44,7 +51,8 @@ def main():
     results, reasons = {}, {}
     for i, a in enumerate(anchors, 1):
         try:
-            res, why = ce.analyze(a, px, universe)
+            home = "CDN" if market[a] == "cdn" else "US"
+            res, why = ce.analyze(a, px, universe[universe["Home"] == home])
         except Exception as e:                      # one bad series shouldn't sink the whole run
             res, why = None, f"error: {e}"
         if res is None:
@@ -60,6 +68,7 @@ def main():
                      "corr": round(float(r["Worst sub-period corr"]), 2), "held": int(r["Held up"]),
                      "blend": [pct(r["Blend CAGR"]), pct(r["Blend vol"]), pct(r["Blend max DD"])]}
                     for c, r in res["top"].iterrows()],
+            "paths": ce.blend_paths(a, list(res["top"].index), px),   # for the growth / drawdown chart
         }
         if i % 100 == 0:
             print(f"  {i}/{len(anchors)} ({time.time() - t0:.0f}s)")

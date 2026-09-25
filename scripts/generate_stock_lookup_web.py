@@ -5,8 +5,8 @@ Website-ready Stock Lookup: members type a ticker (TSX, S&P 500 or Nasdaq 100) a
   3. where it sits against its market's efficient frontier (TSX for Canadian stocks, S&P 500 for US)
   4. growth of $10,000 vs its index (XIC or SPY) over the last 10 years, dividends included
   5. up to 5 complements: stocks that have smoothed the ride when held 50/50 with it (complement_engine, the
-     Complement Finder notebook's method), from outputs/stock-lookup/complements.json, which
-     generate_stock_complements.py refreshes weekly
+     Complement Finder notebook's method; same index: TSX for Canadian stocks, S&P 500 for US), from
+     outputs/stock-lookup/complements.json, which generate_stock_complements.py refreshes weekly
 
 GitHub Pages is static and browsers can't pull from Yahoo, so everything is precomputed: one small JSON file per
 stock in outputs/stock-lookup/data/ (weekly closes, revisions, risk stats), plus the page with the ticker list,
@@ -213,6 +213,7 @@ def build():
     index.sort(key=lambda r: (r[2] != "cdn", r[0]))   # Canada first in the type-ahead list
     print(f"  wrote {len(index)} stock files ({n_rev} with revision data)")
     return dict(index=index, bench=benches, frontier=frontiers, asof=as_of.strftime("%Y-%m-%d"),
+                build=datetime.now().strftime("%Y%m%d%H%M"),
                 rf=RISK_FREE * 100, years=DATA_YEARS)
 
 
@@ -248,7 +249,7 @@ PAGE = r"""<!DOCTYPE html>
   .section h3 { margin: 0; font-size: 21px; border-bottom: 3px solid #C67A29; display: inline-block; padding-bottom: 4px; }
   .section p { margin: 8px 0 0; color: #555555; font-size: 15px; }
   .empty { color: #555555; padding: 16px; font-size: 15px; }
-  #comp { padding: 12px 16px 0; overflow-x: auto; }
+  #comp { padding: 12px 16px 8px; overflow-x: auto; }
   #comp table { border-collapse: collapse; font-size: 15px; min-width: 640px; width: 100%; max-width: 1000px; }
   #comp th { text-align: left; font-size: 12px; color: #555555; text-transform: uppercase; letter-spacing: .03em;
              padding: 6px 10px; border-bottom: 2px solid #C67A29; white-space: nowrap; }
@@ -258,6 +259,7 @@ PAGE = r"""<!DOCTYPE html>
   #comp tbody tr:nth-child(even) { background: #F7F7F7; }
   #comp a { color: #1F79BE; font-weight: bold; cursor: pointer; text-decoration: none; }
   #comp a:hover { text-decoration: underline; }
+  #comp .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 7px; vertical-align: -1px; }
   #comp .note { color: #555555; font-size: 13px; margin: 10px 0 0; line-height: 1.5; max-width: 1000px; }
   .source { color: #555555; font-size: 14px; padding: 20px 16px 0; border-top: 1px solid #E6E6E6; margin-top: 24px; }
   #results { display: none; }
@@ -306,10 +308,12 @@ PAGE = r"""<!DOCTYPE html>
   <div id="c-growth"></div>
   <div class="section"><h3>Stocks that have complemented <span id="comp-for"></span></h3>
     <p>High-quality stocks that, held 50/50 with this one, would have made for a smoother ride: lower volatility and
-    smaller drops, without giving up much return. Each has beaten its own index, made money in every part of the
+    smaller drops, without giving up much return. The chart below the table shows the difference, most visibly in the
+    shaded sell-off. Each has beaten its own index, made money in every part of the
     period, moved differently from this stock, and held up better in most major sell-offs. One per sector, from the
-    TSX and the S&amp;P 500. Click a ticker to look it up.</p></div>
+    same index: TSX stocks for Canadian names, S&amp;P 500 stocks for US names. Click a ticker to look it up.</p></div>
   <div id="comp"></div>
+  <div id="c-comp"></div>
 </div>
 <div class="source">Source: 5i Research, analyst revenue estimates, Yahoo Finance. For TSX, S&amp;P 500 and Nasdaq 100 members.</div>
 <script>
@@ -321,7 +325,11 @@ const CFG = { responsive: true, displaylogo: false };
 const AX = { gridcolor: GRID, zeroline: false, linecolor: "#CFCFCF", tickfont: { size: 12, color: MUTED } };
 // Same rule as data_filename() in the script: Windows device names (PRN, CON, AUX, NUL, COM1-9, LPT1-9) get "_"
 const RESERVED = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/;
-function dataFile(t) { return "data/" + (RESERVED.test(t.split(".")[0]) ? "_" : "") + encodeURIComponent(t) + ".json"; }
+// ?v= build stamp: browsers (and GitHub Pages) cache the data files, so without it a returning visitor can get
+// yesterday's file, or one from before a new section was added, and that section silently stays empty
+function dataFile(t) {
+  return "data/" + (RESERVED.test(t.split(".")[0]) ? "_" : "") + encodeURIComponent(t) + ".json?v=" + META.build;
+}
 const BY_SYM = {};
 META.index.forEach(function (r) { BY_SYM[r[0]] = r; });
 
@@ -553,7 +561,50 @@ function render(d) {
 }
 
 // 5. Complements table: change from holding the stock alone to a 50/50 blend, in percentage points
+const COMP_COLORS = [BLUE, ORANGE, GREEN, "#8E6AC8", "#4B8EA9"];
+
+// Growth of $10,000 alone vs each 50/50 blend (top), drawdowns (bottom). The top two blends show by default; the
+// rest are a legend click away, since six lines at once is hard to read.
+function renderComplementChart(d) {
+  const div = document.getElementById("c-comp"), c = d.comp;
+  if (!c || !c.top || !c.paths) { Plotly.purge(div); div.innerHTML = ""; return; }
+  const p = c.paths, xs = dates(p.start, p.alone.length);
+  const dd = function (v) { let m = -Infinity; return v.map(function (y) { m = Math.max(m, y); return (y / m - 1) * 100; }); };
+  const series = [{ name: d.t + " alone", y: p.alone, color: INK, width: 2.8, vis: true }].concat(
+    c.top.map(function (x, i) {
+      return { name: "50/50 with " + x.t, y: p.blends[i], color: COMP_COLORS[i], width: 1.9, vis: i < 2 ? true : "legendonly" };
+    }));
+  const tr = [];
+  series.forEach(function (s, i) {
+    tr.push({ x: xs, y: s.y, mode: "lines", name: s.name, legendgroup: "g" + i, visible: s.vis,
+              line: { color: s.color, width: s.width }, hovertemplate: s.name + ": $%{y:,.0f}<extra></extra>" });
+    tr.push({ x: xs, y: dd(s.y), mode: "lines", yaxis: "y2", legendgroup: "g" + i, showlegend: false, visible: s.vis,
+              line: { color: s.color, width: s.width * 0.8 }, hovertemplate: s.name + ": %{y:.0f}%<extra></extra>" });
+  });
+  const all = [].concat.apply([], series.map(function (s) { return s.y; }));
+  const shapes = [], annotations = [];
+  if (p.worst_dd) {
+    shapes.push({ type: "rect", xref: "x", yref: "paper", x0: p.worst_dd[0], x1: p.worst_dd[1], y0: 0, y1: 1,
+                  fillcolor: "#9A9A9A", opacity: 0.13, line: { width: 0 }, layer: "below" });
+    annotations.push({ xref: "x", yref: "paper", x: p.worst_dd[0], y: 1, xanchor: "left", yanchor: "bottom", showarrow: false,
+                       text: d.t + " worst drawdown", font: { size: 11, color: MUTED } });
+  }
+  const H = 620, T = 60, B = 90;
+  Plotly.react(div, tr, {
+    height: H, margin: { t: T, b: B, l: 76, r: 24 }, paper_bgcolor: "#FFF", plot_bgcolor: "#FFF",
+    font: { family: "Arial", color: INK, size: 13 }, hovermode: "x unified",
+    title: { text: "<b>" + d.t + "</b>  ·  growth of $10,000 alone vs. 50/50 with each complement", x: 0.02, font: { size: 18 } },
+    legend: { orientation: "h", x: 0, y: -0.09, yanchor: "top", font: { size: 12 } },
+    xaxis: Object.assign({ anchor: "y2", type: "date" }, AX),
+    yaxis: Object.assign({ domain: [0.36, 1], type: "log", tickformat: "$,.0f",
+                           tickvals: logTicks(Math.min.apply(null, all), Math.max.apply(null, all)) }, AX),
+    yaxis2: Object.assign({ domain: [0, 0.28], ticksuffix: "%", title: { text: "Drawdown", font: { size: 13 } } }, AX),
+    shapes: shapes, annotations: annotations, images: logo(H - T - B, T),
+  }, CFG);
+}
+
 function renderComplements(d) {
+  renderComplementChart(d);
   const box = document.getElementById("comp");
   document.getElementById("comp-for").textContent = d.n;
   const c = d.comp;
@@ -573,18 +624,19 @@ function renderComplements(d) {
            (Math.abs(delta) * 100).toFixed(1) + " pts</td>";
   };
   const a = c.alone, pc = function (v) { return (v * 100).toFixed(1) + "%"; };
-  const rows = c.top.map(function (x) {
+  const rows = c.top.map(function (x, i) {
     const link = BY_SYM[x.t] ? '<a data-t="' + x.t + '">' + x.t + "</a>" : x.t;
-    return "<tr><td>" + x.n + " (" + link + ")</td><td>" + x.sector + "</td><td>" + (x.home === "CDN" ? "Canada" : "US") +
+    return '<tr><td><span class="swatch" style="background:' + COMP_COLORS[i] + '"></span>' + x.n + " (" + link + ")</td><td>" + x.sector +
       '</td><td class="num" style="font-weight:normal">' + x.corr.toFixed(2) + "</td>" +
       cell(x.blend[0] - a[0], true) + cell(x.blend[1] - a[1], false) + cell(a[2] - x.blend[2], false) + "</tr>";
   }).join("");
   const span = c.start.slice(0, 4) + "&ndash;" + c.end.slice(0, 4);
-  box.innerHTML = '<table><thead><tr><th rowspan="2">Complement</th><th rowspan="2">Sector</th><th rowspan="2">Market</th>' +
+  box.innerHTML = '<table><thead><tr><th rowspan="2">Complement</th><th rowspan="2">Sector</th>' +
     '<th rowspan="2">Correlation</th><th class="grp" colspan="3">50/50 blend vs. ' + d.t + ' alone</th></tr>' +
     "<tr><th>Return</th><th>Volatility</th><th>Max drawdown</th></tr></thead><tbody>" + rows + "</tbody></table>" +
     '<p class="note">' + d.t + " alone, " + span + ": " + pc(a[0]) + " a year, " + pc(a[1]) + " volatility, " + pc(a[2]) +
-    " worst drawdown. Changes are in percentage points from holding " + d.t + " alone to a 50/50 mix rebalanced every quarter: " +
+    " worst drawdown. The chart below shows " + d.t + " and its top two blends, in the colours above; click a name in its legend to add or hide the others " +
+    "(weekly closes, so drops can look a little shallower than the daily figures in the table). Changes are in percentage points from holding " + d.t + " alone to a 50/50 mix rebalanced every quarter: " +
     "green is better (higher return, lower volatility, smaller worst drop), &asymp; is within 0.5 points. Correlation is the " +
     "highest of three sub-periods (lower means the two moved more independently). Total returns with dividends reinvested, in " +
     "Canadian dollars. Backtested and hypothetical, not a recommendation.</p>";

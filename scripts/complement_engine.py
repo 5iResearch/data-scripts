@@ -14,7 +14,8 @@ reusable functions. For a holding it finds the high-quality stocks that would mo
 Total returns (dividends reinvested), converted to CAD. Backtested and hypothetical, not advice.
 
 Differences from the notebook (for the website's Stock Lookup page): up to 5 complements instead of 3, drawn from
-both markets, and the candidate universe (market cap, sector, name) comes from the revision CSVs
+the holding's own index (TSX for Canadian stocks, S&P 500 for US, i.e. the notebook's per-market UNIVERSE), and the
+candidate universe (market cap, sector, name) comes from the revision CSVs
 (data/us_1w_rev_est_screener.csv, data/cdn_1w_rev_est_screener.csv) rather than the Koyfin files, with the same
 floors: TSX $3B+, S&P 500 members $10B+.
 """
@@ -139,6 +140,26 @@ def blend_navs(anchor_px, cand_px, w=0.5):
         out[m] = level * (w * np.cumprod(1 + a[m])[:, None] + (1 - w) * np.cumprod(1 + R[m], axis=0))
         level = out[m][-1]
     return pd.DataFrame(out, index=cand_px.index, columns=cand_px.columns)
+
+
+def blend_paths(anchor: str, chosen: list, px: pd.DataFrame) -> dict:
+    """Growth of $10,000 for the holding alone and for each 50/50 blend with `chosen`, on the same window, calendar
+    and blend maths as analyze(), sampled at weekly (Friday) closes for charting. Also the holding's worst
+    drawdown period (peak, trough)."""
+    s = px[anchor].dropna()
+    start = max(pd.Timestamp(START), s.index[0])
+    W = px.loc[start:]
+    W = W[W[anchor].notna()][[anchor] + list(chosen)].ffill().bfill(limit=5)
+    blends = blend_navs(W[anchor], W[list(chosen)]) * 10_000
+    alone = W[anchor] / W[anchor].iloc[0] * 10_000
+    wk = lambda x: x.resample("W-FRI").last().dropna()
+    trough = (alone / alone.cummax() - 1).idxmin()
+    peak = alone.loc[:trough].idxmax()
+    a_w = wk(alone)
+    return {"start": a_w.index[0].strftime("%Y-%m-%d"),
+            "alone": [float(f"{v:.4g}") for v in a_w],
+            "blends": [[float(f"{v:.4g}") for v in wk(blends[c]).reindex(a_w.index).ffill()] for c in chosen],
+            "worst_dd": [peak.strftime("%Y-%m-%d"), trough.strftime("%Y-%m-%d")] if trough > peak else None}
 
 
 # ── The screen ─────────────────────────────────────────────────────────────────
