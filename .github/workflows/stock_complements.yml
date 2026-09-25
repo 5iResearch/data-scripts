@@ -1,0 +1,47 @@
+name: Weekly Stock Complements (Website)
+
+on:
+  schedule:
+    - cron: "0 10 * * 0"      # 10:00 AM UTC, Sundays — the daily Stock Lookup build folds the results in from Monday
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-stock-complements:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run weekly complements screen
+        timeout-minutes: 85
+        run: |
+          python scripts/generate_stock_complements.py
+
+      - name: Commit outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add outputs/stock-lookup/complements.json
+          git diff --cached --quiet || git commit -m "chore: update stock lookup complements [skip ci]"
+          for i in 1 2 3 4 5; do
+            git push && break
+            echo "Push rejected, rebasing onto origin/main and retrying ($i)..."
+            git fetch origin main
+            git rebase origin/main
+            sleep $((RANDOM % 10 + 1))
+          done

@@ -4,6 +4,9 @@ Website-ready Stock Lookup: members type a ticker (TSX, S&P 500 or Nasdaq 100) a
   2. analyst revenue estimate revisions (FY1E-FY3E over 1W/1M/3M/6M/1Y), from the revision CSVs
   3. where it sits against its market's efficient frontier (TSX for Canadian stocks, S&P 500 for US)
   4. growth of $10,000 vs its index (XIC or SPY) over the last 10 years, dividends included
+  5. up to 5 complements: stocks that have smoothed the ride when held 50/50 with it (complement_engine, the
+     Complement Finder notebook's method), from outputs/stock-lookup/complements.json, which
+     generate_stock_complements.py refreshes weekly
 
 GitHub Pages is static and browsers can't pull from Yahoo, so everything is precomputed: one small JSON file per
 stock in outputs/stock-lookup/data/ (weekly closes, revisions, risk stats), plus the page with the ticker list,
@@ -35,6 +38,7 @@ from generate_stock_screener import (
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT_DIR = os.path.join(REPO_ROOT, "outputs", "stock-lookup")
 DATA_DIR = os.path.join(OUTPUT_DIR, "data")
+COMPLEMENTS_PATH = os.path.join(OUTPUT_DIR, "complements.json")
 
 HISTORY_YEARS = 15          # weekly chart history: 10 years shown with a 200-week average from the start
 BENCH = {"cdn": ("XIC.TO", "XIC (TSX)"), "us": ("SPY", "SPY (S&P 500)")}
@@ -156,6 +160,14 @@ def build():
     signals = compute_signals(prices10)
     returns = prices10.pct_change(fill_method=None)
     info = load_info()
+    comps = {}
+    if os.path.exists(COMPLEMENTS_PATH):
+        with open(COMPLEMENTS_PATH, encoding="utf-8") as f:
+            comp_file = json.load(f)
+        comps = comp_file["results"]
+        print(f"  complements from {comp_file['asof']} for {sum('top' in v for v in comps.values())} stocks")
+    else:
+        print("  no complements.json yet (generate_stock_complements.py); complements section will be empty")
 
     # Frontiers (TSX for Canadian stocks, S&P 500 for US) and each market's grey dots
     frontiers = {}
@@ -192,6 +204,7 @@ def build():
             risk=None if s is None else [round(s["Vol%"], 1), round(s["AnnRet%"], 1), round(s["Sharpe"], 2),
                                          round(s["NObs"] / 252, 1)],
             rev=meta.get("rev"),
+            comp=comps.get(sym),
         )
         n_rev += doc["rev"] is not None
         with open(os.path.join(DATA_DIR, data_filename(sym)), "w", encoding="utf-8") as f:
@@ -235,6 +248,17 @@ PAGE = r"""<!DOCTYPE html>
   .section h3 { margin: 0; font-size: 21px; border-bottom: 3px solid #C67A29; display: inline-block; padding-bottom: 4px; }
   .section p { margin: 8px 0 0; color: #555555; font-size: 15px; }
   .empty { color: #555555; padding: 16px; font-size: 15px; }
+  #comp { padding: 12px 16px 0; overflow-x: auto; }
+  #comp table { border-collapse: collapse; font-size: 15px; min-width: 640px; width: 100%; max-width: 1000px; }
+  #comp th { text-align: left; font-size: 12px; color: #555555; text-transform: uppercase; letter-spacing: .03em;
+             padding: 6px 10px; border-bottom: 2px solid #C67A29; white-space: nowrap; }
+  #comp th.grp { text-align: center; border-bottom: 1px solid #CFCFCF; }
+  #comp td { padding: 7px 10px; border-bottom: 1px solid #E6E6E6; white-space: nowrap; }
+  #comp td.num { text-align: center; font-weight: bold; }
+  #comp tbody tr:nth-child(even) { background: #F7F7F7; }
+  #comp a { color: #1F79BE; font-weight: bold; cursor: pointer; text-decoration: none; }
+  #comp a:hover { text-decoration: underline; }
+  #comp .note { color: #555555; font-size: 13px; margin: 10px 0 0; line-height: 1.5; max-width: 1000px; }
   .source { color: #555555; font-size: 14px; padding: 20px 16px 0; border-top: 1px solid #E6E6E6; margin-top: 24px; }
   #results { display: none; }
 </style>
@@ -280,6 +304,12 @@ PAGE = r"""<!DOCTYPE html>
     <p>What $10,000 invested would be worth today in this stock versus the index ETF, with dividends reinvested.
     The simplest test of whether owning the stock has paid off compared with owning the market.</p></div>
   <div id="c-growth"></div>
+  <div class="section"><h3>Stocks that have complemented <span id="comp-for"></span></h3>
+    <p>High-quality stocks that, held 50/50 with this one, would have made for a smoother ride: lower volatility and
+    smaller drops, without giving up much return. Each has beaten its own index, made money in every part of the
+    period, moved differently from this stock, and held up better in most major sell-offs. One per sector, from the
+    TSX and the S&amp;P 500. Click a ticker to look it up.</p></div>
+  <div id="comp"></div>
 </div>
 <div class="source">Source: 5i Research, analyst revenue estimates, Yahoo Finance. For TSX, S&amp;P 500 and Nasdaq 100 members.</div>
 <script>
@@ -488,6 +518,8 @@ function render(d) {
     images: logo(560 - 60 - 56, 60),
   }, CFG);
 
+  renderComplements(d);
+
   // 4. Growth of $10,000 vs the index, last 10 years (or since the stock's data begins)
   const bx = dates(bench.start, bench.c.length), bmap = {};
   bx.forEach(function (dt, i) { bmap[dt] = bench.c[i]; });
@@ -518,6 +550,47 @@ function render(d) {
                            tickformat: "$,.0f" }, AX),
     images: logo(440 - 60 - 40, 60),
   }, CFG);
+}
+
+// 5. Complements table: change from holding the stock alone to a 50/50 blend, in percentage points
+function renderComplements(d) {
+  const box = document.getElementById("comp");
+  document.getElementById("comp-for").textContent = d.n;
+  const c = d.comp;
+  if (!c) { box.innerHTML = '<div class="empty">Complements are not available for ' + d.t + ' yet.</div>'; return; }
+  if (!c.top) {
+    // Reasons are either "no stock passed all the tests" or "only 3.2 years of history (at least 5 needed)"
+    box.innerHTML = '<div class="empty">' + (/^only/.test(c.reason || "")
+      ? "Complements need at least five years of price history; " + d.t + " has " + c.reason.replace(/^only /, "").replace(/ \(.*$/, "") + "."
+      : "No stock passed all of the complement tests for " + d.t + ".") + "</div>";
+    return;
+  }
+  const FLAT = 0.005;
+  const cell = function (delta, betterUp) {
+    if (Math.abs(delta) < FLAT) return '<td class="num" style="color:' + MUTED + '">&asymp; same</td>';
+    const good = (delta > 0) === betterUp;
+    return '<td class="num" style="color:' + (good ? GREEN : RED) + '">' + (delta > 0 ? "&#9650; " : "&#9660; ") +
+           (Math.abs(delta) * 100).toFixed(1) + " pts</td>";
+  };
+  const a = c.alone, pc = function (v) { return (v * 100).toFixed(1) + "%"; };
+  const rows = c.top.map(function (x) {
+    const link = BY_SYM[x.t] ? '<a data-t="' + x.t + '">' + x.t + "</a>" : x.t;
+    return "<tr><td>" + x.n + " (" + link + ")</td><td>" + x.sector + "</td><td>" + (x.home === "CDN" ? "Canada" : "US") +
+      '</td><td class="num" style="font-weight:normal">' + x.corr.toFixed(2) + "</td>" +
+      cell(x.blend[0] - a[0], true) + cell(x.blend[1] - a[1], false) + cell(a[2] - x.blend[2], false) + "</tr>";
+  }).join("");
+  const span = c.start.slice(0, 4) + "&ndash;" + c.end.slice(0, 4);
+  box.innerHTML = '<table><thead><tr><th rowspan="2">Complement</th><th rowspan="2">Sector</th><th rowspan="2">Market</th>' +
+    '<th rowspan="2">Correlation</th><th class="grp" colspan="3">50/50 blend vs. ' + d.t + ' alone</th></tr>' +
+    "<tr><th>Return</th><th>Volatility</th><th>Max drawdown</th></tr></thead><tbody>" + rows + "</tbody></table>" +
+    '<p class="note">' + d.t + " alone, " + span + ": " + pc(a[0]) + " a year, " + pc(a[1]) + " volatility, " + pc(a[2]) +
+    " worst drawdown. Changes are in percentage points from holding " + d.t + " alone to a 50/50 mix rebalanced every quarter: " +
+    "green is better (higher return, lower volatility, smaller worst drop), &asymp; is within 0.5 points. Correlation is the " +
+    "highest of three sub-periods (lower means the two moved more independently). Total returns with dividends reinvested, in " +
+    "Canadian dollars. Backtested and hypothetical, not a recommendation.</p>";
+  box.querySelectorAll("a[data-t]").forEach(function (el) {
+    el.addEventListener("click", function () { lookup(el.dataset.t); window.scrollTo({ top: 0, behavior: "smooth" }); });
+  });
 }
 
 document.querySelectorAll(".chips a").forEach(function (a) { a.addEventListener("click", function () { lookup(a.dataset.t); }); });
