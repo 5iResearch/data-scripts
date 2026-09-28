@@ -26,6 +26,8 @@ import shutil
 from datetime import datetime
 
 import pandas as pd
+import yfinance as yf
+from datetime import timedelta
 
 from common_screening import load_nasdaq100_table, load_sp500_sectors
 from generate_efficient_frontier_web import compute_frontier
@@ -42,6 +44,12 @@ COMPLEMENTS_PATH = os.path.join(OUTPUT_DIR, "complements.json")
 
 HISTORY_YEARS = 15          # weekly chart history: 10 years shown with a 200-week average from the start
 BENCH = {"cdn": ("XIC.TO", "XIC (TSX)"), "us": ("SPY", "SPY (S&P 500)")}
+# Growth chart: 11 fiscal years of actuals (-10FY .. latest "FY") plus 3 years of estimates, from the revision CSVs.
+# EPS/Adj. is the history measure on the same basis as the "EPS Norm" consensus estimates (Apple FY2025 7.46 -> FY1E
+# 8.83 = +18.4%, matching Koyfin). The Canadian export is in C$, the US export in US$.
+HIST_PERIODS = [f"-{i}FY" for i in range(10, 0, -1)] + ["FY"]
+FUND_SERIES = {"eps": ("EPS/Adj. ({})", "EPS Norm - Est Avg ({})", 2),
+               "rev": ("Total Revenues ({})", "Revenues - Est Avg ({})", 1)}
 REV_KEYS = [f"{fy}_{w}" for fy in ("fy1", "fy2", "fy3") for w in ("1w", "1m", "3m", "6m", "1y")]
 
 
@@ -63,6 +71,31 @@ def tsx_candidates(symbol: str) -> list:
     return [c for c in cands if c != symbol]
 
 
+def download_both(tickers: list, years: int, chunk_size: int = 150):
+    """Daily closes two ways from one download: total-return (dividend-adjusted, for returns, risk, the frontier and
+    growth of $10,000) and actual traded prices (split-adjusted only, for the 200-week and price-vs-EPS charts, since
+    dividend adjustment lowers past prices and would understate past P/Es)."""
+    end = datetime.now().date()
+    start = end - timedelta(days=int(years * 365.25))
+    adj, act = [], []
+    for i in range(0, len(tickers), chunk_size):
+        chunk = tickers[i:i + chunk_size]
+        try:
+            raw = yf.download(chunk, start=start, end=end, auto_adjust=False, threads=True, progress=False)
+            a, c = raw["Adj Close"], raw["Close"]
+            if isinstance(a, pd.Series):
+                a, c = a.to_frame(chunk[0]), c.to_frame(chunk[0])
+            adj.append(a)
+            act.append(c)
+            print(f"  chunk {i // chunk_size + 1}/{(len(tickers) - 1) // chunk_size + 1} done")
+        except Exception as e:
+            print(f"  chunk {i // chunk_size + 1} error: {e}")
+    if not adj:
+        return pd.DataFrame(), pd.DataFrame()
+    a, c = pd.concat(adj, axis=1), pd.concat(act, axis=1)
+    return a.loc[:, ~a.columns.duplicated()], c.loc[:, ~c.columns.duplicated()]
+
+
 def load_prices():
     universes = load_universes([])
     # The TSX list drops punctuation (BEPUN); data/TSX.csv keeps it (BEP.UN), so add those forms too
@@ -72,7 +105,7 @@ def load_prices():
     benches = [b for b, _ in BENCH.values()]
 
     print(f"Downloading {len(tsx) + len(us)} tickers, {HISTORY_YEARS}yr daily...")
-    prices = download_prices(tsx + us + benches, HISTORY_YEARS)
+    prices, actual = download_both(tsx + us + benches, HISTORY_YEARS)
     prices = prices.loc[:, prices.notna().any()]
 
     # Recover TSX names that didn't resolve, trying each fallback form as one batch across all of them
@@ -85,17 +118,19 @@ def load_prices():
                  and cands[i] not in prices.columns}
         if not batch:
             continue
-        got = download_prices(list(batch), HISTORY_YEARS)
+        got, got_act = download_both(list(batch), HISTORY_YEARS)
         got = got.loc[:, got.notna().any()] if not got.empty else got
         for sym in got.columns:
             if batch.get(sym) and batch[sym] not in resolved:
                 resolved[batch[sym]] = sym
                 prices[sym] = got[sym]
+                actual[sym] = got_act[sym]
     tsx_final = list(dict.fromkeys(resolved.values()))
     # Duplicates from the two TSX lists (e.g. BEPUN.TO failing and BEP-UN.TO working) collapse to one symbol
     print(f"  TSX usable: {len(tsx_final)} (recovered {len(tsx_final) - len([s for s in tsx if s in prices.columns])})")
     market = {**{s: "cdn" for s in tsx_final}, **{s: "us" for s in us if s in prices.columns}}
-    return prices, market, {"cdn": tsx_final, "us": [s for s in universes["S&P 500"] if s in prices.columns]}
+    universe = {"cdn": tsx_final, "us": [s for s in universes["S&P 500"] if s in prices.columns]}
+    return prices, actual, market, universe
 
 
 # ── Names, sectors, revisions ──────────────────────────────────────────────────
@@ -108,6 +143,21 @@ def load_info() -> dict:
         for _, r in raw.iterrows():
             info[(m, norm(r["Ticker"]))] = dict(name=r.get("Name", ""), sector=r.get("Sector", ""),
                                                industry=r.get("Industry", ""))
+        for _, r in raw.iterrows():
+            fund = {}
+            for key, (hist_col, est_col, nd) in FUND_SERIES.items():
+                vals = [pd.to_numeric(r.get(hist_col.format(p)), errors="coerce") for p in HIST_PERIODS]
+                est = [pd.to_numeric(r.get(est_col.format(f"FY{i}E")), errors="coerce") for i in (1, 2, 3)]
+                if any(pd.notna(v) for v in vals + est):
+                    fund[key] = [[None if pd.isna(v) else round(float(v), nd) for v in vals],
+                                 [None if pd.isna(v) else round(float(v), nd) for v in est]]
+            if fund:
+                fund["cur"] = "C$" if m == "cdn" else "US$"
+                # "FY End" is the month the latest fiscal year ("FY") ended, e.g. "Sep-25" for Apple
+                fye = pd.to_datetime(str(r.get("FY End", "")), format="%b-%y", errors="coerce")
+                if pd.notna(fye):
+                    fund["fye"] = (fye + pd.offsets.MonthEnd(0)).strftime("%Y-%m-%d")
+                info[(m, norm(r["Ticker"]))]["fund"] = fund
         rev = load_rev_csv(path)
         for _, r in rev.iterrows():
             vals = [None if pd.isna(r.get(k)) else round(float(r.get(k)) * 100, 2) for k in REV_KEYS]
@@ -154,7 +204,7 @@ def compact(values) -> list:
 
 
 def build():
-    prices, market, universes = load_prices()
+    prices, actual, market, universes = load_prices()
     as_of = prices.dropna(how="all").index.max()
     prices10 = price_window_for_as_of(prices, as_of)
     signals = compute_signals(prices10)
@@ -200,11 +250,14 @@ def build():
         doc = dict(
             t=sym, n=name, m=m, sector=meta.get("sector") or "", industry=meta.get("industry") or "",
             start=w.index[0].strftime("%Y-%m-%d"), c=compact(w.tolist()),
-            last=round(float(prices[sym].dropna().iloc[-1]), 2),
+            # actual traded prices on the same weekly dates (see download_both)
+            p=compact(weekly(actual[sym]).reindex(w.index).ffill().bfill().tolist()) if sym in actual.columns else None,
+            last=round(float(actual[sym].dropna().iloc[-1] if sym in actual.columns else prices[sym].dropna().iloc[-1]), 2),
             risk=None if s is None else [round(s["Vol%"], 1), round(s["AnnRet%"], 1), round(s["Sharpe"], 2),
                                          round(s["NObs"] / 252, 1)],
             rev=meta.get("rev"),
             comp=comps.get(sym),
+            fund=meta.get("fund"),
         )
         n_rev += doc["rev"] is not None
         with open(os.path.join(DATA_DIR, data_filename(sym)), "w", encoding="utf-8") as f:
@@ -249,6 +302,16 @@ PAGE = r"""<!DOCTYPE html>
   .section h3 { margin: 0; font-size: 21px; border-bottom: 3px solid #C67A29; display: inline-block; padding-bottom: 4px; }
   .section p { margin: 8px 0 0; color: #555555; font-size: 15px; }
   .empty { color: #555555; padding: 16px; font-size: 15px; }
+  .pair { display: flex; gap: 12px; align-items: flex-start; }
+  .pair > div { flex: 1 1 0; min-width: 0; }
+  @media (max-width: 900px) { .pair { display: block; } }
+  .fund-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 12px 16px 0; }
+  .toggle button { border: 1px solid #CFCFCF; background: #FFFFFF; color: #363636; padding: 5px 14px; font-size: 14px; cursor: pointer; }
+  .toggle button:first-child { border-radius: 4px 0 0 4px; } .toggle button:last-child { border-radius: 0 4px 4px 0; border-left: none; }
+  .toggle button.on { background: #1F79BE; border-color: #1F79BE; color: #FFFFFF; }
+  .toggle button:disabled { color: #B5B5B5; cursor: default; }
+  #fund-growth { font-size: 14px; color: #555555; }
+  #fund-growth b { color: #363636; }
   #comp { padding: 12px 16px 8px; overflow-x: auto; }
   #comp table { border-collapse: collapse; font-size: 15px; min-width: 640px; width: 100%; max-width: 1000px; }
   #comp th { text-align: left; font-size: 12px; color: #555555; text-transform: uppercase; letter-spacing: .03em;
@@ -292,10 +355,20 @@ PAGE = r"""<!DOCTYPE html>
     <p>The 200-week average (about four years) smooths out short-term swings and shows the long-term trend. Stocks in
     healthy uptrends tend to stay above it; the lower panel shows how far above or below it the stock is.</p></div>
   <div id="c-ma"></div>
-  <div class="section"><h3>Analyst revenue revisions</h3>
-    <p>How much analysts have changed their revenue forecasts for each of the next three fiscal years over the past
-    week, month, three months, six months and year. Bars above zero mean estimates are rising.</p></div>
-  <div id="c-rev"></div>
+  <div class="section"><h3>Growth and analyst estimates</h3>
+    <p>Left: the stock price against its earnings per share (or revenue) over the last eleven years, with analysts'
+    estimates for the next three dashed. The blue line is scaled by the stock's typical valuation over the period
+    (its median price-to-earnings, or price-to-sales, ratio), so when the price sits above the blue line the stock is
+    trading above its usual multiple, and below it, cheaper than usual. Earnings are on an adjusted basis, excluding
+    one-off items, the same basis the estimates use. Right: how much analysts have changed their revenue forecasts for each of the next three
+    fiscal years over the past week, month, three months, six months and year; bars above zero mean estimates are
+    rising.</p></div>
+  <div class="fund-bar"><span class="toggle" id="fund-toggle"><button data-k="eps">EPS</button><button data-k="rev">Revenue</button></span>
+    <span id="fund-growth"></span></div>
+  <div class="pair">
+    <div><div id="c-fund"></div></div>
+    <div><div id="c-rev"></div></div>
+  </div>
   <div class="section"><h3>Risk vs. return: <span id="ef-market"></span> efficient frontier</h3>
     <p>Every stock in the index plotted by annual return (up) against volatility (right) over the last %%YEARS%% years.
     The orange line is the efficient frontier, the best return that mixing the index's highest-Sharpe stocks has
@@ -315,7 +388,7 @@ PAGE = r"""<!DOCTYPE html>
   <div id="comp"></div>
   <div id="c-comp"></div>
 </div>
-<div class="source">Source: 5i Research, analyst revenue estimates, Yahoo Finance. For TSX, S&amp;P 500 and Nasdaq 100 members.</div>
+<div class="source">Source: 5i Research, Koyfin, Yahoo Finance. For TSX, S&amp;P 500 and Nasdaq 100 members.</div>
 <script>
 const META = %%META%%;
 const LOGO = "%%LOGO%%";
@@ -409,13 +482,14 @@ function render(d) {
   document.getElementById("results").style.display = "block";
   const bench = META.bench[d.m], fr = META.frontier[d.m];
   const x = dates(d.start, d.c.length);
+  const P = d.p || d.c;   // actual traded prices (d.c is total-return, used for growth of $10,000)
 
   // 200-week moving average and % vs it
-  const ma = d.c.map(function (_, i) {
+  const ma = P.map(function (_, i) {
     if (i < 199) return null;
-    let s = 0; for (let j = i - 199; j <= i; j++) s += d.c[j]; return s / 200;
+    let s = 0; for (let j = i - 199; j <= i; j++) s += P[j]; return s / 200;
   });
-  const dist = d.c.map(function (v, i) { return ma[i] ? (v / ma[i] - 1) * 100 : null; });
+  const dist = P.map(function (v, i) { return ma[i] ? (v / ma[i] - 1) * 100 : null; });
   const lastDist = dist[dist.length - 1];
 
   // Summary card
@@ -436,11 +510,11 @@ function render(d) {
 
   // 1. Price vs 200-week MA
   const below = dist.map(function (v) { return v !== null && v < 0 ? 5 : 0; });
-  const pv = nums(d.c.concat(ma)), dv = nums(dist);
+  const pv = nums(P.concat(ma)), dv = nums(dist);
   const pLo = Math.min.apply(null, pv), pHi = Math.max.apply(null, pv);
   const dLo = Math.min(0, Math.min.apply(null, dv)), dHi = Math.max(0, Math.max.apply(null, dv)), dPad = (dHi - dLo) * 0.08 || 5;
   Plotly.react("c-ma", [
-    { x: x, y: d.c, mode: "lines+markers", name: "Weekly close", line: { color: BLUE, width: 2 },
+    { x: x, y: P, mode: "lines+markers", name: "Weekly close", line: { color: BLUE, width: 2 },
       marker: { size: below, color: GREEN }, hovertemplate: "Close: $%{y:,.2f}<extra></extra>" },
     { x: x, y: ma, mode: "lines", name: "200-week average", line: { color: ORANGE, width: 2 },
       hovertemplate: "200-wk avg: $%{y:,.2f}<extra></extra>" },
@@ -462,7 +536,8 @@ function render(d) {
     images: logo(600 - 60 - 80, 60),
   }, CFG);
 
-  // 2. Revisions
+  // 2. Growth (left) and revisions (right)
+  renderFund(d);
   const rev = document.getElementById("c-rev");
   if (d.rev) {
     const wins = ["1W", "1M", "3M", "6M", "1Y"], cols = [BLUE, "#4B8EA9", ORANGE];
@@ -470,13 +545,13 @@ function render(d) {
       return { type: "bar", x: wins, y: d.rev.slice(k * 5, k * 5 + 5), name: "FY" + (k + 1) + "E",
                marker: { color: cols[k] }, hovertemplate: "%{x}: %{y:+.2f}%<extra>FY" + (k + 1) + "E</extra>" };
     }), {
-      height: 420, margin: { t: 60, b: 80, l: 70, r: 24 }, paper_bgcolor: "#FFF", plot_bgcolor: "#FFF",
+      height: 420, margin: { t: 50, b: 80, l: 64, r: 16 }, paper_bgcolor: "#FFF", plot_bgcolor: "#FFF",
       font: { family: "Arial", color: INK, size: 13 }, barmode: "group",
-      title: { text: "<b>" + d.t + "</b>  ·  revenue estimate revisions", x: 0.02, font: { size: 18 } },
+      title: { text: "<b>" + d.t + "</b>  ·  revenue estimate revisions", x: 0.02, font: { size: 17 } },
       legend: { orientation: "h", x: 0, y: -0.12, yanchor: "top", traceorder: "normal" },
       xaxis: Object.assign({ type: "category" }, AX),
       yaxis: Object.assign({ ticksuffix: "%", zeroline: true, zerolinecolor: "#9A9A9A" }, AX),
-      images: logo(420 - 60 - 80, 60),
+      images: logo(420 - 50 - 80, 50),
     }, CFG);
   } else {
     Plotly.purge(rev);
@@ -560,8 +635,102 @@ function render(d) {
   }, CFG);
 }
 
+// Growth chart: actuals (-10FY .. last FY) then FY+1E..FY+3E estimates, EPS or revenue
+let FUND_KEY = "eps", CUR_DOC = null;
+function cagr(a, b, n) { return a > 0 && b > 0 ? Math.pow(b / a, 1 / n) - 1 : null; }
+function renderFund(d) {
+  CUR_DOC = d;
+  const div = document.getElementById("c-fund"), f = d.fund, g = document.getElementById("fund-growth");
+  const btns = document.querySelectorAll("#fund-toggle button");
+  if (!f || (!f.eps && !f.rev)) {
+    Plotly.purge(div); div.innerHTML = '<div class="empty">No reported results or estimates on file for ' + d.t + ".</div>";
+    g.textContent = ""; btns.forEach(function (b) { b.disabled = true; b.classList.remove("on"); }); return;
+  }
+  if (!f[FUND_KEY]) FUND_KEY = f.eps ? "eps" : "rev";
+  btns.forEach(function (b) { b.disabled = !f[b.dataset.k]; b.classList.toggle("on", b.dataset.k === FUND_KEY); });
+  const hist = f[FUND_KEY][0], est = f[FUND_KEY][1], eps = FUND_KEY === "eps", n = hist.length, last = hist[n - 1];
+
+  // Growth rates row (unchanged)
+  const grow = [["10-yr", cagr(hist[0], last, 10)], ["5-yr", cagr(hist[n - 6], last, 5)], ["Next 3 yrs (est.)", cagr(last, est[2], 3)]];
+  g.innerHTML = "Growth per year: " + grow.map(function (x) {
+    return x[0] + " <b>" + (x[1] === null ? "n/a" : (x[1] >= 0 ? "+" : "") + (x[1] * 100).toFixed(1) + "%") + "</b>";
+  }).join(" &middot; ") + (grow.some(function (x) { return x[1] === null; }) ? " (n/a: loss or missing year)" : "");
+
+  // Fiscal-year-end dates: latest FY ends at f.fye (else assume December of the last full year)
+  const fye = f.fye ? new Date(f.fye + "T00:00:00Z") : new Date(Date.UTC(new Date().getUTCFullYear() - 1, 11, 31));
+  const fyDate = function (k) {   // k years after the latest FY (negative = earlier)
+    const dt = new Date(Date.UTC(fye.getUTCFullYear() + k, fye.getUTCMonth() + 1, 0));
+    return dt.toISOString().slice(0, 10);
+  };
+  const fyLabel = function (k) { return "FY" + (fye.getUTCFullYear() + k) + (k > 0 ? "E" : ""); };
+  const hx = hist.map(function (_, i) { return fyDate(i - (n - 1)); }), ex = [1, 2, 3].map(fyDate);
+  const hl = hist.map(function (_, i) { return fyLabel(i - (n - 1)); }), el = [1, 2, 3].map(fyLabel);
+
+  // Weekly price, from the first fiscal year on
+  const px = dates(d.start, d.c.length), P = d.p || d.c;   // actual prices: P/E needs the price investors saw then
+  const priceAt = function (iso) {   // last weekly close on or before a date
+    let v = null;
+    for (let i = 0; i < px.length && px[i] <= iso; i++) v = P[i];
+    return v;
+  };
+  const p0 = px.findIndex(function (x) { return x >= hx[0]; });
+  const pxX = px.slice(Math.max(0, p0 - 8)), pxY = P.slice(Math.max(0, p0 - 8));
+
+  // Scale: the median of price / value at each fiscal year end with a positive value (median P/E or P/"sales")
+  const ratios = [];
+  hist.forEach(function (v, i) { const pr = priceAt(hx[i]); if (v > 0 && pr) ratios.push(pr / v); });
+  ratios.sort(function (a, b) { return a - b; });
+  const k = ratios.length ? ratios[Math.floor(ratios.length / 2)] : null;
+  const scaled = function (a) { return a.map(function (v) { return v === null || k === null ? null : v * k; }); };
+  const hs = scaled(hist), es = scaled(est);
+  const allPos = nums(hs.concat(es, pxY)).every(function (v) { return v > 0; });
+
+  const unitName = eps ? "EPS" : "Revenue";
+  const big = !eps && Math.max.apply(null, nums(hist.concat(est)).map(Math.abs)) >= 1000;
+  const val = function (v) {
+    return v === null ? "n/a" : eps ? f.cur + v.toFixed(2) : f.cur + (big ? (v / 1000).toFixed(1) + "B" : Math.round(v).toLocaleString("en-US") + "M");
+  };
+  // Hover text: value plus year-over-year change (not annualized). No % from a loss: it would be meaningless.
+  const seq = hist.concat(est), seqLabels = hl.concat(el);
+  const yoy = function (i) {
+    if (i === 0 || seq[i] === null || seq[i - 1] === null) return "";
+    const a = seq[i - 1], b = seq[i], vs = " vs " + seqLabels[i - 1].replace(/E$/, "E");
+    if (a > 0) { const c = (b / a - 1) * 100; return " · " + (c >= 0 ? "+" : "") + c.toFixed(1) + "%" + vs; }
+    return b > 0 ? " · back to a profit from a loss" : " · n/a (loss" + (a < 0 ? " both years)" : ")");
+  };
+  const hover = function (i) { return seqLabels[i] + ": " + val(seq[i]) + yoy(i); };
+  const tr = [
+    { x: pxX, y: pxY, mode: "lines", name: "Share price", line: { color: INK, width: 1.5 },
+      hovertemplate: "Price: " + f.cur + "%{y:,.2f}<extra></extra>" },
+    { x: hx, y: hs, mode: "lines+markers", name: unitName + " (reported)", line: { color: BLUE, width: 3 },
+      marker: { size: 7, color: BLUE }, customdata: hist.map(function (_, i) { return hover(i); }),
+      hovertemplate: "%{customdata}<extra></extra>" },
+    { x: [hx[n - 1]].concat(ex), y: [hs[n - 1]].concat(es), mode: "lines+markers", name: unitName + " (analyst estimate)",
+      line: { color: BLUE, width: 3, dash: "dash" }, marker: { size: [0, 7, 7, 7], color: "#FFFFFF", line: { color: BLUE, width: 2 } },
+      customdata: [""].concat(est.map(function (_, i) { return hover(n + i); })),
+      hovertemplate: "%{customdata}<extra></extra>" },
+  ];
+  const note = k === null ? "" : (eps ? "EPS × " + k.toFixed(1) + " (median P/E)" : "revenue scaled to price (median ratio)");
+  Plotly.react(div, tr, {
+    height: 420, margin: { t: 50, b: 80, l: 64, r: 16 }, paper_bgcolor: "#FFF", plot_bgcolor: "#FFF",
+    font: { family: "Arial", color: INK, size: 13 }, hovermode: "closest",
+    title: { text: "<b>" + d.t + "</b>  ·  price vs. " + (eps ? "earnings per share" : "revenue"), x: 0.02, font: { size: 17 } },
+    legend: { orientation: "h", x: 0, y: -0.12, yanchor: "top", font: { size: 12 } },
+    xaxis: Object.assign({ type: "date", range: [fyDate(-(n - 1) - 0.25).slice(0, 10), ex[2]] }, AX),
+    yaxis: Object.assign({ type: allPos ? "log" : "linear", tickprefix: f.cur, tickformat: ",.0f",
+                           title: { text: "Share price (" + f.cur + ")", font: { size: 12 } } },
+                         allPos ? { tickvals: logTicks(Math.min.apply(null, nums(hs.concat(es, pxY))), Math.max.apply(null, nums(hs.concat(es, pxY)))) } : {}, AX),
+    annotations: note ? [{ xref: "paper", yref: "paper", x: 0.01, y: 0.99, xanchor: "left", yanchor: "top", showarrow: false,
+                           text: "Blue line: " + note, font: { size: 11, color: MUTED }, bgcolor: "rgba(255,255,255,0.8)" }] : [],
+  }, CFG);
+}
+document.querySelectorAll("#fund-toggle button").forEach(function (b) {
+  b.addEventListener("click", function () { if (!b.disabled && CUR_DOC) { FUND_KEY = b.dataset.k; renderFund(CUR_DOC); } });
+});
+
 // 5. Complements table: change from holding the stock alone to a 50/50 blend, in percentage points
 const COMP_COLORS = [BLUE, ORANGE, GREEN, "#8E6AC8", "#4B8EA9"];
+const CHARCOAL = "#5F6368";   // the stock alone: softer than the near-black text colour
 
 // Growth of $10,000 alone vs each 50/50 blend (top), drawdowns (bottom). The top two blends show by default; the
 // rest are a legend click away, since six lines at once is hard to read.
@@ -570,16 +739,20 @@ function renderComplementChart(d) {
   if (!c || !c.top || !c.paths) { Plotly.purge(div); div.innerHTML = ""; return; }
   const p = c.paths, xs = dates(p.start, p.alone.length);
   const dd = function (v) { let m = -Infinity; return v.map(function (y) { m = Math.max(m, y); return (y / m - 1) * 100; }); };
-  const series = [{ name: d.t + " alone", y: p.alone, color: INK, width: 2.8, vis: true }].concat(
+  const series = [{ name: d.t + " alone", y: p.alone, color: CHARCOAL, width: 2.8, vis: true }].concat(
     c.top.map(function (x, i) {
-      return { name: "50/50 with " + x.t, y: p.blends[i], color: COMP_COLORS[i], width: 1.9, vis: i < 2 ? true : "legendonly" };
+      return { name: "50/50 with " + x.t, y: p.blends[i], color: COMP_COLORS[i], width: 1.4, vis: i < 2 ? true : "legendonly" };
     }));
-  const tr = [];
-  series.forEach(function (s, i) {
-    tr.push({ x: xs, y: s.y, mode: "lines", name: s.name, legendgroup: "g" + i, visible: s.vis,
-              line: { color: s.color, width: s.width }, hovertemplate: s.name + ": $%{y:,.0f}<extra></extra>" });
+  // Blends thin and slightly see-through; the stock alone thick and drawn last so it stays on top where lines cross
+  const tr = [], order = series.slice(1).concat([series[0]]);
+  order.forEach(function (s) {
+    const i = series.indexOf(s), alone = i === 0;
+    tr.push({ x: xs, y: s.y, mode: "lines", name: s.name, legendgroup: "g" + i, visible: s.vis, legendrank: i,
+              opacity: alone ? 1 : 0.85, line: { color: s.color, width: s.width },
+              hovertemplate: s.name + ": $%{y:,.0f}<extra></extra>" });
     tr.push({ x: xs, y: dd(s.y), mode: "lines", yaxis: "y2", legendgroup: "g" + i, showlegend: false, visible: s.vis,
-              line: { color: s.color, width: s.width * 0.8 }, hovertemplate: s.name + ": %{y:.0f}%<extra></extra>" });
+              opacity: alone ? 1 : 0.8, line: { color: s.color, width: alone ? 1.9 : 1.0 },
+              hovertemplate: s.name + ": %{y:.0f}%<extra></extra>" });
   });
   const all = [].concat.apply([], series.map(function (s) { return s.y; }));
   const shapes = [], annotations = [];
