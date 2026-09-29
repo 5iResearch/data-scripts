@@ -1,0 +1,32 @@
+{
+  "as_of": "2026-09-28",
+  "blog_title": "Benchmark Beaters Weekly: 43 Stocks Beating Their Benchmarks (September 28, 2026)",
+  "email_subject": "Benchmark Beaters: MATR & MRNA lead 43 stocks beating the market",
+  "preview_text": "23 Canadian and 20 U.S. names at six-month relative highs. Full table and charts inside.",
+  "intro": [
+    "The latest Benchmark Beaters screen (as of September 28, 2026) found 43 Canadian and U.S. stocks outperforming their benchmarks, each hitting a new six-month relative high in the last five trading days.",
+    "In Canada, 23 stocks made a fresh six-month high relative to the TSX Composite, 12 of them new to the list this week. Mattr Corp. (MATR) leads with a +133% six-month return, and Materials is the most represented sector with 13 names.",
+    "In the U.S., 20 stocks made a fresh six-month high relative to the S&P 500, 11 of them new to the list this week. Moderna Inc. (MRNA) leads with a +296% six-month return, and Health Care is the most represented sector with 10 names."
+  ],
+  "total": 43,
+  "stats": {
+    "cdn": {
+      "count": 23,
+      "new": 12,
+      "streak": 0,
+      "top_sector": "Materials",
+      "top_sector_n": 13
+    },
+    "us": {
+      "count": 20,
+      "new": 11,
+      "streak": 1,
+      "top_sector": "Health Care",
+      "top_sector_n": 10
+    }
+  },
+  "workbook": "Benchmark_Beaters_2026-09-28.xlsx",
+  "image_url": "https://5iresearch.github.io/data-scripts/outputs/benchmark-beaters-weekly/2026-09-28/teaser.png",
+  "table_url": "{{TABLE_PDF_URL}}",
+  "charts_url": "{{CHARTS_PDF_URL}}"
+}
