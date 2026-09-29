@@ -326,9 +326,16 @@ PAGE = r"""<!DOCTYPE html>
   #comp .note { color: #555555; font-size: 13px; margin: 10px 0 0; line-height: 1.5; max-width: 1000px; }
   .source { color: #555555; font-size: 14px; padding: 20px 16px 0; border-top: 1px solid #E6E6E6; margin-top: 24px; }
   #results { display: none; }
+  #fs-btn { position: fixed; top: 10px; right: 12px; z-index: 50; display: none; align-items: center; gap: 6px;
+            background: #FFFFFF; color: #363636; border: 1px solid #CFCFCF; border-radius: 4px; padding: 6px 10px;
+            font: 14px Arial, sans-serif; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  #fs-btn:hover { border-color: #1F79BE; color: #1F79BE; }
+  #fs-btn svg { width: 16px; height: 16px; }
+  :fullscreen { background: #FFFFFF; overflow-y: auto; }
 </style>
 </head>
 <body>
+<button id="fs-btn" type="button" title="Full screen"></button>
 <header>
   <h1>Stock Lookup</h1>
   <div class="meta">Prices as of %%ASOF%% &middot; TSX, S&amp;P 500 and Nasdaq 100 stocks</div>
@@ -823,6 +830,26 @@ document.getElementById("q").addEventListener("keydown", function (e) { if (e.ke
 (function () {
   const t = new URLSearchParams(location.search).get("t");
   if (t) lookup(t);
+})();
+</script>
+<script>
+// Full-screen button: only shown when the browser (and the panel embedding this page) allows full screen
+(function () {
+  const btn = document.getElementById("fs-btn"), root = document.documentElement;
+  const enabled = document.fullscreenEnabled || document.webkitFullscreenEnabled;
+  if (!enabled) return;
+  const cur = function () { return document.fullscreenElement || document.webkitFullscreenElement; };
+  const ICON_IN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+  const ICON_OUT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>';
+  const draw = function () { btn.innerHTML = cur() ? ICON_OUT + "Exit full screen" : ICON_IN + "Full screen"; };
+  btn.addEventListener("click", function () {
+    if (cur()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    else (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
+  });
+  ["fullscreenchange", "webkitfullscreenchange"].forEach(function (ev) {
+    document.addEventListener(ev, function () { draw(); window.dispatchEvent(new Event("resize")); });
+  });
+  draw(); btn.style.display = "inline-flex";
 })();
 </script>
 </body>
