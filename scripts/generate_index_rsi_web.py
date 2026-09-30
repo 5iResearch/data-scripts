@@ -69,6 +69,37 @@ RED = "#A22A2A"
 
 SIGNAL_COLORS = {"buy": GREEN, "hold": "#9A9A9A", "sell": RED}
 
+# Full-screen button (top right) for pages embedded in the website's slide-out panel. Drop in just before </body>.
+# It only shows when the browser allows full screen here: inside an iframe, the embed needs allowfullscreen, and
+# without it the button stays hidden rather than doing nothing.
+FULLSCREEN_HTML = """<style>
+  #fs-btn { position: fixed; top: 10px; right: 12px; z-index: 50; display: none; align-items: center; gap: 6px;
+            background: #FFFFFF; color: #363636; border: 1px solid #CFCFCF; border-radius: 4px; padding: 6px 10px;
+            font: 14px Arial, sans-serif; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  #fs-btn:hover { border-color: #1F79BE; color: #1F79BE; }
+  #fs-btn svg { width: 16px; height: 16px; }
+  :fullscreen { background: #FFFFFF; overflow-y: auto; }
+</style>
+<button id="fs-btn" type="button" title="Full screen"></button>
+<script>
+(function () {
+  const btn = document.getElementById("fs-btn"), root = document.documentElement;
+  if (!(document.fullscreenEnabled || document.webkitFullscreenEnabled)) return;
+  const cur = function () { return document.fullscreenElement || document.webkitFullscreenElement; };
+  const ICON_IN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+  const ICON_OUT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>';
+  const draw = function () { btn.innerHTML = cur() ? ICON_OUT + "Exit full screen" : ICON_IN + "Full screen"; };
+  btn.addEventListener("click", function () {
+    if (cur()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    else (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
+  });
+  ["fullscreenchange", "webkitfullscreenchange"].forEach(function (ev) {
+    document.addEventListener(ev, function () { draw(); window.dispatchEvent(new Event("resize")); });
+  });
+  draw(); btn.style.display = "inline-flex";
+})();
+</script>"""
+
 # Index levels rather than ETFs, so the charts show the benchmarks by name.
 # (oversold, overbought) per index for the weekly RSI-14 and the 1-year RSI-52. Defaults are
 # 40/75 and 45/65; S&P 500 1-year and both Russell 2000 views are tightened because they
