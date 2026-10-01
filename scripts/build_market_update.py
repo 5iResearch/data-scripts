@@ -155,9 +155,45 @@ Text for this issue's call to action. Links look like [this](https://www.5iresea
 
 # --------------------------------------------------------------------------- inline text
 
+# Set by main(): where issue.md images live and where they'll be hosted.
+ISSUE = {"folder": "", "build_dir": "", "img_prefix": "", "images": [], "warnings": []}
+MD_IMAGE = r"!\[([^\]]*)\]\(([^)]+)\)"
+MD_BUTTON = r"\[button:\s*(.+?)\]\((https?://[^)\s]+)\)"
+
+
+def issue_image_src(src):
+    """URL for an issue.md image: web links pass through, files in the issue
+    folder are copied to _build and hosted with the other images."""
+    src = html.unescape(src).strip().strip("<>")
+    if re.match(r"https?://", src):
+        return src
+    path = os.path.join(ISSUE["folder"], src)
+    if not os.path.isfile(path):
+        msg = f"Image '{src}' in issue.md isn't in the issue folder."
+        if msg not in ISSUE["warnings"]:
+            ISSUE["warnings"].append(msg)
+        return ""
+    name = re.sub(r"[^a-z0-9.]+", "-", os.path.basename(src).lower()).strip("-")
+    if name not in ISSUE["images"]:
+        shutil.copyfile(path, os.path.join(ISSUE["build_dir"], name))
+        ISSUE["images"].append(name)
+    return f'{ISSUE["img_prefix"]}/{name}'
+
+
+def _inline_image(m):
+    src = issue_image_src(m.group(2))
+    if not src:
+        return ""
+    return (f'<img src="{html.escape(src)}" alt="{m.group(1)}" height="22" style="display:inline-block;height:22px;'
+            f'width:auto;vertical-align:middle;border:0;margin:0 4px;">')
+
+
 def inline_md(text):
-    """Minimal markdown: **bold**, *italic*, [text](url). Everything else is escaped."""
+    """Minimal markdown: **bold**, *italic*, [text](url), ![alt](image) as a small
+    inline icon. Everything else is escaped."""
+    text = re.sub(r"\\([\\`*_{}\[\]()#+\-.!&<>~|])", r"\1", text)  # editors save "Q&A" as "Q\&A"
     s = html.escape(text, quote=False)
+    s = re.sub(MD_IMAGE, _inline_image, s)
     s = re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)",
                lambda m: f'<a href="{m.group(2)}" style="color:{BLUE};font-weight:bold;">{m.group(1)}</a>', s)
     s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
@@ -171,15 +207,23 @@ def p(inner, size=16, color=INK, align="left", margin="0 0 14px", extra=""):
 
 
 def md_blocks(text):
-    """Paragraphs (blank-line separated), '- ' bullet lists and [button: x](url) lines."""
+    """Paragraphs (blank-line separated), '- ' bullet lists, [button: x](url) and
+    ![alt](image) on its own line as a full-width figure."""
     out = []
+    # A button stuck on the end of a paragraph still becomes a button.
+    text = re.sub(MD_BUTTON, lambda m: f"\n\n{m.group(0)}\n\n", text)
     for block in re.split(r"\n\s*\n", text.strip()):
         lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
         if not lines:
             continue
-        m = re.fullmatch(r"\[button:\s*(.+?)\]\((https?://\S+)\)", " ".join(lines))
+        m = re.fullmatch(MD_BUTTON, " ".join(lines))
+        fig = re.fullmatch(MD_IMAGE, " ".join(lines))
         if m:
-            out.append(button(m.group(2), html.escape(m.group(1)), BLUE))
+            out.append(button(m.group(2), html.escape(m.group(1), quote=False), BLUE))
+        elif fig:
+            src = issue_image_src(fig.group(2))
+            if src:
+                out.append(image(src, fig.group(1)))
         elif all(ln.startswith(("- ", "* ")) for ln in lines):
             items = "".join(f'<li style="margin:0 0 6px;">{inline_md(ln[2:])}</li>' for ln in lines)
             out.append(f'<ul style="margin:0 0 14px;padding-left:22px;font-family:{FONT};font-size:16px;'
@@ -595,6 +639,7 @@ def main():
     shutil.rmtree(build_dir, ignore_errors=True)
     os.makedirs(build_dir, exist_ok=True)
     img_prefix = f"{PAGES_BASE}/{date_str}"
+    ISSUE.update(folder=folder, build_dir=build_dir, img_prefix=img_prefix, images=[], warnings=warnings)
 
     docs = [d for d in glob.glob(os.path.join(folder, "Market Update*.docx"))
             if not os.path.basename(d).startswith("~$")]
@@ -630,6 +675,7 @@ def main():
         with open(os.path.join(build_dir, name), "w", encoding="utf-8") as f:
             f.write(content)
 
+    images += ISSUE["images"]
     host_dir = os.path.join(IMAGES_ROOT, date_str)
     os.makedirs(host_dir, exist_ok=True)
     for name in images:
