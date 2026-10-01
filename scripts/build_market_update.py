@@ -21,6 +21,7 @@ Needs python-docx (in the miniconda base env; not in requirements.txt).
 """
 
 import glob
+import hashlib
 import html
 import json
 import os
@@ -667,6 +668,14 @@ def main():
         post_html = build_post(build_rows(meta, sections, mu_title, mu_html, report_card_src, []))
     finally:
         LAYOUT["web"] = False
+    # Stamp each image URL with its content hash: a replaced image (same name)
+    # otherwise keeps showing the old copy from browser / Mailchimp caches.
+    for name in dict.fromkeys(images + ISSUE["images"]):
+        with open(os.path.join(build_dir, name), "rb") as f:
+            url = f"{img_prefix}/{name}"
+            stamped = f"{url}?v={hashlib.md5(f.read()).hexdigest()[:8]}"
+        email_html = email_html.replace(f'"{url}"', f'"{stamped}"')
+        post_html = post_html.replace(f'"{url}"', f'"{stamped}"')
     subject = meta.get("subject") or "Market, Model Portfolio, and Report Updates!"
     preview = meta.get("preview") or mu_title
     blog_title = meta.get("blog title") or (f"Market Update: {mu_title}" if mu_title else subject)
