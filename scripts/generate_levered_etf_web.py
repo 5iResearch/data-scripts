@@ -24,7 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from generate_index_rsi_web import BLUE, RED, fetch_all, fig_to_div, log_ticks, timeframe_ranges
+from generate_index_rsi_web import BLUE, RED, fetch_all, fig_to_div, log_ticks, timeframe_ranges, with_fullscreen
 from generate_vix_web import AXIS_STYLE, FIT_AXES_JS, SPX_COLOR, base_layout, zone_segments
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -203,7 +203,7 @@ def main():
 
     out_path = os.path.join(OUTPUT_DIR, "Levered_ETF_Sentiment.html")
     with open(out_path, "w", encoding="utf-8") as f:
-        f.write(html)
+        f.write(with_fullscreen(html))
     print(f"Saved: {out_path}")
 
 

@@ -20,7 +20,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 
-from generate_index_rsi_web import BLUE, GREEN, GRID, INK, LOGO_B64, MUTED, ORANGE, RED
+from generate_index_rsi_web import BLUE, GREEN, GRID, INK, LOGO_B64, MUTED, ORANGE, RED, with_fullscreen
 from generate_stock_screener import (
     DATA_YEARS, MIN_FRONTIER_HISTORY, RISK_FREE, TOP_N, compute_signals, download_prices, efficient_frontier,
     get_extra_tickers, load_universes,
@@ -291,7 +291,7 @@ def main():
                                 n_stocks=n_stocks)
     out_path = os.path.join(OUTPUT_DIR, "Efficient_Frontier.html")
     with open(out_path, "w", encoding="utf-8") as f:
-        f.write(html)
+        f.write(with_fullscreen(html))
     print(f"Saved: {out_path}")
 
 

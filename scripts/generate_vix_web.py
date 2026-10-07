@@ -22,7 +22,7 @@ from plotly.subplots import make_subplots
 
 from generate_index_rsi_web import (
     BLUE, GREEN, GRID, INK, LOGO_B64, MUTED, ORANGE, RED,
-    fetch_all, fig_to_div, log_ticks, timeframe_ranges,
+    fetch_all, fig_to_div, log_ticks, timeframe_ranges, with_fullscreen,
 )
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -327,7 +327,7 @@ def main():
 
     out_path = os.path.join(OUTPUT_DIR, "VIX_Report.html")
     with open(out_path, "w", encoding="utf-8") as f:
-        f.write(html)
+        f.write(with_fullscreen(html))
     print(f"Saved: {out_path}")
 
 

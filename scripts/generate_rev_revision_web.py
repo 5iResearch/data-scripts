@@ -25,7 +25,7 @@ import plotly.io as pio
 from plotly.subplots import make_subplots
 
 from common_screening import CAP_FILTER_CONTROL_HTML, CAP_FILTER_JS, load_sp500_symbols
-from generate_index_rsi_web import BLUE, GREEN, GRID, INK, MUTED, ORANGE, RED
+from generate_index_rsi_web import BLUE, GREEN, GRID, INK, MUTED, ORANGE, RED, with_fullscreen
 from generate_rev_revision_screener import (
     ALL_WIN_KEYS, ALL_WIN_LABELS, CDN_CSV_PATH, CHART_CUTOFF, PRICE_YEARS, SPOTLIGHT_TOP_N, US_CSV_PATH,
     compute_vs_bench_10y, download_bench_series, download_spotlight_prices, load_rev_csv, rank_by_revisions,
@@ -295,7 +295,7 @@ def main():
                                 cap_js=CAP_FILTER_JS, cap_control=CAP_FILTER_CONTROL_HTML)
     out_path = os.path.join(OUTPUT_DIR, "Rev_Revision_Screener.html")
     with open(out_path, "w", encoding="utf-8") as f:
-        f.write(html)
+        f.write(with_fullscreen(html))
     print(f"Saved: {out_path}")
 
 

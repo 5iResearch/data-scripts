@@ -33,7 +33,7 @@ import ta
 import yfinance as yf
 from plotly.subplots import make_subplots
 
-from generate_index_rsi_web import fig_to_div, timeframe_ranges
+from generate_index_rsi_web import fig_to_div, timeframe_ranges, with_fullscreen
 from generate_vix_web import AXIS_STYLE, FIT_AXES_JS, base_layout
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -405,8 +405,8 @@ def build_market(market: str):
     for key, fig in charts.items():
         name = f"{cfg['slug']}-{'market-model' if key == 'model' else key}.html"
         with open(os.path.join(CHART_DIR, name), "w", encoding="utf-8") as f:
-            f.write(STANDALONE_TEMPLATE.format(title=f"{cfg['name']}: {name[:-5]}", fit_js=FIT_AXES_JS,
-                                               chart=fig_to_div(fig)))
+            f.write(with_fullscreen(STANDALONE_TEMPLATE.format(title=f"{cfg['name']}: {name[:-5]}",
+                                                               fit_js=FIT_AXES_JS, chart=fig_to_div(fig))))
         print(f"  saved charts/{name}")
 
     # Full page
@@ -428,7 +428,7 @@ def build_market(market: str):
         date_str=datetime.now().strftime("%B %d, %Y"), index_name=cfg["name"],
         weights_note=weights_note, legend=legend, charts="\n".join(body))
     with open(os.path.join(OUTPUT_DIR, cfg["page"]), "w", encoding="utf-8") as f:
-        f.write(html)
+        f.write(with_fullscreen(html))
     print(f"  saved {cfg['page']} (current signal: {SIGNAL_LABELS[signal]})")
 
 

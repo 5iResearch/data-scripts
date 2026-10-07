@@ -100,6 +100,12 @@ FULLSCREEN_HTML = """<style>
 })();
 </script>"""
 
+
+def with_fullscreen(html: str) -> str:
+    """The page with FULLSCREEN_HTML dropped in before its closing </body>."""
+    head, sep, tail = html.rpartition("</body>")
+    return head + FULLSCREEN_HTML + "\n" + sep + tail if sep else html + FULLSCREEN_HTML
+
 # Index levels rather than ETFs, so the charts show the benchmarks by name.
 # (oversold, overbought) per index for the weekly RSI-14 and the 1-year RSI-52. Defaults are
 # 40/75 and 45/65; S&P 500 1-year and both Russell 2000 views are tightened because they
@@ -367,7 +373,7 @@ def main():
 
     out_path = os.path.join(OUTPUT_DIR, "Index_RSI_Report.html")
     with open(out_path, "w", encoding="utf-8") as f:
-        f.write(html)
+        f.write(with_fullscreen(html))
     print(f"Saved: {out_path}")
 
 
