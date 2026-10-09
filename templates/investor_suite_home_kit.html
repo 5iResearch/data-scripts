@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Investor Suite home page - Kit</title>
+<style>
+:root { --blue:#1F79BE; --orange:#C67A29; --ink:#363636; --muted:#6b6b6b; --bg:#F2F4F6; --card:#fff; --rule:#dde1e5; --good:#2e8b57; --bad:#a22a2a; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 Arial,Helvetica,sans-serif; }
+main { max-width:1240px; margin:0 auto; padding:24px 16px 60px; }
+h1 { margin:0 0 4px; font-size:24px; } h2 { margin:0 0 4px; font-size:18px; }
+.sub { color:var(--muted); margin:0 0 20px; }
+section { background:var(--card); border:1px solid var(--rule); border-radius:8px; padding:18px; margin:0 0 16px; }
+.step { color:var(--orange); font-weight:bold; text-transform:uppercase; font-size:12px; letter-spacing:.05em; }
+.row { display:flex; gap:8px; align-items:center; margin:6px 0; flex-wrap:wrap; }
+.row code { flex:1 1 300px; background:var(--bg); padding:8px 10px; border-radius:5px; font:14px Arial,sans-serif; overflow-wrap:anywhere; }
+button { background:var(--blue); color:#fff; border:0; border-radius:5px; padding:9px 14px; font:bold 14px Arial,sans-serif; cursor:pointer; white-space:nowrap; }
+button.done { background:var(--good); }
+button.quiet { background:#fff; color:var(--blue); border:1px solid var(--blue); }
+iframe { width:100%; border:1px solid var(--rule); border-radius:5px; margin-top:10px; background:#fff; }
+ul.warn { margin:6px 0 0 18px; padding:0; color:var(--bad); }
+dl { display:grid; grid-template-columns:max-content 1fr; gap:4px 16px; margin:8px 0 0; }
+dt { color:var(--muted); } dd { margin:0; overflow-wrap:anywhere; }
+details summary { cursor:pointer; font-weight:bold; }
+.thumbs { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; margin-top:10px; }
+.thumbs a { display:block; border:1px solid var(--rule); border-radius:5px; padding:8px; text-decoration:none; color:var(--ink); font-size:12px; overflow-wrap:anywhere; }
+.thumbs img { width:100%; height:110px; object-fit:contain; display:block; margin-bottom:6px; background:#fff; }
+.other { margin-top:16px; } .other b { text-transform:capitalize; }
+</style></head>
+<body><main>
+<h1>Investor Suite home page</h1>
+<p class="sub" id="sub"></p>
+
+<section>
+<h2>What was read</h2>
+<dl id="facts"></dl>
+<ul id="warnings" class="warn"></ul>
+<p class="sub" style="margin:14px 0 4px;" id="listnote"></p>
+<ol id="listing" style="margin:0 0 0 20px;padding:0;"></ol>
+</section>
+
+<section>
+<div class="step">Step 1</div><h2>Home page block</h2>
+<p>This replaces everything under the page's subtitle: Our Current View, then Market Memes where Key Risks to Watch was. Paste it through the editor's <b>HTML</b> button. It sets no fonts or text colours, so it picks up the page's own.</p>
+<div class="row"><code>Our Current View + Market Memes (HTML)</code><button data-copy="block">Copy block HTML</button></div>
+<p class="sub" style="margin:10px 0 0;">If the page keeps those as separate fields, use these instead:</p>
+<div class="row"><code id="view"></code><button class="quiet" data-copy="view">Copy current view text</button></div>
+<div class="row"><code>Market Memes only (HTML)</code><button class="quiet" data-copy="memes_block">Copy Market Memes HTML</button></div>
+<iframe id="preview" title="Home page preview"></iframe>
+</section>
+
+<section id="shotsection">
+<div class="step">Step 2</div><h2>Upload the Suite Screens picture</h2>
+<p>Upload to the site's file manager, keeping the name exactly. The bottom block already points at <code>/files/www/&lt;name&gt;</code>. It is in the same <code>_build</code> folder as this page.</p>
+<div id="images" class="thumbs"></div>
+</section>
+
+<section>
+<div class="step" id="bottomstep">Step 3</div><h2>Bottom of the page</h2>
+<p>The watchlist tag, Suite Screens and Disclosure, as one block. Paste it through the editor's <b>HTML</b> button. The wording comes from <span id="bottomsettings"></span> and stays the same each month unless you change it there.</p>
+<div class="row"><code>Watchlist tag + Suite Screens + Disclosure (HTML)</code><button data-copy="footer">Copy bottom HTML</button></div>
+<iframe id="bottom" title="Bottom block preview"></iframe>
+</section>
+
+<section>
+<details><summary>Other looks for Market Memes</summary>
+<p class="sub" style="margin:8px 0 0;" id="othernote"></p>
+<div id="others"></div>
+</details>
+</section>
+</main>
+<script>
+const DATA = %%DATA_JSON%%;
+const $ = id => document.getElementById(id);
+$("sub").textContent = `${DATA.month} · ${DATA.memes.length} Market Memes bullet${DATA.memes.length === 1 ? "" : "s"}`;
+const fact = (k, v) => { const dt = document.createElement("dt"), dd = document.createElement("dd");
+  dt.textContent = k; dd.textContent = v; $("facts").append(dt, dd); };
+fact("Market Memes", DATA.source || "not found");
+fact("Our Current View", DATA.view ? "typed in " + DATA.settings : "blank");
+fact("Settings file", DATA.settings + " (current view, heading and look; edit and rebuild)");
+DATA.warnings.forEach(w => { const li = document.createElement("li"); li.textContent = w; $("warnings").appendChild(li); });
+$("view").textContent = DATA.view || "(blank)";
+const out = DATA.listing.filter(m => !m.used).length;
+$("listnote").textContent = `The bullets as found, in the issue's order. ${DATA.memes.length} are shown`
+  + (out ? `; the ${out} struck through ${out === 1 ? "is" : "are"} left out.` : ".")
+  + ` Change which with Max Memes and Leave Out in ${DATA.settings}.`;
+DATA.listing.forEach(m => { const li = document.createElement("li"); li.textContent = m.text;
+  if (!m.used) { li.style.textDecoration = "line-through"; li.style.color = "#9aa0a6"; } $("listing").appendChild(li); });
+
+// Roughly the site's page: its title and subtitle above, grey text, light headings.
+const frame = (el, block, bare) => {
+  el.srcdoc = '<base href="' + location.href.replace(/[^/]*$/, "") + '"><style>body{font:18px/1.5 "Nunito","Segoe UI",Arial,sans-serif;color:#5f6b76;margin:22px 28px;}'
+    + 'h1{font-size:40px;font-weight:400;color:#0b1f33;margin:0 0 4px;}h3{font-size:28px;font-weight:400;color:#0b1f33;}'
+    + '.lead{margin:0 0 22px;}.stand{border:1px dashed #b9c2cb;border-radius:6px;padding:18px;text-align:center;font-size:14px;}</style>'
+    + (bare ? "" : '<h1>Investor Suite</h1><p class="lead">Institutional-Style Macro, Equity, and Portfolio Research for Serious Canadian Investors</p>')
+    + block;
+  el.addEventListener("load", () => { el.style.height = el.contentDocument.documentElement.scrollHeight + 4 + "px"; });
+};
+frame($("preview"), DATA.block);
+
+// Bottom block: the picture loads from this folder (it isn't uploaded yet); the site fills in the watchlist.
+DATA.images.forEach(i => {
+  const a = document.createElement("a"); a.href = i.name; a.download = i.name;
+  const img = document.createElement("img"); img.src = i.name; img.alt = "";
+  a.append(img, document.createTextNode(`${i.name} (${i.w}×${i.h})`));
+  $("images").appendChild(a);
+});
+if (!DATA.images.length) { $("shotsection").hidden = true; $("bottomstep").textContent = "Step 2"; }
+$("bottomsettings").textContent = DATA.settings;
+let bottom = DATA.footer;
+DATA.images.forEach(i => { bottom = bottom.split("/files/www/" + i.name).join(i.name); });
+if (DATA.watchlist_tag) bottom = bottom.replace(DATA.watchlist_tag,
+  '<div class="stand">' + DATA.watchlist_tag + ' &nbsp;(the site puts the watchlist here)</div>');
+frame($("bottom"), bottom, true);
+
+$("othernote").textContent = "This build uses the \"" + DATA.style + "\" look. To switch, set Style in " + DATA.settings + " and rebuild.";
+DATA.others.forEach(o => {
+  const d = document.createElement("div"); d.className = "other";
+  const b = document.createElement("b"); b.textContent = "Style: " + o.style;
+  const f = document.createElement("iframe"); f.title = o.style;
+  d.append(b, f); $("others").appendChild(d); frame(f, o.block);
+});
+// A frame inside a closed <details> has no height yet: measure again when it opens.
+document.querySelector("details").addEventListener("toggle", () => document.querySelectorAll("#others iframe").forEach(f => {
+  if (f.contentDocument) f.style.height = f.contentDocument.documentElement.scrollHeight + 4 + "px"; }));
+
+async function copyText(txt) {
+  try { await navigator.clipboard.writeText(txt); return; } catch (e) {}
+  const ta = document.createElement("textarea");
+  ta.value = txt; document.body.appendChild(ta); ta.select();
+  document.execCommand("copy"); ta.remove();
+}
+document.querySelectorAll("button[data-copy]").forEach(b => b.addEventListener("click", async () => {
+  await copyText(DATA[b.dataset.copy] || "");
+  const label = b.textContent;
+  b.textContent = "Copied"; b.classList.add("done");
+  setTimeout(() => { b.textContent = label; b.classList.remove("done"); }, 1500);
+}));
+</script>
+</body></html>

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Investor Suite kits</title>
+<style>
+:root { --blue:#1F79BE; --orange:#C67A29; --ink:#363636; --muted:#6b6b6b; --bg:#F2F4F6; --card:#fff; --rule:#dde1e5; --good:#2e8b57; --bad:#a22a2a; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 Arial,Helvetica,sans-serif; }
+main { max-width:1240px; margin:0 auto; padding:24px 16px 60px; }
+h1 { margin:0 0 4px; font-size:24px; } h2 { margin:26px 0 8px; font-size:18px; }
+.sub { color:var(--muted); margin:0 0 16px; }
+.bar { display:flex; gap:8px; flex-wrap:wrap; margin:0 0 6px; }
+.bar button { background:#fff; color:var(--ink); border:1px solid var(--rule); border-radius:5px; padding:7px 12px; font:bold 13px Arial,sans-serif; cursor:pointer; }
+.bar button.on { background:var(--blue); border-color:var(--blue); color:#fff; }
+table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--rule); border-radius:8px; overflow:hidden; }
+th, td { text-align:left; padding:9px 12px; border-top:1px solid var(--rule); vertical-align:top; }
+th { border-top:0; background:#fafbfc; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+td.month { white-space:nowrap; font-weight:bold; } td.num { white-space:nowrap; color:var(--muted); }
+a { color:var(--blue); font-weight:bold; text-decoration:none; } a:hover { text-decoration:underline; }
+.tag { display:inline-block; font-size:12px; padding:1px 8px; border-radius:999px; background:var(--bg); color:var(--muted); white-space:nowrap; }
+.tag.only { background:#FCF3EA; color:var(--orange); }
+ul.warn { margin:4px 0 0 16px; padding:0; color:var(--bad); font-size:13px; }
+.ok { color:var(--good); font-size:13px; }
+ul.skipped { margin:0 0 0 18px; padding:0; color:var(--muted); }
+</style></head>
+<body><main>
+<h1>Investor Suite kits</h1>
+<p class="sub" id="sub"></p>
+<div class="bar" id="years"></div>
+<div class="bar" id="filters"></div>
+<table><thead><tr><th>Issue</th><th>Article</th><th>Built from</th><th>Size</th><th>To check</th></tr></thead><tbody id="rows"></tbody></table>
+<div id="skippedbox" hidden><h2>Not built</h2><ul class="skipped" id="skipped"></ul></div>
+</main>
+<script>
+const DATA = %%DATA_JSON%%;
+const $ = id => document.getElementById(id);
+const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
+const rows = DATA.rows.slice().sort((a, b) => b.year - a.year || b.month - a.month || a.kind.localeCompare(b.kind));
+$("sub").textContent = `${rows.length} articles · built ${DATA.built} · ${DATA.root}`;
+let year = "All", only = "All";
+
+function draw() {
+  $("rows").textContent = "";
+  let last = "";
+  rows.filter(r => (year === "All" || r.year === +year) && (only === "All" || (only === "Needs a look" ? r.warnings.length || r.unused || r.source === "PDF only" : r.kind === only)))
+    .forEach(r => {
+      const tr = el("tr");
+      tr.appendChild(el("td", r.month_label === last ? "" : r.month_label, "month")); last = r.month_label;
+      const td = el("td"); const a = el("a", r.title || "(untitled)"); a.href = r.kit; td.append(el("div", r.kind, "tag"), document.createElement("br"), a); tr.appendChild(td);
+      const src = el("td"); src.appendChild(el("span", r.source, "tag" + (r.source === "PDF only" ? " only" : ""))); tr.appendChild(src);
+      tr.appendChild(el("td", `${r.words.toLocaleString()} words, ${r.charts} chart${r.charts === 1 ? "" : "s"}`, "num"));
+      const chk = el("td");
+      const notes = r.warnings.slice(); if (r.unused) notes.push(`${r.unused} line(s) of PDF text were not placed (listed in the kit).`);
+      if (notes.length) { const ul = el("ul", undefined, "warn"); notes.forEach(w => ul.appendChild(el("li", w))); chk.appendChild(ul); }
+      else chk.appendChild(el("span", "Nothing flagged", "ok"));
+      tr.appendChild(chk); $("rows").appendChild(tr);
+    });
+}
+function bar(id, values, get, set) {
+  values.forEach(v => { const b = el("button", v); b.onclick = () => { set(v); [...$(id).children].forEach(c => c.classList.toggle("on", c === b)); draw(); }; if (v === get()) b.className = "on"; $(id).appendChild(b); });
+}
+bar("years", ["All", ...[...new Set(rows.map(r => r.year))].sort((a, b) => b - a).map(String)], () => year, v => year = v);
+bar("filters", ["All", "Chart of Interest", "Market Musings", "Stock of Interest", "Needs a look"], () => only, v => only = v);
+if (DATA.skipped.length) { $("skippedbox").hidden = false; DATA.skipped.forEach(s => $("skipped").appendChild(el("li", s))); }
+draw();
+</script>
+</body></html>

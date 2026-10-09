@@ -1,23 +1,32 @@
 """
 Investor Suite articles (Chart of Interest, Market Musings, Stock of Interest): Word draft -> blog HTML.
 
-Point it at an article folder (e.g. Documents/Investor Suite/2026/Sep/COI) or a whole month folder. For each
+Point it at an article folder (e.g. Documents/Investor Suite/2026/Sep/COI), a whole month folder, or a year
+folder / the whole archive: several months are built in one run and listed on an index page. For each
 article it:
   * picks the Word draft - the one that best matches the month's Investor Suite PDF when there is one,
     otherwise the most recently saved (pin a file with "Document:" in post.txt)
   * past issues, where the month's published PDF is in the folder: takes the wording and every chart from the
     PDF itself (see investor_suite_pdf.py) and uses the draft only for headings and chart positions, so the
-    post matches what members received. "Source: word" in post.txt, or --source word, builds from the draft
+    post matches what members received. "Source: word" in post.txt, or --source word, builds from the draft.
+    An article that is in the PDF but has no Word draft is built from the PDF alone (its folder is created)
   * turns the draft into blog markup: bold-only lines become subheadings, pasted charts are saved as
     investor-suite-<yyyy>-<mm>-<type>-fig<N>.png with their "Figure N" / "Source:" lines as captions,
     Word tables become HTML tables, "(DONE)" tags and section numbers are dropped
+  * only with "Folder Images: yes" in post.txt: uses chart images saved beside the draft in place of the ones
+    pasted in Word ("Figure 2.png", "2.png" or "2 - margins.png" is chart 2). Normally charts come from the doc
   * Stock of Interest only: adds the Investment Thesis / Sweet Spot bullets from the companion doc and an
     Investor Considerations box (figures from post.txt, or read from the PDF for past issues)
   * writes the short description that goes with the post: up to three one-line bullets and one embedded
-    chart ("Summary 1-3" and "Summary Chart" in post.txt; left blank, the bullets are suggested). The chart
+    chart. When "Summary 1-3" in post.txt are blank, the bullets are written by Claude (the Claude Code
+    command line, already installed here) as teasers that don't give the findings away, and saved to post.txt
+    to edit. A year / archive run skips this: past posts carry no short description. The chart
     is shown through the site's [[embedchart:<slug>]] tag, so the kit also gives the slug, title and link to
     register it with
   * writes _build/post.html and _build/kit.html (copy buttons + preview) next to the draft
+A month folder (or its Memes folder alone) also gets the block for the Investor Suite home page: "Our Current
+View", typed into Memes/home.txt each month, and the "Market Memes" bullets read from the published PDF, or
+from the Word doc in the Memes folder when the PDF isn't there yet. Kit: Memes/_build/kit.html.
 
 Nothing is published or committed: these are member posts, so text and images stay in the Documents folder.
 The PNGs are uploaded to the site's file manager by hand, keeping their names: the <img> tags already point
@@ -33,6 +42,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import webbrowser
@@ -51,6 +61,8 @@ except ImportError:
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 KIT_TEMPLATE = os.path.join(REPO_ROOT, "templates", "investor_suite_kit.html")
+INDEX_TEMPLATE = os.path.join(REPO_ROOT, "templates", "investor_suite_index.html")
+HOME_TEMPLATE = os.path.join(REPO_ROOT, "templates", "investor_suite_home_kit.html")
 SITE_IMAGE_DIR = "/files/www"
 SITE_URL = "https://www.5iresearch.ca"      # an embedded chart is registered on the site with its full link
 
@@ -72,6 +84,8 @@ SKIP_DOC = re.compile(r"notes|wording|memes|methodology", re.I)
 SKIP_DIR = re.compile(r"^(_build|old|memes|market memes|claude outputs)$", re.I)
 TITLE_PREFIX = re.compile(r"^(COI|Chart of Interest|Market Musings?(?: Draft)?)\s*[–—:_-]*\s*", re.I)
 DONE_TAG = re.compile(r"\s*\(\s*DON+E+\s*\)\s*$", re.I)
+IMAGE_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp")
+IMAGE_NUMBER = re.compile(r"^(?:(?:fig(?:ure)?|chart|image|img)[ _.-]*)?(\d{1,2})(?=$|[ _.-])", re.I)
 BULLET = re.compile(r"^[●·•▪◦]\s*")
 CAPTION = re.compile(r"^(Figure|Chart|Table|Exhibit)\s+\d+\b.{0,200}$|^Sources?\s*:", re.I)
 
@@ -88,6 +102,19 @@ SUMMARY_MAX = 110          # characters; a suggested bullet longer than this is 
 SUMMARY_HEIGHT = "auto"    # the embed tag's height: the small chart's own height, so nothing is cropped or padded
 SUMMARY_WIDTH = "600"      # px, the short description's own smaller copy of the chart
 SUMMARY_STYLES = ("bullets", "pill-blue", "pill-orange", "plain")      # the first is the default
+MEMES_DIR = re.compile(r"^(market )?memes$", re.I)
+HOME_STYLES = ("plain", "box", "cards")     # Market Memes on the home page; the first is the default. Plain on
+#                                             purpose: the interactive boxes below it are the page's main feature
+HOME_MEMES = 6             # bullets shown on the home page; the issue usually carries a few more
+HOME_TINT = "#F7FBFE"
+SCREENS_DIR = re.compile(r"^(suite )?screens?$", re.I)
+SCREENS_WIDTH = 900        # px, the widest the Suite Screens tables are shown on the home page
+SCREENS_TEXT = ("Top-5 52-week highs and lows and the largest insider-position changes are refreshed with each "
+                "monthly update.")
+SCREENS_NOTE = ("Disclosure: While this table does not constitute any formal opinion on names presented, authors "
+                "may own shares in non-Canadian securities listed above.")      # used when no PDF prints its own
+HOME_DISCLOSURE = ("Opinions expressed are those of 5i Research and are for general information only. Employees of "
+                   "5i Research involved in the research process cannot trade in Canadian-traded stocks.")
 
 
 # --------------------------------------------------------------------------- folders
@@ -175,7 +202,7 @@ def write_settings(path, kind, values):
 
 def summary_settings(values):
     return (["# Short description shown with the post: up to three short bullets and one chart. Leave the bullets",
-             "# blank to have them suggested. Summary Chart is a chart number from the kit. Leave its slug and",
+             "# blank and they are written for you on the next build. Summary Chart is a chart number from the kit. Leave its slug and",
              "# title blank for the standard ones (e.g. coi-2026-09-fig1)."]
             + [f"Summary {i}: {values.get(f'summary {i}', '')}" for i in range(1, SUMMARY_BULLETS + 1)]
             + [f"Summary Chart: {values.get('summary chart', '1')}",
@@ -478,6 +505,65 @@ def read_draft(path, kind, img_dir, img_stem, warnings):
     return ("" if title == "?" else title), blocks
 
 
+def use_folder_images(folder, blocks, build_dir, img_stem, notes, warnings):
+    """Final chart images saved beside the draft replace the draft's own, spot for spot.
+
+    A spot is a chart pasted in the Word doc or a line holding just the word "image". A file whose name starts
+    with a number ("Figure 2.png", "2 - margins.png") takes that spot; the rest fill what is left in name order."""
+    files = sorted((f for f in os.listdir(folder) if f.lower().endswith(IMAGE_EXT) and not f.startswith(("~", "."))),
+                   key=lambda f: [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", f)])
+    if not files:
+        return blocks
+    spots = [b for b in blocks if b["t"] in ("img", "gap")]
+    if not spots:
+        warnings.append(f"{len(files)} image file(s) are in the folder, but the draft doesn't say where they go. "
+                        'Type the word "image" on its own line where each chart belongs, then rebuild.')
+        return blocks
+    chosen, loose = {}, []
+    for f in files:
+        m = IMAGE_NUMBER.match(os.path.splitext(f)[0])
+        n = int(m.group(1)) if m else 0
+        if 0 < n <= len(spots) and n not in chosen:
+            chosen[n] = f
+        else:
+            loose.append(f)
+    if not chosen:                              # no numbers at all: take them in name order
+        for n in range(1, len(spots) + 1):
+            if loose:
+                chosen[n] = loose.pop(0)
+    if loose:
+        warnings.append(f"Image file(s) in the folder that were not used: {', '.join(loose)}. Start a file's name "
+                        "with its chart number (e.g. \"Figure 3.png\") to place it.")
+
+    for b in spots:                             # set the draft's own pictures aside while the charts are renumbered
+        if b["t"] == "img":
+            os.replace(os.path.join(build_dir, b["name"]), os.path.join(build_dir, "_was_" + b["name"]))
+    out, k = [], 0
+    for b in blocks:
+        n = spots.index(b) + 1 if any(b is x for x in spots) else 0
+        if not n or (b["t"] == "gap" and n not in chosen):
+            out.append(b)
+            continue
+        k += 1
+        name = f"{img_stem}-fig{k}.png"
+        if n in chosen:
+            with open(os.path.join(folder, chosen[n]), "rb") as f:
+                w, h = save_image(f.read(), os.path.splitext(chosen[n])[1].lower(), [0, 0, 0, 0],
+                                  os.path.join(build_dir, name))
+            out.append(dict(t="img", name=name, w=w, h=h, share=b.get("share", 1.0), caption=b["caption"]))
+        else:
+            os.replace(os.path.join(build_dir, "_was_" + b["name"]), os.path.join(build_dir, name))
+            out.append({**b, "name": name})
+    for f in os.listdir(build_dir):
+        if f.startswith("_was_"):
+            os.remove(os.path.join(build_dir, f))
+    notes.append("Charts from the folder: " + "; ".join(f"chart {n} = {chosen[n]}" for n in sorted(chosen)) + "."
+                 + (" The rest are the ones pasted in the Word draft." if len(chosen) < len(spots) else ""))
+    if not any(b["t"] == "gap" for b in out):
+        warnings[:] = [w for w in warnings if not w.startswith("A chart is missing")]
+    return out
+
+
 def read_thesis(path):
     """{'Investment Thesis': [...], 'The Sweet Spot': [...]} from the companion bullet doc."""
     out, current = {}, None
@@ -671,24 +757,49 @@ def build_post(kind, title, blocks, eyebrow, disclosure, thesis=None, considerat
     return f'<div style="max-width:{width}px;margin:0 auto;">\n{body}\n</div>\n' if width else body + "\n"
 
 
-def suggest_summary(blocks, thesis):
-    """Three teaser lines when post.txt has none: the shortest Investment Thesis bullets for a Stock of
-    Interest, otherwise the opening sentence of the first, a middle and the last paragraph."""
-    points = next(iter(thesis.values()), []) if thesis else []
-    if len(points) >= SUMMARY_BULLETS:
-        keep = sorted(sorted(range(len(points)), key=lambda i: len(points[i]))[:SUMMARY_BULLETS])
-        picks = [points[i] for i in keep]
-    else:
-        paras = [b["text"] for b in blocks if b["t"] == "p" and len(b["text"]) > 80]
-        spots = sorted({0, len(paras) // 2, len(paras) - 1}) if paras else []
-        picks = [re.split(r"(?<=[.!?])\s+", paras[i])[0] for i in spots]
-        picks = [t if len(t) <= SUMMARY_MAX else t[:t.rfind(" ", 0, SUMMARY_MAX)].rstrip(" ,;") + "…" for t in picks]
-    return [t.strip().rstrip(".") for t in picks]
+TEASER_PROMPT = """Below is a {kind} article from 5i Research's monthly Investor Suite, titled "{title}".
+
+Write the short description that sits above the "read the full article" button: exactly {n} bullet points
+that make a member want to open it.
+
+Rules:
+- Tease, don't summarise. Say what the article looks at or the question it answers; do not give away its
+  findings, conclusion, key numbers, price target or implied return.
+- Each bullet is one plain line of at most 85 characters, with no full stop at the end.
+- Plain, confident wording in 5i's voice ("we"), Canadian spelling, no hype, no exclamation marks, no emoji.
+- Use only what is in the article.
+
+Reply with the {n} lines and nothing else: no numbering, no bullet characters, no preamble.
+
+ARTICLE:
+{text}
+"""
+
+
+def write_teaser(kind, title, blocks, thesis):
+    """Three teaser bullets from Claude, through the Claude Code command line. [] if it isn't available."""
+    exe = shutil.which("claude")
+    if not exe:
+        return [], "the Claude command line was not found"
+    parts = [f"{h}: " + "; ".join(v) for h, v in (thesis or {}).items()]
+    parts += [("\n## " if b["t"] == "h" else "- " if b["t"] == "li" else "") + b["text"]
+              for b in blocks if b["t"] in ("h", "p", "li")]
+    prompt = TEASER_PROMPT.format(kind=KINDS[kind], title=title, n=SUMMARY_BULLETS, text="\n".join(parts)[:24000])
+    try:
+        done = subprocess.run([exe, "-p", "--model", "sonnet"], input=prompt, capture_output=True, text=True,
+                              encoding="utf-8", timeout=180)
+    except Exception as e:
+        return [], f"{type(e).__name__}: {e}"
+    lines = [re.sub(r"^\s*(?:[-•·*]|\d+[.)])\s*", "", ln).strip().rstrip(".") for ln in done.stdout.splitlines()]
+    lines = [ln for ln in lines if 15 <= len(ln) <= 140]
+    if done.returncode or len(lines) < SUMMARY_BULLETS:
+        return [], (done.stderr or done.stdout or "no reply").strip()[:200]
+    return lines[:SUMMARY_BULLETS], ""
 
 
 # --------------------------------------------------------------------------- one article
 
-def build_article(folder, kind, docs, open_kit, source=""):
+def build_article(folder, kind, docs, open_kit, source="", teaser=True):
     typed = bool(kind_of(os.path.basename(folder)))
     build_dir = os.path.join(folder, "_build") if typed else os.path.join(folder, "_build", kind)
     settings_path = os.path.join(folder, "post.txt" if typed else f"post-{kind}.txt")
@@ -700,7 +811,8 @@ def build_article(folder, kind, docs, open_kit, source=""):
     settings, warnings = read_settings(settings_path), []
     year, month = folder_date(folder)
     if not (year and month):
-        when = datetime.fromtimestamp(max(os.path.getmtime(os.path.join(folder, f)) for f in docs))
+        when = datetime.fromtimestamp(max([os.path.getmtime(os.path.join(folder, f)) for f in docs]
+                                          or [datetime.now().timestamp()]))
         year, month = year or when.year, month or when.month
         warnings.append(f"Couldn't read the issue month from the folder path; using {MONTHS[month - 1]} {year}.")
     img_stem = f"investor-suite-{year}-{month:02d}-{kind}"
@@ -709,41 +821,47 @@ def build_article(folder, kind, docs, open_kit, source=""):
 
     thesis_docs = [f for f in docs if "thesis" in f.lower()]
     drafts = [f for f in docs if f not in thesis_docs]
-    if not drafts:
+    if not drafts and not (pages and pdfsrc):
         print(f"  {KINDS[kind]}: no draft found in {folder}")
         return None
 
-    # Pick the draft: pinned in post.txt, else the best match to the PDF, else the latest saved.
-    scored = []
-    for f in drafts:
-        scratch = []
-        _, blocks = read_draft(os.path.join(folder, f), kind, build_dir, "_probe", scratch)
-        scored.append((pdf_match(blocks, pages)[0], os.path.getmtime(os.path.join(folder, f)), f))
-    for f in os.listdir(build_dir):
-        if f.startswith("_probe"):
-            os.remove(os.path.join(build_dir, f))
-    pinned = settings.get("document", "")
-    if pinned and pinned not in drafts:
-        warnings.append(f'post.txt names "{pinned}", which is not in the folder; picked a draft automatically.')
-        pinned = ""
-    chosen = pinned or max(scored, key=lambda s: (s[0] if s[0] is not None else -1, s[1]))[2]
-    others = [f"{f} ({'%.0f%% match' % (s * 100) if s is not None else 'not compared'})"
-              for s, _, f in sorted(scored, key=lambda s: -s[1]) if f != chosen]
-
-    draft_warnings = []
-    title, blocks = read_draft(os.path.join(folder, chosen), kind, build_dir, "_draft", draft_warnings)
-    score, missing, on_pages = pdf_match(blocks, pages)
+    pinned, chosen, others, draft_warnings = "", "", [], []
+    title, blocks, score, missing, on_pages = "", [], None, [], []
+    if drafts:
+        # Pick the draft: pinned in post.txt, else the best match to the PDF, else the latest saved.
+        scored = []
+        for f in drafts:
+            scratch = []
+            _, blocks = read_draft(os.path.join(folder, f), kind, build_dir, "_probe", scratch)
+            scored.append((pdf_match(blocks, pages)[0], os.path.getmtime(os.path.join(folder, f)), f))
+        for f in os.listdir(build_dir):
+            if f.startswith("_probe"):
+                os.remove(os.path.join(build_dir, f))
+        pinned = settings.get("document", "")
+        if pinned and pinned not in drafts:
+            warnings.append(f'post.txt names "{pinned}", which is not in the folder; picked a draft automatically.')
+            pinned = ""
+        chosen = pinned or max(scored, key=lambda s: (s[0] if s[0] is not None else -1, s[1]))[2]
+        others = [f"{f} ({'%.0f%% match' % (s * 100) if s is not None else 'not compared'})"
+                  for s, _, f in sorted(scored, key=lambda s: -s[1]) if f != chosen]
+        title, blocks = read_draft(os.path.join(folder, chosen), kind, build_dir, "_draft", draft_warnings)
+        score, missing, on_pages = pdf_match(blocks, pages)
 
     # Past issue with its PDF: the PDF supplies the words and charts, the draft only the structure.
     source = (source or settings.get("source") or "auto").lower()
     article, notes, unused = None, [], []
     if source != "word" and pages and pdfsrc:
         try:
-            article = pdfsrc.read_article(pdf_path, kind, blocks, title, build_dir, build_dir, img_stem, on_pages)
+            article = pdfsrc.read_article(pdf_path, kind, blocks or None, title, build_dir, build_dir, img_stem,
+                                          on_pages or None)
         except Exception as e:
             warnings.append(f"Couldn't read this article from the PDF ({e}); built from the Word draft instead.")
         if article is None and source == "pdf":
             warnings.append("This article wasn't found in the PDF, so it was built from the Word draft.")
+    if article is None and not drafts:
+        print(f"  {KINDS[kind]}: not found in the PDF and there is no Word draft in {folder}"
+              + (f" ({warnings[-1]})" if warnings else ""))
+        return None
     for f in os.listdir(build_dir):
         if f.startswith("_draft"):
             if article:
@@ -757,19 +875,33 @@ def build_article(folder, kind, docs, open_kit, source=""):
         if score is not None:
             notes.append(f"The Word draft has {score:.0%} of its sentences word for word in the PDF; where they "
                          "differ, the PDF wording is used.")
+        if not drafts:
+            notes.append("There is no Word draft for this article, so headings, paragraph breaks and chart "
+                         "positions are read from the PDF's layout. Give it a closer look than usual.")
         title, blocks, on_pages, unused = article["title"] or title, article["blocks"], article["pages"], article["unused"]
     else:
         warnings += draft_warnings
         for b in blocks:
             if b["t"] == "img":
                 b["name"] = img_stem + b["name"][len("_draft"):]
+        if typed and settings.get("folder images", "").lower() in ("yes", "true", "on"):     # opt-in, per article
+            blocks = use_folder_images(folder, blocks, build_dir, img_stem, notes, warnings)
     if len(drafts) > 1 and not pinned and score is None:
         warnings.append("Several drafts and no PDF to compare against, so the most recently saved was used. "
                         'Set "Document:" in post.txt to pin the right one.')
 
     thesis, considerations = {}, ""
-    if kind == "soi":
+    # Some Decembers run a year-in-review of the year's picks as the Stock of Interest: an article in its own
+    # right, with no single company, thesis box or price target.
+    review = kind == "soi" and bool(re.search(r"year.{0,3}in.{0,3}review", title, re.I))
+    if review:
+        notes.append("This is a year-in-review, so it has no company name, thesis boxes or Investor Considerations.")
+    if kind == "soi" and not review:
         ticker = settings.get("ticker") or (re.match(r"^([A-Z.]{1,6}) ", chosen) or [None, ""])[1]
+        named = re.search(r"^(.*?)\s*\(([A-Z.]{1,6})\)\s*$", title) if article else None
+        if named:                               # the PDF's own heading, e.g. "Amphenol Corporation (APH)"
+            ticker = settings.get("ticker") or named.group(2)
+            settings.setdefault("company", named.group(1).split(":")[0].strip())
         company = settings.get("company") or pdf_company(pages, ticker) if ticker else settings.get("company", "")
         if not company and ticker:
             m = re.search(rf"((?:[A-Z][\w&.'’-]*\s+){{1,4}})\({re.escape(ticker)}\)",
@@ -816,21 +948,29 @@ def build_article(folder, kind, docs, open_kit, source=""):
                         "probably edited in InDesign. See the list at the bottom.")
     images = [b for b in blocks if b["t"] == "img"]
     if not images:
-        warnings.append("No charts found in the draft.")
+        warnings.append("No charts found.")
 
     # The short description: a few one-line bullets and one chart, as the site's embed tag.
     bullets = [settings.get(f"summary {i}", "") for i in range(1, SUMMARY_BULLETS + 1)]
     bullets = [b.lstrip("-•· ").strip() for b in bullets if b.strip()]
-    suggested = not bullets
-    if suggested:
-        bullets = suggest_summary(blocks, thesis)
-        if not thesis:
-            warnings.append("Short description: the three bullets are just sentences lifted from the article. "
-                            f"Write your own as Summary 1 to 3 in {os.path.basename(settings_path)} and rebuild.")
+    suggested = False
+    if not bullets and teaser:
+        bullets, problem = write_teaser(kind, title, blocks, thesis)
+        suggested = bool(bullets)
+        if bullets:                             # keep them: the next build reuses these, and they can be edited
+            with open(settings_path, encoding="utf-8-sig") as f:
+                text = f.read()
+            for i, b in enumerate(bullets, 1):
+                text = re.sub(rf"(?m)^Summary {i}:.*$", lambda m, b=b, i=i: f"Summary {i}: {b}", text)
+            with open(settings_path, "w", encoding="utf-8") as f:
+                f.write(text)
+        else:
+            warnings.append(f"Short description: the bullets couldn't be written automatically ({problem}). Add "
+                            f"them as Summary 1 to 3 in {os.path.basename(settings_path)} and rebuild.")
     pick = settings.get("summary chart", "").strip() or "1"
     number = int(pick) if pick.isdigit() else 0
-    chosen_image = images[number - 1] if 0 < number <= len(images) else None
-    if not chosen_image and images:
+    chosen_image = images[number - 1] if bullets and 0 < number <= len(images) else None
+    if bullets and not chosen_image and images:
         warnings.append(f'Short description: "Summary Chart: {pick}" is not one of charts 1 to {len(images)}, so '
                         "no chart was embedded.")
     # The site shows a chart through a registered slug, not a file name: slug + title + the uploaded file's link.
@@ -864,8 +1004,11 @@ def build_article(folder, kind, docs, open_kit, source=""):
         style = SUMMARY_STYLES[0]
     summary_look = summary_markup(style, KINDS[kind], bullets)
     summary = "\n".join(filter(None, [summary_look, f"[[embedchart:{embed} height={height}]]" if embed else ""]))
-    with open(os.path.join(build_dir, "summary.txt"), "w", encoding="utf-8") as f:
-        f.write(summary + "\n")
+    if summary:
+        with open(os.path.join(build_dir, "summary.txt"), "w", encoding="utf-8") as f:
+            f.write(summary + "\n")
+    elif os.path.exists(os.path.join(build_dir, "summary.txt")):
+        os.remove(os.path.join(build_dir, "summary.txt"))
 
     month_label = f"{MONTHS[month - 1]} {year}"
     post_title = f"{KINDS[kind]}: {title}"
@@ -897,7 +1040,8 @@ def build_article(folder, kind, docs, open_kit, source=""):
                     .replace("%%TITLE%%", html.escape(post_title)))
 
     print(f"\n{post_title}  ({month_label})")
-    print(f"  Draft: {chosen}" + (f"  [{score:.0%} match to the PDF]" if score is not None else ""))
+    if chosen:
+        print(f"  Draft: {chosen}" + (f"  [{score:.0%} match to the PDF]" if score is not None else ""))
     for note in notes:
         print(f"  {note}")
     if unused:
@@ -908,13 +1052,330 @@ def build_article(folder, kind, docs, open_kit, source=""):
     print(f"  Kit: {kit_path}")
     if open_kit:
         webbrowser.open("file:///" + kit_path.replace(os.sep, "/"))
+    return dict(kind=KINDS[kind], title=title, year=year, month=month, kit=kit_path, warnings=warnings,
+                source="PDF" if article and drafts else "PDF only" if article else "Word draft",
+                charts=len(images), words=data["words"], unused=len(unused))
+
+
+# --------------------------------------------------------------------------- home page block
+
+def read_memes_pdf(pdf_path):
+    """The Market Memes bullets as published: the page headed MARKET MEMES, both columns, down to the watchlist."""
+    lines_by_page = pdfsrc._load(pdf_path)[0]
+    doc = fitz.open(pdf_path)
+    for n, lines in enumerate(lines_by_page):
+        flat = [l for l in lines if l["flat"]]
+        heads = [l for l in flat if l["size"] >= 17 and " ".join(l["text"].upper().split()) == "MARKET MEMES"]
+        marks = [l for l in flat if l["bullet"]]
+        if not heads or not marks:
+            continue                            # the cover lists "Market Memes" among the contents
+        top = min(l["y0"] for l in heads)
+        below = [l["y0"] for l in flat if l["size"] >= 20 and l["y0"] > top + 40]
+        bottom = min(below) if below else doc[n].rect.height
+        marks = [l for l in marks if top < l["y0"] < bottom]
+        if not marks:
+            continue
+        size, font = max(((l["size"], l["font"]) for l in marks), key=[(l["size"], l["font"]) for l in marks].count)
+        body = [l for l in flat if top < l["y0"] < bottom and l["size"] == size and l["font"] == font]
+        split = doc[n].rect.width * 0.45
+        body.sort(key=lambda l: (l["x0"] >= split, l["y0"]))
+        items = []
+        for l in body:
+            if l["bullet"]:
+                items.append([l])
+            elif items:
+                items[-1].append(l)
+        return [pdfsrc._text(pdfsrc._segments(item, set(), True)) for item in items]
+    return []
+
+
+def read_memes_doc(path):
+    """The bullets at the top of the Market Memes Word doc (the watchlist notes follow them)."""
+    out = []
+    for p in docx.Document(path).paragraphs:
+        text = " ".join(p.text.split())
+        if not text:
+            continue
+        if BULLET.match(text) or "list" in (p.style.name or "").lower():
+            out.append(BULLET.sub("", text).strip())
+        elif out:
+            break
+    return out
+
+
+def read_screens_pdf(pdf_path, build_dir, stem):
+    """The Suite Screens tables, cropped from the page(s) tabbed SUITE SCREEN, and the note printed under them."""
+    lines_by_page = pdfsrc._load(pdf_path)[0]
+    doc = fitz.open(pdf_path)
+    shots, note = [], ""
+    for n, lines in enumerate(lines_by_page):
+        if not any(not l["flat"] and "SUITE SCREEN" in " ".join(l["text"].upper().split()) for l in lines):
+            continue
+        page = doc[n]
+        boxes = [fitz.Rect(i["bbox"]) for i in page.get_image_info()]
+        boxes = sorted((b for b in boxes if b.width > 150 and b.height > 100 and b.y0 > 40), key=lambda b: b.y0)
+        for box in boxes:
+            name = f"{stem}{'' if not shots else '-' + str(len(shots) + 1)}.png"
+            pix = page.get_pixmap(clip=box & page.rect, matrix=fitz.Matrix(*[min(3.0, MAX_IMAGE_PX / box.width)] * 2))
+            pix.save(os.path.join(build_dir, name))
+            shots.append(dict(name=name, w=pix.width, h=pix.height))
+        if boxes and not note:
+            under = sorted((l for l in lines if l["flat"] and boxes[-1].y1 - 2 < l["y0"] < boxes[-1].y1 + 70
+                            and l["size"] >= 10), key=lambda l: l["y0"])
+            note = pdfsrc._text(pdfsrc._segments(under, set(), False)) if under else ""
+            note = re.sub(r"(?<=[a-z])- (?=[a-z])", "", note)        # a word split over the line end
+    return shots, note
+
+
+def folder_screens(month, memes, build_dir, stem):
+    """With no PDF: pictures in a "Suite Screens" / "Screens" folder in the month, or any picture named
+    "...screen..." in the month or Memes folder."""
+    found = []
+    for d in [month, memes] + [os.path.join(month, s) for s in sorted(os.listdir(month)) if SCREENS_DIR.match(s)]:
+        if os.path.isdir(d):
+            own = bool(SCREENS_DIR.match(os.path.basename(d)))
+            found += [os.path.join(d, f) for f in sorted(os.listdir(d))
+                      if f.lower().endswith(IMAGE_EXT) and (own or "screen" in f.lower())]
+    shots = []
+    for path in found:
+        name = f"{stem}{'' if not shots else '-' + str(len(shots) + 1)}.png"
+        im = Image.open(path).convert("RGB")
+        if im.width > MAX_IMAGE_PX:
+            im = im.resize((MAX_IMAGE_PX, round(im.height * MAX_IMAGE_PX / im.width)), Image.LANCZOS)
+        im.save(os.path.join(build_dir, name))
+        shots.append(dict(name=name, w=im.width, h=im.height))
+    return shots
+
+
+def footer_markup(tag, text, shots, note, disclosure, label):
+    """The bottom of the home page: the site's watchlist tag, Suite Screens with the month's tables, Disclosure."""
+    out = [tag, ""] if tag else []
+    out.append('<h3 style="margin:24px 0 8px;">Suite Screens</h3>')
+    if text:
+        out.append(f'<p style="margin:0 0 14px;">{html.escape(text)}</p>')
+    for i, s in enumerate(shots):
+        alt = f"Suite Screens, {label}" + (f" ({i + 1} of {len(shots)})" if len(shots) > 1 else "")
+        out.append(f'<p style="margin:0 0 12px;"><img src="{SITE_IMAGE_DIR}/{s["name"]}" alt="{html.escape(alt)}" '
+                   f'width="{min(s["w"], SCREENS_WIDTH)}" style="display:block;width:100%;max-width:{SCREENS_WIDTH}px;'
+                   f'height:auto;border:1px solid {RULE};border-radius:6px;"></p>')
+    if note and shots:
+        out.append(f'<p style="margin:0 0 14px;font-size:13px;color:{MUTED};">{html.escape(note)}</p>')
+    if disclosure:
+        out.append('<h3 style="margin:24px 0 8px;">Disclosure</h3>')
+        out.append(f'<p style="margin:0 0 14px;">{html.escape(disclosure)}</p>')
+    return "\n".join(out)
+
+
+def home_markup(style, view, heading, subheading, memes):
+    """The block under the Investor Suite title on the site's home page. No fonts or text colours are set, so
+    it takes the page's own."""
+    edge = "#BFD9EC"
+    out = []
+    if view:
+        out.append('<h3 style="margin:0 0 8px;">Our Current View</h3>')
+        out.append(f'<p style="margin:0 0 24px;padding:2px 0 2px 14px;border-left:3px solid {BLUE};'
+                   f'font-style:italic;">{html.escape(view)}</p>')
+    if not memes:
+        return "\n".join(out)
+    out.append(f'<h3 style="margin:0 0 2px;">{html.escape(heading)}</h3>')
+    if subheading:
+        out.append(f'<p style="margin:0 0 12px;font-size:12px;letter-spacing:1px;text-transform:uppercase;'
+                   f'color:{MUTED};">{html.escape(subheading)}</p>')
+    if style == "cards":
+        cards = "".join(f'<div style="flex:1 1 340px;border:1px solid {edge};border-left:4px solid {BLUE};'
+                        f'border-radius:10px;background:#ffffff;padding:10px 14px;line-height:1.45;">'
+                        f'{html.escape(m)}</div>' for m in memes)
+        out.append(f'<div style="display:flex;flex-wrap:wrap;gap:12px;margin:0 0 20px;">{cards}</div>')
+        return "\n".join(out)
+    items = "".join(f'<li style="margin:0 0 10px;break-inside:avoid;page-break-inside:avoid;">{html.escape(m)}</li>'
+                    for m in memes)
+    lst = f'<ul style="margin:0;padding-left:18px;columns:340px 2;column-gap:44px;line-height:1.5;">{items}</ul>'
+    if style == "plain":
+        out.append(f'<div style="margin:0 0 20px;">{lst}</div>')
+    else:
+        out.append(f'<div style="margin:0 0 20px;border:1px solid {edge};border-radius:12px;'
+                   f'background:{HOME_TINT};padding:16px 22px 6px;">{lst}</div>')
+    return "\n".join(out)
+
+
+def build_home(month, open_kit):
+    """The home page block for a month: Our Current View (typed into home.txt) and the Market Memes bullets
+    (from the published PDF when it is there, otherwise from the Word doc in the Memes folder)."""
+    year, mon = folder_date(month)
+    folder = next((os.path.join(month, d) for d in sorted(os.listdir(month))
+                   if os.path.isdir(os.path.join(month, d)) and MEMES_DIR.match(d)), os.path.join(month, "Memes"))
+    pdf = month_pdf(month) if pdfsrc else None
+    docs = []
+    if os.path.isdir(folder):
+        docs = sorted((f for f in os.listdir(folder) if f.lower().endswith(".docx") and not f.startswith("~$")),
+                      key=lambda f: ("meme" not in f.lower(), -os.path.getmtime(os.path.join(folder, f))))
+    if not pdf and not docs:
+        return None
+    build_dir = os.path.join(folder, "_build")
+    os.makedirs(build_dir, exist_ok=True)
+
+    settings_path = os.path.join(folder, "home.txt")
+    s = read_settings(settings_path)
+    values = {"current view": s.get("current view", ""), "heading": s.get("heading", "Market Memes"),
+              "subheading": s.get("subheading", "What the market consensus is currently saying"),
+              "source": s.get("source", "auto"), "style": s.get("style", HOME_STYLES[0]),
+              "max memes": s.get("max memes", str(HOME_MEMES)), "leave out": s.get("leave out", ""),
+              "watchlist tag": s.get("watchlist tag", "[[watchlist]]"),
+              "suite screens text": s.get("suite screens text", SCREENS_TEXT),
+              "suite screens note": s.get("suite screens note", "auto"),
+              "disclosure": s.get("disclosure", HOME_DISCLOSURE)}
+    with open(settings_path, "w", encoding="utf-8") as f:
+        f.write("\n".join([
+            "# The block under the Investor Suite title on the home page. Edit a value, save, and rebuild.",
+            "# Current View is typed here each month; the Market Memes bullets are read for you.",
+            f"Current View: {values['current view']}",
+            f"Heading: {values['heading']}",
+            f"Subheading: {values['subheading']}",
+            "# Source: auto (the published PDF when it is in the month folder, otherwise the Word doc), pdf, word",
+            f"Source: {values['source']}",
+            f"# Style: {', '.join(HOME_STYLES)}",
+            f"Style: {values['style']}",
+            "# Max Memes: how many bullets to show; the first ones are kept. To drop particular ones instead, put",
+            "# their numbers (as listed in the kit) after Leave Out, e.g. Leave Out: 4",
+            f"Max Memes: {values['max memes']}",
+            f"Leave Out: {values['leave out']}",
+            "# The bottom of the page: the site's watchlist tag, Suite Screens (the tables are cropped from the PDF,",
+            '# or taken from pictures in a "Suite Screens" folder in the month), then Disclosure.',
+            "# Suite Screens Note is the small line under the tables: auto = the one printed in the PDF (or the",
+            "# standard one when there is no PDF), blank = none.",
+            f"Watchlist Tag: {values['watchlist tag']}",
+            f"Suite Screens Text: {values['suite screens text']}",
+            f"Suite Screens Note: {values['suite screens note']}",
+            f"Disclosure: {values['disclosure']}"]) + "\n")
+
+    warnings, memes, source = [], [], ""
+    want = values["source"].lower()
+    if pdf and want != "word":
+        memes, source = read_memes_pdf(pdf), os.path.basename(pdf) + " (the published issue)"
+        if not memes:
+            warnings.append("No Market Memes page was found in the PDF; used the Word doc instead.")
+    if not memes and docs:
+        memes, source = read_memes_doc(os.path.join(folder, docs[0])), docs[0] + " (Word doc)"
+        if pdf is None or want == "word":
+            warnings.append(f"The Word doc lists {len(memes)} bullets and the first {values['max memes']} are shown. "
+                            "Trim the doc to the ones you want, or use Leave Out in home.txt.")
+    if not memes:
+        warnings.append("No Market Memes bullets were found.")
+    short = [m for m in memes if len(m.split()) < 5 or m[:1].islower()]
+    if short:
+        warnings.append("Check these, they look cut off: " + " / ".join(short))
+    found = memes
+    drop = {int(x) for x in re.findall(r"\d+", values["leave out"])}
+    limit = int(values["max memes"]) if values["max memes"].strip().isdigit() else len(found)
+    kept = [i for i in range(1, len(found) + 1) if i not in drop][:limit]
+    memes = [found[i - 1] for i in kept]
+    listing = [dict(n=i, text=m, used=i in kept) for i, m in enumerate(found, 1)]
+    view = values["current view"].strip()
+    if view and view[-1] not in ".!?”\"":
+        view += "."
+    if not view:
+        warnings.append(f"Our Current View is blank, so it is left out. Type it after Current View in {settings_path} "
+                        "and rebuild.")
+    style = values["style"].lower()
+    if style not in HOME_STYLES:
+        warnings.append(f'Style "{style}" is not one of {", ".join(HOME_STYLES)}; used {HOME_STYLES[0]}.')
+        style = HOME_STYLES[0]
+
+    label = f"{MONTHS[mon - 1]} {year}"
+    stem = f"investor-suite-{year}-{mon:02d}-suite-screen"
+    shots, printed = read_screens_pdf(pdf, build_dir, stem) if pdf else ([], "")
+    if not shots:
+        shots = folder_screens(month, folder, build_dir, stem)
+    if not shots:
+        warnings.append("No Suite Screens tables were found, so that section has no picture. They are cropped from "
+                        'the PDF, or taken from pictures in a "Suite Screens" folder in the month folder.')
+    note = (printed or SCREENS_NOTE) if values["suite screens note"].lower() == "auto" else values["suite screens note"]
+    footer = footer_markup(values["watchlist tag"], values["suite screens text"], shots, note,
+                           values["disclosure"], label)
+    with open(os.path.join(build_dir, "home-bottom.html"), "w", encoding="utf-8") as f:
+        f.write(footer)
+
+    args = (view, values["heading"], values["subheading"], memes)
+    block = home_markup(style, *args)
+    with open(os.path.join(build_dir, "home.html"), "w", encoding="utf-8") as f:
+        f.write(block)
+    data = {"month": label, "block": block, "footer": footer, "images": shots,
+            "watchlist_tag": values["watchlist tag"], "listing": listing, "view": view, "memes_block": home_markup(style, "", *args[1:]),
+            "memes": memes, "source": source, "settings": os.path.basename(settings_path), "style": style,
+            "warnings": warnings, "others": [{"style": o, "block": home_markup(o, *args)}
+                                             for o in HOME_STYLES if o != style]}
+    with open(HOME_TEMPLATE, encoding="utf-8") as f:
+        page = f.read()
+    kit_path = os.path.join(build_dir, "kit.html")
+    with open(kit_path, "w", encoding="utf-8") as f:
+        f.write(page.replace("%%DATA_JSON%%", json.dumps(data).replace("</", "<\\/")))
+    print(f"\nHome page block  ({label})")
+    print(f"  {len(memes)} of {len(found)} Market Memes bullet(s) from {source or 'nowhere'}")
+    print(f"  {len(shots)} Suite Screens picture(s)")
+    for w in warnings:
+        print(f"  ! {w}")
+    print(f"  Kit: {kit_path}")
+    if open_kit:
+        webbrowser.open("file:///" + kit_path.replace(os.sep, "/"))
     return kit_path
+
+
+def month_articles(folder):
+    """find_articles(), plus the articles that are in the month's PDF but have no Word draft filed."""
+    found = find_articles(folder)
+    pdf = month_pdf(folder)
+    if not (pdf and pdfsrc):
+        return found
+    own = kind_of(os.path.basename(folder))
+    if own:
+        return found or [(folder, own, [])]
+    if not all(folder_date(folder)):
+        return found
+    have = {k for _, k, _ in found}
+    for kind, _ in pdfsrc.kinds_in(pdf).items():
+        if kind in have:
+            continue
+        sub = next((d for d in sorted(os.listdir(folder)) if os.path.isdir(os.path.join(folder, d))
+                    and not SKIP_DIR.match(d) and kind_of(d) == kind), {"coi": "COI", "musings": "Musings",
+                                                                        "soi": "SOI"}[kind])
+        os.makedirs(os.path.join(folder, sub), exist_ok=True)
+        found.append((os.path.join(folder, sub), kind, []))
+    return found
+
+
+def month_folders(folder):
+    """The month folders under a year folder or under the whole archive, oldest first."""
+    out = []
+    for d in sorted(os.listdir(folder)):
+        path = os.path.join(folder, d)
+        if not os.path.isdir(path) or SKIP_DIR.match(d) or d.startswith(("_", ".")):
+            continue
+        year, month = folder_date(path)
+        if year and month and not kind_of(d):
+            out.append((year, month, path))
+        elif re.fullmatch(r"20\d\d", d):
+            out += [(y, m, q) for y, m, q in month_folders(path)]
+    return sorted(out)
+
+
+def write_index(root, results, skipped):
+    with open(INDEX_TEMPLATE, encoding="utf-8") as f:
+        page = f.read()
+    rows = [{**r, "kit": os.path.relpath(r["kit"], root).replace(os.sep, "/"),
+             "month_label": f"{MONTHS[r['month'] - 1]} {r['year']}"} for r in results]
+    data = {"root": root, "built": datetime.now().strftime("%Y-%m-%d %H:%M"), "rows": rows, "skipped": skipped}
+    path = os.path.join(root, "_investor_suite_index.html")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(page.replace("%%DATA_JSON%%", json.dumps(data).replace("</", "<\\/")))
+    return path
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("folder", help="Article folder (COI, Musings, SOI) or a month folder holding them")
+    ap.add_argument("folder", help="Article folder (COI, Musings, SOI), a month folder holding them, or a year "
+                                   "folder / the whole archive to build every month in it")
     ap.add_argument("--no-open", action="store_true")
+    ap.add_argument("--no-summary", action="store_true", help="don't write short description bullets")
     ap.add_argument("--source", choices=["auto", "pdf", "word"], default="",
                     help="pdf: wording and charts from the month's published PDF (the default when it is there); "
                          "word: build from the draft")
@@ -923,12 +1384,52 @@ def main():
     folder = os.path.abspath(args.folder.strip('"'))
     if not os.path.isdir(folder):
         sys.exit(f"Not a folder: {folder}")
-    articles = find_articles(folder)
+
+    if not folder_date(folder)[1]:              # a year or the whole archive: every month, then an index
+        months = month_folders(folder)
+        if not months:
+            sys.exit("No month folders found under " + folder)
+        results, skipped = [], []
+        for year, month, path in months:
+            label = f"{MONTHS[month - 1]} {year}"
+            print(f"\n=== {label}")
+            try:
+                articles = month_articles(path)
+            except Exception as e:
+                articles = []
+                skipped.append(f"{label}: could not be read ({e})")
+            if not articles:
+                skipped.append(f"{label}: no drafts and no published PDF in the folder")
+            for apath, kind, docs in articles:
+                try:
+                    info = build_article(apath, kind, docs, False, args.source, teaser=False)
+                except Exception as e:
+                    info = None
+                    skipped.append(f"{label}, {KINDS[kind]}: failed ({type(e).__name__}: {e})")
+                    print(f"  {KINDS[kind]}: FAILED ({type(e).__name__}: {e})")
+                if info:
+                    results.append(info)
+        index = write_index(folder, results, skipped)
+        print(f"\n{len(results)} article(s) built. Index: {index}")
+        if not args.no_open:
+            webbrowser.open("file:///" + index.replace(os.sep, "/"))
+        return
+
+    if MEMES_DIR.match(os.path.basename(folder)):       # the Memes folder alone: just the home page block
+        if not build_home(os.path.dirname(folder), not args.no_open):
+            sys.exit("No Market Memes Word doc here and no published PDF in the month folder.")
+        return
+
+    articles = month_articles(folder)
+    if not kind_of(os.path.basename(folder)):           # a month folder: its home page block too
+        home = build_home(folder, not args.no_open)
+        if home and not articles:
+            return
     if not articles:
         sys.exit("No Chart of Interest, Market Musings or Stock of Interest drafts found. Name the folder COI, "
                  'Musings or SOI, or start the file name with "COI" / "Market Musings".')
     for path, kind, docs in articles:
-        build_article(path, kind, docs, not args.no_open, args.source)
+        build_article(path, kind, docs, not args.no_open, args.source, teaser=not args.no_summary)
 
 
 if __name__ == "__main__":

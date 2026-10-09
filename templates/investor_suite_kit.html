@@ -44,7 +44,7 @@ details summary { cursor:pointer; font-weight:bold; }
 
 <section>
 <div class="step">Step 1</div><h2>Upload the charts</h2>
-<p>Upload these PNGs to the site's file manager, keeping their names exactly. The post already points at <code>/files/www/&lt;name&gt;</code>, so nothing needs re-linking. They are in the same <code>_build</code> folder as this page.</p>
+<p>Upload these PNGs to the site's file manager, keeping their names exactly (they are renamed copies, so upload these and not your originals). The post already points at <code>/files/www/&lt;name&gt;</code>, so nothing needs re-linking. They are in the same <code>_build</code> folder as this page.</p>
 <div id="images" class="thumbs"></div>
 </section>
 
@@ -67,7 +67,7 @@ details summary { cursor:pointer; font-weight:bold; }
 <p class="sub" style="margin:8px 0 0;" id="chartwhich"></p>
 </section>
 
-<section>
+<section id="teasersection">
 <div class="step" id="teaserstep">Step 4</div><h2>Short description</h2>
 <p id="teasernote"></p>
 <div class="row"><code>Short description (bullets and chart tag)</code><button data-copy="summary">Copy short description</button></div>
@@ -92,7 +92,7 @@ const fact = (k, v) => { const dt = document.createElement("dt"), dd = document.
   dt.textContent = k; dd.textContent = v; $("facts").append(dt, dd); };
 const fromPdf = DATA.source === "pdf";
 if (fromPdf) fact("Text and charts", DATA.pdf + " (the published issue)");
-fact(fromPdf ? "Headings and chart positions" : "Word draft", DATA.document);
+if (DATA.document) fact(fromPdf ? "Headings and chart positions" : "Word draft", DATA.document);
 if (DATA.others.length) fact("Not used", DATA.others.join("; "));
 if (DATA.pdf && !fromPdf) fact("Checked against", DATA.pdf + (DATA.match === null ? "" : ` (${DATA.match}% of sentences match)`));
 (DATA.notes || []).forEach(n => { const li = document.createElement("li"); li.textContent = n; $("notes").appendChild(li); });
@@ -120,9 +120,10 @@ if (DATA.chart_slug) {
   $("chartslug").textContent = DATA.chart_slug; $("charttitle").textContent = DATA.chart_title; $("chartlink").textContent = DATA.chart_link;
   $("chartwhich").textContent = "Chart used: " + DATA.summary_image + ". Pick a different one with Summary Chart in " + DATA.settings + "; the slug and title can be changed there too.";
 } else { $("chartstep").hidden = true; $("teaserstep").textContent = "Step 3"; }
+if (!DATA.summary_bullets.length) $("teasersection").hidden = true;      // archive posts carry no short description
 $("teasertext").textContent = DATA.summary;
 $("teasernote").textContent = (DATA.summary_suggested
-  ? "These bullets were suggested automatically. To use your own, fill in Summary 1 to 3 in " + DATA.settings + " and rebuild. "
+  ? "These bullets were written automatically for this build and saved in " + DATA.settings + ". Read them, and edit Summary 1 to 3 there (then rebuild) to change any. Clear all three to have a fresh set written. "
   : "The bullets are the ones in " + DATA.settings + ". ")
   + "The last line embeds a chart; change which one with Summary Chart in the same file. Look: " + DATA.summary_style
   + " (Summary Style in the same file; plain gives bare lines with no HTML).";

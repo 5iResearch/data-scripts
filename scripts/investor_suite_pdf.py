@@ -133,16 +133,62 @@ def _box_key(r):
     return tuple(round(v / 4) for v in r)
 
 
+# Sections that shared an article's side tab in some issues but are not part of it and were not carried over.
+OTHER_SECTIONS = ("EARNINGS UPDATE",)
+COHORT_TABLE = re.compile(r"\d{4}\s+COHORT\s*$")      # "STOCK OF INTEREST - 2025 COHORT", the table page
+
+
 def article_pages(lines_by_page, kind):
-    """Pages carrying this article's side tab, leaving out the Stock of Interest cohort table."""
-    pages = []
+    """The pages this article runs over: from the first page carrying its side tab, through any untabbed pages
+    that follow (some issues only tab the opening page), up to the next section or the cohort table.
+
+    Where another section sits under the same tab (the Earnings Update ran under MARKET MUSINGS), the article
+    is the part that opens with its own section heading."""
+    pages, openers, others = [], [], []
     for i, lines in enumerate(lines_by_page):
         upper = [(" ".join(l["text"].upper().split()), l) for l in lines]
-        tab = any(not l["flat"] and any(lbl in t for lbl in LABELS[kind]) for t, l in upper)
-        cohort = any("COHORT" in t and l["size"] >= 15 for t, l in upper)
-        if tab and not cohort:
+        tabs = [t for t, l in upper if not l["flat"] and l["size"] >= 15]
+        heads = [t for t, l in upper if l["flat"] and l["size"] >= 17]
+        mine = any(lbl in t for t in tabs for lbl in LABELS[kind])
+        cohort = any(COHORT_TABLE.search(t) for t in heads)
+        if (mine and not cohort and (not pages or i - pages[-1] == 1)) or \
+                (pages and not tabs and not cohort and i - pages[-1] == 1):
             pages.append(i)
+            if any(t in LABELS[kind] for t in heads):
+                openers.append(i)
+            if any(t in OTHER_SECTIONS for t in heads):
+                others.append(i)
+        elif pages:
+            break
+    if openers:
+        pages = [i for i in pages if i >= openers[0]]
+    later = [i for i in others if pages and i > pages[0]]
+    if later:
+        pages = [i for i in pages if i < later[0]]
+    elif others and not openers:
+        pages = []                              # only the other section ran under this tab
     return pages
+
+
+_LOADED = {}
+
+
+def _load(pdf_path):
+    """Every page's text lines, pictures and drawings, read once per PDF (three articles share an issue)."""
+    key = (os.path.abspath(pdf_path), os.path.getmtime(pdf_path))
+    if key not in _LOADED:
+        _LOADED.clear()
+        with fitz.open(pdf_path) as doc:
+            _LOADED[key] = ([_page_lines(p, i) for i, p in enumerate(doc)],
+                            [p.get_image_info(xrefs=True) for p in doc],
+                            [[(tuple(d["rect"]), d.get("fill")) for d in p.get_drawings()] for p in doc])
+    return _LOADED[key]
+
+
+def kinds_in(pdf_path):
+    """{kind: [page indexes]} for the articles this issue carries."""
+    lines_by_page = _load(pdf_path)[0]
+    return {k: pages for k in LABELS if (pages := article_pages(lines_by_page, k))}
 
 
 def _figure_regions(page, lines, images, drawings, body_lines):
@@ -446,22 +492,21 @@ def read_article(pdf_path, kind, draft_blocks=None, draft_title="", draft_dir=""
     """dict(title, blocks, thesis, pages, unused, notes) for one article, or None when it can't be found."""
     notes = []
     with fitz.open(pdf_path) as doc:
-        lines_by_page = [_page_lines(p, i) for i, p in enumerate(doc)]
+        lines_by_page, images_by_page, drawings_by_page = _load(pdf_path)
         pages = article_pages(lines_by_page, kind)
         if hint_pages and set(pages) <= set(range(min(hint_pages), max(hint_pages) + 1)):
             # Some issues only tab the first page; the draft's own sentences show how far the article runs.
             cohort = {i for i, lines in enumerate(lines_by_page)
-                      if any("COHORT" in l["text"].upper() and l["size"] >= 15 for l in lines)}
-            pages = [i for i in range(min(hint_pages), max(hint_pages) + 1) if i not in cohort]
+                      if any(COHORT_TABLE.search(l["text"].upper()) and l["size"] >= 15 for l in lines)}
+            wide = [i for i in range(min(hint_pages), max(hint_pages) + 1) if i not in cohort]
+            pages = wide if not pages else [i for i in wide if i >= pages[0]] or pages
         if not pages:
             return None
         n = len(doc)
         fixed_lines = _repeated(lines_by_page, _line_key, n)
-        images_by_page = [p.get_image_info(xrefs=True) for p in doc]
         fixed_images = {x for x, c in Counter(i["xref"] for imgs in images_by_page
                                               for i in {v["xref"]: v for v in imgs}.values()).items()
                         if c >= max(3, n * 0.3)}
-        drawings_by_page = [[(tuple(d["rect"]), d.get("fill")) for d in p.get_drawings()] for p in doc]
         fixed_boxes = _repeated([[r for r, _ in ds] for ds in drawings_by_page], _box_key, n)
 
         # What the article's own text is set in.
