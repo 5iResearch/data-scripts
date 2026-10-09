@@ -13,6 +13,10 @@ article it:
     Word tables become HTML tables, "(DONE)" tags and section numbers are dropped
   * Stock of Interest only: adds the Investment Thesis / Sweet Spot bullets from the companion doc and an
     Investor Considerations box (figures from post.txt, or read from the PDF for past issues)
+  * writes the short description that goes with the post: up to three one-line bullets and one embedded
+    chart ("Summary 1-3" and "Summary Chart" in post.txt; left blank, the bullets are suggested). The chart
+    is shown through the site's [[embedchart:<slug>]] tag, so the kit also gives the slug, title and link to
+    register it with
   * writes _build/post.html and _build/kit.html (copy buttons + preview) next to the draft
 
 Nothing is published or committed: these are member posts, so text and images stay in the Documents folder.
@@ -48,6 +52,7 @@ except ImportError:
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 KIT_TEMPLATE = os.path.join(REPO_ROOT, "templates", "investor_suite_kit.html")
 SITE_IMAGE_DIR = "/files/www"
+SITE_URL = "https://www.5iresearch.ca"      # an embedded chart is registered on the site with its full link
 
 FONT = "Arial,Helvetica,sans-serif"
 BLUE, ORANGE, INK = "#1F79BE", "#C67A29", "#363636"
@@ -78,6 +83,11 @@ ANALYST_DISCLOSURE = ("Analysts of 5i Research responsible for this report do no
                       "report. The i2i Fund does not have a financial or other interest in {t}.")
 CONSIDERATION_FIELDS = ["Current Price", "Price Target", "Implied Return", "Investor Type/Style",
                         "Dividend Yield", "Confidence"]
+SUMMARY_BULLETS = 3
+SUMMARY_MAX = 110          # characters; a suggested bullet longer than this is cut at a clause
+SUMMARY_HEIGHT = "auto"    # the embed tag's height: the small chart's own height, so nothing is cropped or padded
+SUMMARY_WIDTH = "600"      # px, the short description's own smaller copy of the chart
+SUMMARY_STYLES = ("bullets", "pill-blue", "pill-orange", "plain")      # the first is the default
 
 
 # --------------------------------------------------------------------------- folders
@@ -158,8 +168,42 @@ def write_settings(path, kind, values):
                   f"Company: {values.get('company', '')}", f"Ticker: {values.get('ticker', '')}"]
         lines += [f"{k}: {values.get(k.lower(), '')}" for k in CONSIDERATION_FIELDS]
     lines.append(f"Disclosure: {values.get('disclosure', '')}")
+    lines += summary_settings(values)
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
+
+
+def summary_settings(values):
+    return (["# Short description shown with the post: up to three short bullets and one chart. Leave the bullets",
+             "# blank to have them suggested. Summary Chart is a chart number from the kit. Leave its slug and",
+             "# title blank for the standard ones (e.g. coi-2026-09-fig1)."]
+            + [f"Summary {i}: {values.get(f'summary {i}', '')}" for i in range(1, SUMMARY_BULLETS + 1)]
+            + [f"Summary Chart: {values.get('summary chart', '1')}",
+               f"Summary Chart Height: {values.get('summary chart height', SUMMARY_HEIGHT)}",
+               f"Summary Chart Slug: {values.get('summary chart slug', '')}",
+               f"Summary Chart Title: {values.get('summary chart title', '')}",
+               "# The short description uses its own small copy of the chart, this many pixels wide. If the site",
+               "# still stretches it across the page, set Summary Chart Canvas to the page's width (e.g. 1200):",
+               "# the small chart is then placed at the left of a white image that wide.",
+               f"Summary Chart Width: {values.get('summary chart width', SUMMARY_WIDTH)}",
+               f"Summary Chart Canvas: {values.get('summary chart canvas', '')}",
+               f"# Summary Style: {', '.join(SUMMARY_STYLES)}",
+               f"Summary Style: {values.get('summary style', SUMMARY_STYLES[0])}"])
+
+
+def summary_markup(style, label, bullets):
+    """The short description's bullets: plain lines, a bullet list, or a list under a small coloured pill
+    naming the kind of article. Kept quiet on purpose: it is a teaser above the article, not a banner."""
+    if style == "plain" or not bullets:
+        return "\n".join(bullets)
+    items = "".join(f'<li style="margin:0 0 4px;">{html.escape(b)}</li>' for b in bullets)
+    out = f'<ul style="margin:0 0 12px;padding-left:20px;line-height:1.5;">{items}</ul>'
+    if style.startswith("pill"):
+        colour = ORANGE if style.endswith("orange") else BLUE
+        out = (f'<div style="margin:0 0 10px;"><span style="display:inline-block;background:{colour};color:#ffffff;'
+               f'font-family:{FONT};font-size:11px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;'
+               f'line-height:1;padding:6px 12px;border-radius:999px;">{html.escape(label)}</span></div>' + out)
+    return out
 
 
 # --------------------------------------------------------------------------- published PDF
@@ -627,6 +671,21 @@ def build_post(kind, title, blocks, eyebrow, disclosure, thesis=None, considerat
     return f'<div style="max-width:{width}px;margin:0 auto;">\n{body}\n</div>\n' if width else body + "\n"
 
 
+def suggest_summary(blocks, thesis):
+    """Three teaser lines when post.txt has none: the shortest Investment Thesis bullets for a Stock of
+    Interest, otherwise the opening sentence of the first, a middle and the last paragraph."""
+    points = next(iter(thesis.values()), []) if thesis else []
+    if len(points) >= SUMMARY_BULLETS:
+        keep = sorted(sorted(range(len(points)), key=lambda i: len(points[i]))[:SUMMARY_BULLETS])
+        picks = [points[i] for i in keep]
+    else:
+        paras = [b["text"] for b in blocks if b["t"] == "p" and len(b["text"]) > 80]
+        spots = sorted({0, len(paras) // 2, len(paras) - 1}) if paras else []
+        picks = [re.split(r"(?<=[.!?])\s+", paras[i])[0] for i in spots]
+        picks = [t if len(t) <= SUMMARY_MAX else t[:t.rfind(" ", 0, SUMMARY_MAX)].rstrip(" ,;") + "…" for t in picks]
+    return [t.strip().rstrip(".") for t in picks]
+
+
 # --------------------------------------------------------------------------- one article
 
 def build_article(folder, kind, docs, open_kit, source=""):
@@ -746,12 +805,67 @@ def build_article(folder, kind, docs, open_kit, source=""):
 
     if not os.path.exists(settings_path):
         write_settings(settings_path, kind, {**settings, "title": title, "document": chosen, "disclosure": disclosure})
+    else:                                       # a post.txt from before these settings were added
+        new = [ln for ln in summary_settings(settings)
+               if not ln.startswith("#") and ln.split(":", 1)[0].lower() not in settings]
+        if new:
+            with open(settings_path, "a", encoding="utf-8") as f:
+                f.write("\n".join(new) + "\n")
     if score is not None and score < 0.9 and not article:
         warnings.append(f"Only {score:.0%} of this draft's sentences appear in the published PDF, so the text was "
                         "probably edited in InDesign. See the list at the bottom.")
     images = [b for b in blocks if b["t"] == "img"]
     if not images:
         warnings.append("No charts found in the draft.")
+
+    # The short description: a few one-line bullets and one chart, as the site's embed tag.
+    bullets = [settings.get(f"summary {i}", "") for i in range(1, SUMMARY_BULLETS + 1)]
+    bullets = [b.lstrip("-•· ").strip() for b in bullets if b.strip()]
+    suggested = not bullets
+    if suggested:
+        bullets = suggest_summary(blocks, thesis)
+        if not thesis:
+            warnings.append("Short description: the three bullets are just sentences lifted from the article. "
+                            f"Write your own as Summary 1 to 3 in {os.path.basename(settings_path)} and rebuild.")
+    pick = settings.get("summary chart", "").strip() or "1"
+    number = int(pick) if pick.isdigit() else 0
+    chosen_image = images[number - 1] if 0 < number <= len(images) else None
+    if not chosen_image and images:
+        warnings.append(f'Short description: "Summary Chart: {pick}" is not one of charts 1 to {len(images)}, so '
+                        "no chart was embedded.")
+    # The site shows a chart through a registered slug, not a file name: slug + title + the uploaded file's link.
+    embed = chart_title = chart_link = ""
+    preview = None
+    if chosen_image:
+        embed = settings.get("summary chart slug", "").strip() or f"{kind}-{year}-{month:02d}-fig{number}"
+        chart_title = (settings.get("summary chart title", "").strip()
+                       or f"{KINDS[kind]}: {title} ({MONTHS[month - 1][:3]} {year})")
+        # Its own small copy: the embed shows a picture as big as the file is, so the file is made small.
+        number_of = lambda key, default: int(v) if (v := settings.get(key, "").strip()).isdigit() else default
+        width, canvas = number_of("summary chart width", int(SUMMARY_WIDTH)), number_of("summary chart canvas", 0)
+        with Image.open(os.path.join(build_dir, chosen_image["name"])) as im:
+            small = im.convert("RGB")
+        if small.width > width:
+            small = small.resize((width, round(small.height * width / small.width)), Image.LANCZOS)
+        if canvas > small.width:
+            sheet = Image.new("RGB", (canvas, small.height), "white")
+            sheet.paste(small, (0, 0))
+            small = sheet
+        preview = dict(name=os.path.splitext(chosen_image["name"])[0] + "-preview.png", w=small.width,
+                       h=small.height, caption=["short description"])
+        small.save(os.path.join(build_dir, preview["name"]), "PNG", optimize=True)
+        chart_link = f"{SITE_URL}{SITE_IMAGE_DIR}/{preview['name']}"
+    height = settings.get("summary chart height", "").strip() or SUMMARY_HEIGHT
+    if not height.isdigit():
+        height = str(preview["h"]) if preview else "420"
+    style = settings.get("summary style", "").strip().lower() or SUMMARY_STYLES[0]
+    if style not in SUMMARY_STYLES:
+        warnings.append(f'Summary Style "{style}" is not one of {", ".join(SUMMARY_STYLES)}; used {SUMMARY_STYLES[0]}.')
+        style = SUMMARY_STYLES[0]
+    summary_look = summary_markup(style, KINDS[kind], bullets)
+    summary = "\n".join(filter(None, [summary_look, f"[[embedchart:{embed} height={height}]]" if embed else ""]))
+    with open(os.path.join(build_dir, "summary.txt"), "w", encoding="utf-8") as f:
+        f.write(summary + "\n")
 
     month_label = f"{MONTHS[month - 1]} {year}"
     post_title = f"{KINDS[kind]}: {title}"
@@ -768,9 +882,13 @@ def build_article(folder, kind, docs, open_kit, source=""):
             "pdf": os.path.basename(pdf_path) if pages else "", "match": None if score is None else round(score * 100),
             "missing": [] if article else missing[:40], "settings": os.path.basename(settings_path),
             "source": "pdf" if article else "word", "notes": notes, "unused": unused[:60],
+            "summary": summary, "summary_bullets": bullets, "summary_suggested": suggested,
+            "summary_style": style, "summary_look": summary_look,
+            "summary_image": preview["name"] if preview else "", "summary_height": height,
+            "chart_slug": embed, "chart_title": chart_title, "chart_link": chart_link,
             "words": sum(len(b["text"].split()) for b in blocks if b["t"] in ("p", "li")),
             "images": [{"name": b["name"], "w": b["w"], "h": b["h"], "caption": " · ".join(b["caption"])}
-                       for b in images]}
+                       for b in images + ([preview] if preview else [])]}
     with open(KIT_TEMPLATE, encoding="utf-8") as f:
         page = f.read()
     kit_path = os.path.join(build_dir, "kit.html")

@@ -25,6 +25,11 @@ dt { color:var(--muted); } dd { margin:0; overflow-wrap:anywhere; }
 .thumbs a { display:block; border:1px solid var(--rule); border-radius:5px; padding:8px; text-decoration:none; color:var(--ink); font-size:12px; overflow-wrap:anywhere; }
 .thumbs img { width:100%; height:110px; object-fit:contain; display:block; margin-bottom:6px; background:#fff; }
 details summary { cursor:pointer; font-weight:bold; }
+.teaser { display:flex; gap:18px; flex-wrap:wrap; margin-top:10px; }
+.teaser pre { flex:1 1 380px; margin:0; background:var(--bg); padding:12px 14px; border-radius:5px; font:14px/1.6 Consolas,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
+.teaser .look { flex:1 1 380px; border:1px solid var(--rule); border-radius:5px; padding:12px 16px; background:#fff; }
+.teaser .look ul { margin:0 0 10px 18px; padding:0; } .teaser .look img { display:block; max-width:100%; margin:0 auto; }
+.teaser .look small { color:var(--muted); }
 </style></head>
 <body><main>
 <h1 id="h1"></h1>
@@ -51,6 +56,22 @@ details summary { cursor:pointer; font-weight:bold; }
 <div class="row"><code id="title"></code><button data-copy="title">Copy title</button></div>
 <div class="row"><code>Blog post body (HTML)</code><button data-copy="post">Copy body HTML</button></div>
 <iframe id="preview" title="Blog post preview"></iframe>
+</section>
+
+<section id="chartstep">
+<div class="step">Step 3</div><h2>Register the short description's chart</h2>
+<p>The short description shows one chart through the site's embedded chart function. After the PNGs are uploaded (Step 1), create the embedded chart on the site with these three values. The tag in Step 4 already uses this slug.</p>
+<div class="row"><code id="chartslug"></code><button data-copy="chart_slug">Copy slug</button></div>
+<div class="row"><code id="charttitle"></code><button data-copy="chart_title">Copy title</button></div>
+<div class="row"><code id="chartlink"></code><button data-copy="chart_link">Copy link</button></div>
+<p class="sub" style="margin:8px 0 0;" id="chartwhich"></p>
+</section>
+
+<section>
+<div class="step" id="teaserstep">Step 4</div><h2>Short description</h2>
+<p id="teasernote"></p>
+<div class="row"><code>Short description (bullets and chart tag)</code><button data-copy="summary">Copy short description</button></div>
+<div class="teaser"><pre id="teasertext"></pre><div class="look"><small>Roughly how it reads</small><div id="teaserlook" style="margin-top:10px;"></div><img id="teaserimg" alt="" hidden></div></div>
 </section>
 
 <section id="pdfcheck" hidden>
@@ -95,6 +116,23 @@ if (leftOver.length) {
   leftOver.forEach(s => { const li = document.createElement("li"); li.textContent = s; $("missing").appendChild(li); });
 }
 
+if (DATA.chart_slug) {
+  $("chartslug").textContent = DATA.chart_slug; $("charttitle").textContent = DATA.chart_title; $("chartlink").textContent = DATA.chart_link;
+  $("chartwhich").textContent = "Chart used: " + DATA.summary_image + ". Pick a different one with Summary Chart in " + DATA.settings + "; the slug and title can be changed there too.";
+} else { $("chartstep").hidden = true; $("teaserstep").textContent = "Step 3"; }
+$("teasertext").textContent = DATA.summary;
+$("teasernote").textContent = (DATA.summary_suggested
+  ? "These bullets were suggested automatically. To use your own, fill in Summary 1 to 3 in " + DATA.settings + " and rebuild. "
+  : "The bullets are the ones in " + DATA.settings + ". ")
+  + "The last line embeds a chart; change which one with Summary Chart in the same file. Look: " + DATA.summary_style
+  + " (Summary Style in the same file; plain gives bare lines with no HTML).";
+if (DATA.summary_style === "plain") {
+  const ul = document.createElement("ul");
+  DATA.summary_bullets.forEach(b => { const li = document.createElement("li"); li.textContent = b; ul.appendChild(li); });
+  $("teaserlook").appendChild(ul);
+} else $("teaserlook").innerHTML = DATA.summary_look;
+if (DATA.summary_image) { $("teaserimg").src = DATA.summary_image; $("teaserimg").style.maxHeight = DATA.summary_height + "px"; $("teaserimg").hidden = false; }
+
 // Preview: the charts load from this folder (they aren't uploaded yet).
 let preview = DATA.post;
 DATA.images.forEach(i => { preview = preview.split("/files/www/" + i.name).join(i.name); });
@@ -109,7 +147,7 @@ async function copyText(txt) {
   document.execCommand("copy"); ta.remove();
 }
 document.querySelectorAll("button[data-copy]").forEach(b => b.addEventListener("click", async () => {
-  await copyText(b.dataset.copy === "title" ? DATA.title : DATA.post);
+  await copyText(b.dataset.copy === "post" ? DATA.post : (DATA[b.dataset.copy] || ""));
   const label = b.textContent;
   b.textContent = "Copied"; b.classList.add("done");
   setTimeout(() => { b.textContent = label; b.classList.remove("done"); }, 1500);

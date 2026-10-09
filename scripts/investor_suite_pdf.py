@@ -172,6 +172,7 @@ def _figure_regions(page, lines, images, drawings, body_lines):
         regions.append(box)
 
     area = page.rect.width * page.rect.height
+    body_lines = body_lines + [l for c in captions for l in c["lines"]]
     grown = True
     while grown:
         grown = False
@@ -198,9 +199,11 @@ def _figure_regions(page, lines, images, drawings, body_lines):
     return regions, captions
 
 
-def _render(page, rect, avoid=()):
+def _render(page, rect, avoid=(), inner=None):
     """The region as members saw it: cropped from the page, white margins trimmed."""
     clip = fitz.Rect(rect[0] - 3, rect[1] - 3, rect[2] + 3, rect[3] + 3) & page.rect
+    if inner:
+        clip.x0, clip.x1 = max(clip.x0, inner[0]), min(clip.x1, inner[1])
     for a in avoid:                             # keep the page's side tab out of a chart that sits beside it
         if a[2] - a[0] < 40 and a[1] < clip.y1 and a[3] > clip.y0:
             if clip.x0 < a[2] < rect[0] + 1:
@@ -530,7 +533,12 @@ def read_article(pdf_path, kind, draft_blocks=None, draft_title="", draft_dir=""
                       < page.rect.width * page.rect.height * 0.85]
             boxes = [r for r, _ in drawings_by_page[i] if _box_key(r) not in fixed_boxes]
             fixed = [r for r, _ in drawings_by_page[i] if _box_key(r) in fixed_boxes]
-            regions, captions = _figure_regions(page, lines, images, boxes, body)
+            regions, captions = _figure_regions(page, lines, images, boxes,
+                                                [l for l in lines if l["role"] != "foreign"])
+            # The footer strip runs up the right-hand edge over anything placed full width; stop charts short of it.
+            # (The left-hand tab is handled in _render: charts often start right beside it.)
+            rights = [l["x0"] for l in lines if not l["flat"] and l["x0"] > page.rect.width * 0.9]
+            inner = (0, min(rights) - 6 if rights else page.rect.width)
 
             figures = []
             for r in regions:
@@ -540,7 +548,7 @@ def read_article(pdf_path, kind, draft_blocks=None, draft_title="", draft_dir=""
                 if "investor considerations" in " ".join(l["text"] for l in inside).lower():
                     continue                    # rebuilt as a box from its figures, not shown as a picture
                 figures.append(dict(t="img", x0=r[0], y0=r[1], x1=r[2], y1=r[3], page=i, caption=[],
-                                    im=_render(page, r, fixed),
+                                    im=_render(page, r, fixed, inner),
                                     share=min(1.0, (r[2] - r[0]) / max(page.rect.width - 56, 1))))
             for c in captions:
                 near = min(figures, key=lambda f: _distance(_rect(f), c["rect"]), default=None)
