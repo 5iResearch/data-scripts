@@ -1,0 +1,32 @@
+{
+  "as_of": "2026-10-13",
+  "blog_title": "Benchmark Beaters Weekly: 44 Stocks Beating Their Benchmarks (October 13, 2026)",
+  "email_subject": "Benchmark Beaters: CVVY & MRNA lead 44 stocks beating the market",
+  "preview_text": "24 Canadian and 20 U.S. names at six-month relative highs. Full table and charts inside.",
+  "intro": [
+    "The latest Benchmark Beaters screen (as of October 13, 2026) found 44 Canadian and U.S. stocks outperforming their benchmarks, each hitting a new six-month relative high in the last five trading days.",
+    "In Canada, 24 stocks made a fresh six-month high relative to the TSX Composite, 9 of them new to the list this week. Cavvy Energy Ltd. (CVVY) leads with a +113% six-month return, and Information Technology is the most represented sector with 6 names.",
+    "In the U.S., 20 stocks made a fresh six-month high relative to the S&P 500, 10 of them new to the list this week. Moderna Inc. (MRNA) leads with a +297% six-month return, and Information Technology is the most represented sector with 11 names."
+  ],
+  "total": 44,
+  "stats": {
+    "cdn": {
+      "count": 24,
+      "new": 9,
+      "streak": 2,
+      "top_sector": "Information Technology",
+      "top_sector_n": 6
+    },
+    "us": {
+      "count": 20,
+      "new": 10,
+      "streak": 2,
+      "top_sector": "Information Technology",
+      "top_sector_n": 11
+    }
+  },
+  "workbook": "Benchmark_Beaters_2026-10-13.xlsx",
+  "image_url": "https://5iresearch.github.io/data-scripts/outputs/benchmark-beaters-weekly/2026-10-13/teaser.png",
+  "table_url": "{{TABLE_PDF_URL}}",
+  "charts_url": "{{CHARTS_PDF_URL}}"
+}
