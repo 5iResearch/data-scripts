@@ -1186,6 +1186,7 @@ def home_markup(style, view, heading, subheading, memes):
                         f'border-radius:10px;background:#ffffff;padding:10px 14px;line-height:1.45;">'
                         f'{html.escape(m)}</div>' for m in memes)
         out.append(f'<div style="display:flex;flex-wrap:wrap;gap:12px;margin:0 0 20px;">{cards}</div>')
+        out.append('<p>&nbsp;</p>')                 # a blank line under Market Memes before what follows
         return "\n".join(out)
     items = "".join(f'<li style="margin:0 0 10px;break-inside:avoid;page-break-inside:avoid;">{html.escape(m)}</li>'
                     for m in memes)
@@ -1195,6 +1196,7 @@ def home_markup(style, view, heading, subheading, memes):
     else:
         out.append(f'<div style="margin:0 0 20px;border:1px solid {edge};border-radius:12px;'
                    f'background:{HOME_TINT};padding:16px 22px 6px;">{lst}</div>')
+    out.append('<p>&nbsp;</p>')                     # a blank line under Market Memes before what follows
     return "\n".join(out)
 
 
