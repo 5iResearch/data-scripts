@@ -265,7 +265,7 @@ def parse_trades(content):
     for part in parts[1:]:
         title, _, rationale = part.partition("\n")
         # "Trade Rationale - BEP.UN: BEP.UN is..." / "BEP.UN: ..." -> "BEP.UN is...";
-        # portfolio_block() puts a bold "Trade Rationale:" back in front.
+        # portfolio_block() puts an italic "Trade Rationale:" back in front.
         rationale = re.sub(r"^\s*(?:(?i:Trade Rationale)\s*[-–:]?\s*)?(?:[A-Z][A-Z0-9]{0,5}(?:\.[A-Z]{1,3})?\s*:\s*)?",
                            "", rationale.strip())
         trades.append((title.strip(), rationale))
@@ -436,7 +436,7 @@ def portfolio_block(name, content):
         rows += (f'<div style="{sep}padding:{"14px" if i else "2px"} 0 2px;">'
                  f'<p style="margin:0 0 6px;font-family:{FONT};font-size:17px;font-weight:bold;line-height:1.4;'
                  f'color:{INK};">{trade_badge(title)}{inline_md(title)}</p>'
-                 f'{md_blocks("**Trade Rationale:** " + rationale if rationale else "")}</div>')
+                 f'{md_blocks("*Trade Rationale:* " + rationale if rationale else "")}</div>')
     head = (f'<p style="margin:0 0 12px;font-family:{FONT};font-size:19px;font-weight:bold;color:{colour};">'
             f'{html.escape(name)} Model Portfolio</p>')
     return card(head + rows, bg="#ffffff", left=colour)
