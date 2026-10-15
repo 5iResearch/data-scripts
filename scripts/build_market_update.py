@@ -28,6 +28,7 @@ import os
 import re
 import shutil
 import sys
+import urllib.request
 import webbrowser
 from datetime import datetime
 
@@ -114,6 +115,11 @@ Preview: One line that shows next to the subject in the inbox
 Header:
 Blog title:
 Date:
+
+## New Podcast Episode!
+Delete this section if there's no new episode. It goes at the top of the email.
+Paste the YouTube and Spotify embed codes (or plain links) below the write-up -
+the email gets a clickable thumbnail + buttons, the blog gets the players.
 
 ## Report Updates
 We have posted report updates on the following names:
@@ -457,6 +463,74 @@ def analytics_plug():
                    card(body, bg=BLUE_TINT, border="#D3E4F2"), accent=BLUE)
 
 
+# --------------------------------------------------------------------------- podcast
+
+# Email clients strip <iframe>, so the email gets a linked YouTube thumbnail and
+# Watch / Listen buttons; the blog keeps the real players.
+YT_ID = r"(?:youtube(?:-nocookie)?\.com/(?:embed/|watch\?v=|live/|shorts/)|youtu\.be/)([\w-]{11})"
+SPOTIFY_EP = r"open\.spotify\.com/(?:embed/)?(episode|show)/(\w+)"
+YOUTUBE_RED = "#CC0000"
+SPOTIFY_GREEN = "#1DB954"
+
+
+def is_podcast(title):
+    tl = title.lower()
+    return "podcast" in tl or "exponent" in tl
+
+
+def youtube_thumb(vid):
+    """maxresdefault is sharp but only exists for HD uploads; hqdefault always does."""
+    url = f"https://img.youtube.com/vi/{vid}/maxresdefault.jpg"
+    try:
+        urllib.request.urlopen(urllib.request.Request(url, method="HEAD"), timeout=6)
+        return url
+    except Exception:
+        return f"https://img.youtube.com/vi/{vid}/hqdefault.jpg"
+
+
+def link_buttons(links):
+    """Side-by-side buttons that wrap to two lines on narrow phones."""
+    a = "".join(
+        f'<a href="{html.escape(url)}" target="_blank" style="display:inline-block;background:{bg};'
+        f'border-radius:4px;padding:12px 22px;margin:0 5px 10px;font-family:{FONT};font-size:15px;'
+        f'font-weight:bold;color:#ffffff;text-decoration:none;">{label}</a>'
+        for label, url, bg in links)
+    return f'<p style="margin:4px 0 8px;text-align:center;">{a}</p>'
+
+
+def podcast_block(content, warnings):
+    yt = re.search(YT_ID, content)
+    sp = re.search(SPOTIFY_EP, content)
+    # Strip the embed codes / bare player links; what's left is the write-up.
+    text = re.sub(r"<iframe\b.*?</iframe>", "", content, flags=re.S | re.I)
+    text = re.sub(r"^\s*<?https?://\S*(?:youtu|spotify)\S*>?\s*$", "", text, flags=re.M | re.I)
+    body = md_blocks(text)
+    if not (yt or sp):
+        warnings.append("Podcast section has no YouTube or Spotify link/embed.")
+        return body
+    watch = f"https://www.youtube.com/watch?v={yt.group(1)}" if yt else ""
+    listen = f"https://open.spotify.com/{sp.group(1)}/{sp.group(2)}" if sp else ""
+    if LAYOUT["web"]:
+        if yt:
+            body += (f'<div style="position:relative;width:100%;padding-bottom:56.25%;height:0;overflow:hidden;'
+                     f'border-radius:6px;margin:6px 0 14px;"><iframe src="https://www.youtube.com/embed/{yt.group(1)}" '
+                     f'title="YouTube video player" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" '
+                     f'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; '
+                     f'web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>')
+        if sp:
+            body += (f'<iframe src="https://open.spotify.com/embed/{sp.group(1)}/{sp.group(2)}" width="100%" '
+                     f'height="152" style="border:0;border-radius:12px;margin:0 0 14px;" loading="lazy" '
+                     f'allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe>')
+        return body
+    if yt:
+        body += (f'<a href="{watch}" target="_blank" style="display:block;text-decoration:none;">'
+                 f'{image(youtube_thumb(yt.group(1)), "Watch the episode on YouTube")}</a>')
+    body += link_buttons([(label, url, bg) for label, url, bg in (
+        ("&#9654;&nbsp; Watch on YouTube", watch, YOUTUBE_RED),
+        ("&#9835;&nbsp; Listen on Spotify", listen, SPOTIFY_GREEN)) if url])
+    return body
+
+
 # --------------------------------------------------------------------------- assemble
 
 RESEARCH_ACCENTS = [  # (heading keywords, card accent) - boxed "Research" sections, kept in file order
@@ -475,7 +549,13 @@ def build_rows(meta, sections, mu_title, mu_html, report_card_src, warnings):
     rows = []
     by_key = {t.lower(): c for t, c in sections}
 
-    research = [(t, c, research_accent(t)) for t, c in sections if c and research_accent(t)]
+    # A new podcast episode leads the issue, ahead of the research.
+    for t, c in sections:
+        if c and is_podcast(t):
+            rows.append(section("The Exponent Podcast", html.escape(t), podcast_block(c, warnings), accent=BLUE))
+            rows.append(divider())
+
+    research =[(t, c, research_accent(t)) for t, c in sections if c and research_accent(t)]
     for i, (title, content, accent) in enumerate(research):
         body = card(md_blocks(content), left=accent)
         if i == len(research) - 1:
@@ -487,7 +567,7 @@ def build_rows(meta, sections, mu_title, mu_html, report_card_src, warnings):
 
     for t, c in sections:
         tl = t.lower()
-        if tl == "market intro" or research_accent(t) or tl.startswith(("model portfolio", "call to action")):
+        if tl == "market intro" or research_accent(t) or is_podcast(t) or tl.startswith(("model portfolio", "call to action")):
             continue
         rows.append(section("", html.escape(t), md_blocks(c)))
         rows.append(divider())
