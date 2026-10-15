@@ -116,6 +116,9 @@ Header:
 Blog title:
 Date:
 
+(The Weekly Brief goes first: drop the "Weekly Brief.md" file you're sent into
+this folder, or paste its contents here as a "## Weekly Brief" section.)
+
 ## New Podcast Episode!
 Delete this section if there's no new episode. It goes at the top of the email.
 Paste the YouTube and Spotify embed codes (or plain links) below the write-up -
@@ -463,6 +466,83 @@ def analytics_plug():
                    card(body, bg=BLUE_TINT, border="#D3E4F2"), accent=BLUE)
 
 
+# --------------------------------------------------------------------------- weekly brief
+
+# A colleague writes the Weekly Brief (news + earnings, one paragraph per item)
+# and sends "Weekly Brief.md", made with tools/weekly_brief_formatter.html. Drop
+# it in the issue folder (or paste it into issue.md as "## Weekly Brief") and it
+# leads the issue, each item tagged with its first ticker.
+BRIEF_TICKER = r"\(([A-Z][A-Z0-9]{0,5}(?:[.\-][A-Z0-9]{1,3})?)\)"
+
+
+def is_brief(title):
+    return "weekly brief" in title.lower()
+
+
+def add_brief_file(folder, sections, warnings):
+    """Put the newest 'Weekly Brief*.md' in the folder in front of the issue.md
+    sections, unless issue.md already has a Weekly Brief section."""
+    files = glob.glob(os.path.join(folder, "Weekly Brief*.md"))
+    if not files or any(is_brief(t) for t, _ in sections):
+        return sections
+    newest = max(files, key=os.path.getmtime)
+    if len(files) > 1:
+        warnings.append(f"Several Weekly Brief files found; used {os.path.basename(newest)}.")
+    with open(newest, encoding="utf-8-sig") as f:
+        text = f.read().strip()
+    title, _, content = text.partition("\n")
+    if not (title.startswith("#") and is_brief(title)):
+        title, content = "Weekly Brief", text
+    return [(title.lstrip("#").strip(), content.strip())] + sections
+
+
+def _bold_first_company(text):
+    """**Microsoft (MSFT)**: bold the capitalised name + ticker the first time."""
+    if "**" in text:
+        return text
+    m = re.search(r"(?:\b[A-Z][\w&'’.\-]*\s+(?:(?:of|and|&amp;|&)\s+)?){1,5}" + BRIEF_TICKER, text)
+    if not m:
+        return text
+    # "Shares of Bank of America (BAC)" -> bold from "Bank".
+    name = re.sub(r"^(?:(?:Shares|Stock|Stocks|Investors|After|While|As|In|On|The)\s+(?:of\s+|in\s+)?)+",
+                  "", m.group(0))
+    start = m.end() - len(name)
+    return f"{text[:start]}**{name}**{text[m.end():]}"
+
+
+def brief_block(content, warnings):
+    as_of, disclosure, items = "", "", []
+    for block in re.split(r"\n\s*\n", content.strip()):
+        text = " ".join(ln.strip() for ln in block.splitlines() if ln.strip())
+        m = re.fullmatch(r"\(?as of:?\s*([^)]+)\)?", text, flags=re.I)
+        if m and not as_of:
+            as_of = m.group(1).strip()
+        elif re.match(r"\*?\s*(disclosure:|analysts of 5i)", text, flags=re.I):
+            disclosure = re.sub(r"^\*?\s*disclosure:\s*", "", text, flags=re.I).lstrip("* ")
+        else:
+            items.append(re.sub(r"^[-*•]\s+", "", text))
+    if not disclosure:
+        warnings.append("Weekly Brief has no disclosure paragraph.")
+
+    rows = []
+    for i, text in enumerate(items):
+        t = re.search(BRIEF_TICKER, text)
+        pill = (f'<span style="display:inline-block;background:{BLUE_TINT};color:{BLUE};font-family:{FONT};'
+                f'font-size:12px;font-weight:bold;letter-spacing:0.5px;line-height:1;padding:5px 7px;'
+                f'border-radius:4px;">{t.group(1)}</span>') if t else ""
+        top = f"border-top:1px solid {RULE};" if i else ""
+        rows.append(f'<tr><td width="74" valign="top" style="width:74px;padding:14px 10px 12px 0;{top}">{pill}</td>'
+                    f'<td valign="top" style="padding:12px 0 12px;{top}font-family:{FONT};font-size:16px;'
+                    f'line-height:1.6;color:{INK};">{inline_md(_bold_first_company(text))}</td></tr>')
+    body = p(f"As of {html.escape(as_of)}", size=14, color=MUTED, margin="-8px 0 6px") if as_of else ""
+    body += (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+             f'style="margin:0 0 10px;">{"".join(rows)}</table>')
+    if disclosure:
+        body += p(inline_md(disclosure), size=12, color=MUTED, margin="4px 0 8px",
+                  extra="line-height:1.5;font-style:italic;")
+    return body
+
+
 # --------------------------------------------------------------------------- podcast
 
 # Email clients strip <iframe>, so the email gets a linked YouTube thumbnail and
@@ -549,7 +629,12 @@ def build_rows(meta, sections, mu_title, mu_html, report_card_src, warnings):
     rows = []
     by_key = {t.lower(): c for t, c in sections}
 
-    # A new podcast episode leads the issue, ahead of the research.
+    # The Weekly Brief leads the issue, then a new podcast episode, then research.
+    for t, c in sections:
+        if c and is_brief(t):
+            rows.append(section("News &amp; Earnings", "The Weekly Brief", brief_block(c, warnings)))
+            rows.append(divider())
+
     for t, c in sections:
         if c and is_podcast(t):
             rows.append(section("The Exponent Podcast", html.escape(t), podcast_block(c, warnings), accent=BLUE))
@@ -567,7 +652,7 @@ def build_rows(meta, sections, mu_title, mu_html, report_card_src, warnings):
 
     for t, c in sections:
         tl = t.lower()
-        if tl == "market intro" or research_accent(t) or is_podcast(t) or tl.startswith(("model portfolio", "call to action")):
+        if tl == "market intro" or research_accent(t) or is_podcast(t) or is_brief(t) or tl.startswith(("model portfolio", "call to action")):
             continue
         rows.append(section("", html.escape(t), md_blocks(c)))
         rows.append(divider())
@@ -713,6 +798,7 @@ def main():
 
     meta, sections = parse_issue(issue_md)
     warnings = []
+    sections = add_brief_file(folder, sections, warnings)
     when = issue_date(folder, meta, warnings)
     date_str = when.strftime("%Y-%m-%d")
     date_label = f"{when:%B} {when.day}, {when.year}"
