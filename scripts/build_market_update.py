@@ -511,16 +511,14 @@ def podcast_block(content, warnings):
     watch = f"https://www.youtube.com/watch?v={yt.group(1)}" if yt else ""
     listen = f"https://open.spotify.com/{sp.group(1)}/{sp.group(2)}" if sp else ""
     if LAYOUT["web"]:
+        # Same plain players as the Exponent episode posts: full-width video,
+        # then Spotify's compact bar. The blog editor keeps these as they are.
         if yt:
-            body += (f'<div style="position:relative;width:100%;padding-bottom:56.25%;height:0;overflow:hidden;'
-                     f'border-radius:6px;margin:6px 0 14px;"><iframe src="https://www.youtube.com/embed/{yt.group(1)}" '
-                     f'title="YouTube video player" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" '
-                     f'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; '
-                     f'web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>')
+            body += (f'<p><iframe src="https://www.youtube.com/embed/{yt.group(1)}" width="100%" height="450">'
+                     f'</iframe></p>')
         if sp:
-            body += (f'<iframe src="https://open.spotify.com/embed/{sp.group(1)}/{sp.group(2)}" width="100%" '
-                     f'height="152" style="border:0;border-radius:12px;margin:0 0 14px;" loading="lazy" '
-                     f'allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe>')
+            body += (f'<p><iframe src="https://open.spotify.com/embed/{sp.group(1)}/{sp.group(2)}" width="100%" '
+                     f'height="85"></iframe></p>')
         return body
     if yt:
         body += (f'<a href="{watch}" target="_blank" style="display:block;text-decoration:none;">'
