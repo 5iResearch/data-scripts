@@ -469,9 +469,11 @@ def analytics_plug():
 # --------------------------------------------------------------------------- weekly brief
 
 # A colleague writes the Weekly Brief (news + earnings, one paragraph per item)
-# and sends "Weekly Brief.md", made with tools/weekly_brief_formatter.html. Drop
-# it in the issue folder (or paste it into issue.md as "## Weekly Brief") and it
-# leads the issue, each item tagged with its first ticker.
+# and sends it as text from the Weekly Brief Formatter page (source in
+# Documents/Mailchimp/Weekly Brief Formatter/). Paste it into issue.md as
+# "## Weekly Brief", or save it as "Weekly Brief.md" in the issue folder, and it
+# leads the issue, each item tagged with its first ticker. Keep the ticker and
+# name-bolding rules in step with the formatter's script.
 BRIEF_TICKER = r"\(([A-Z][A-Z0-9]{0,5}(?:[.\-][A-Z0-9]{1,3})?)\)"
 
 
