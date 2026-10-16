@@ -1,32 +1,32 @@
 {
-  "as_of": "2026-10-15",
-  "blog_title": "Benchmark Beaters Weekly: 59 Stocks Beating Their Benchmarks (October 15, 2026)",
-  "email_subject": "Benchmark Beaters: CVVY & MRNA lead 59 stocks beating the market",
-  "preview_text": "22 Canadian and 37 U.S. names at six-month relative highs. Full table and charts inside.",
+  "as_of": "2026-10-16",
+  "blog_title": "Benchmark Beaters Weekly: 56 Stocks Beating Their Benchmarks (October 16, 2026)",
+  "email_subject": "Benchmark Beaters: CVVY & MRNA lead 56 stocks beating the market",
+  "preview_text": "19 Canadian and 37 U.S. names at six-month relative highs. Full table and charts inside.",
   "intro": [
-    "The latest Benchmark Beaters screen (as of October 15, 2026) found 59 Canadian and U.S. stocks outperforming their benchmarks, each hitting a new six-month relative high in the last five trading days.",
-    "In Canada, 22 stocks made a fresh six-month high relative to the TSX Composite, 8 of them new to the list this week. Cavvy Energy Ltd. (CVVY) leads with a +118% six-month return, and Energy is the most represented sector with 8 names.",
-    "In the U.S., 37 stocks made a fresh six-month high relative to the S&P 500, 25 of them new to the list this week. Moderna Inc. (MRNA) leads with a +341% six-month return, and Health Care is the most represented sector with 14 names."
+    "The latest Benchmark Beaters screen (as of October 16, 2026) found 56 Canadian and U.S. stocks outperforming their benchmarks, each hitting a new six-month relative high in the last five trading days.",
+    "In Canada, 19 stocks made a fresh six-month high relative to the TSX Composite, 8 of them new to the list this week. Cavvy Energy Ltd. (CVVY) leads with a +117% six-month return, and Energy is the most represented sector with 9 names.",
+    "In the U.S., 37 stocks made a fresh six-month high relative to the S&P 500, 26 of them new to the list this week. Moderna Inc. (MRNA) leads with a +294% six-month return, and Health Care is the most represented sector with 15 names."
   ],
-  "total": 59,
+  "total": 56,
   "stats": {
     "cdn": {
-      "count": 22,
+      "count": 19,
       "new": 8,
       "streak": 1,
       "top_sector": "Energy",
-      "top_sector_n": 8
+      "top_sector_n": 9
     },
     "us": {
       "count": 37,
-      "new": 25,
+      "new": 26,
       "streak": 3,
       "top_sector": "Health Care",
-      "top_sector_n": 14
+      "top_sector_n": 15
     }
   },
-  "workbook": "Benchmark_Beaters_2026-10-15.xlsx",
-  "image_url": "https://5iresearch.github.io/data-scripts/outputs/benchmark-beaters-weekly/2026-10-15/teaser.png",
+  "workbook": "Benchmark_Beaters_2026-10-16.xlsx",
+  "image_url": "https://5iresearch.github.io/data-scripts/outputs/benchmark-beaters-weekly/2026-10-16/teaser.png",
   "table_url": "{{TABLE_PDF_URL}}",
   "charts_url": "{{CHARTS_PDF_URL}}"
 }
