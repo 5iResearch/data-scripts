@@ -2,7 +2,7 @@ name: Daily Index 200-Week MA (Website)
 
 on:
   schedule:
-    - cron: "0 7 * * 1-5"    # 7:00 AM UTC, weekdays — after the Index RSI website report (6:45)
+    - cron: "0 7 * * 1-6"    # 7:00 AM UTC, Mon-Sat (Sat picks up Friday's close) — after the Index RSI website report (6:45)
   workflow_dispatch:
 
 permissions:

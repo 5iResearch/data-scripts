@@ -2,7 +2,7 @@ name: Daily Relative Strength Ladder (Website)
 
 on:
   schedule:
-    - cron: "45 9 * * 1-5"   # 9:45 AM UTC, weekdays — after the Stock Lookup website report (9:30)
+    - cron: "45 9 * * 1-6"   # 9:45 AM UTC, Mon-Sat (Sat picks up Friday's close) — after the Stock Lookup website report (9:30)
   workflow_dispatch:
 
 permissions:

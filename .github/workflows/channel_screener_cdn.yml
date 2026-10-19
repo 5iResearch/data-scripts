@@ -2,7 +2,7 @@ name: Daily 10-Year Regression Channel Screener (CDN)
 
 on:
   schedule:
-    - cron: "0 8 * * 1-5"   # 8:00 AM UTC, weekdays — offset from US Channel Screener (7:50)
+    - cron: "0 8 * * 1-6"   # 8:00 AM UTC, Mon-Sat (Sat picks up Friday's close) — offset from US Channel Screener (7:50)
   workflow_dispatch:
 
 permissions:

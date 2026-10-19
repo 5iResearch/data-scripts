@@ -2,7 +2,7 @@ name: Daily Regression Channel Screener (Website)
 
 on:
   schedule:
-    - cron: "15 8 * * 1-5"   # 8:15 AM UTC, weekdays — after the US (7:50) and CDN (8:00) channel screeners
+    - cron: "15 8 * * 1-6"   # 8:15 AM UTC, Mon-Sat (Sat picks up Friday's close) — after the US (7:50) and CDN (8:00) channel screeners
   workflow_dispatch:
 
 permissions:

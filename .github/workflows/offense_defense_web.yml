@@ -2,7 +2,7 @@ name: Daily Offense vs Defense (Website)
 
 on:
   schedule:
-    - cron: "30 7 * * 1-5"   # 7:30 AM UTC, weekdays — after the VIX website report (7:15)
+    - cron: "30 7 * * 1-6"   # 7:30 AM UTC, Mon-Sat (Sat picks up Friday's close) — after the VIX website report (7:15)
   workflow_dispatch:
 
 permissions:

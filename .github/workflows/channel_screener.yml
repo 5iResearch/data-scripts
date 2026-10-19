@@ -2,7 +2,7 @@ name: Daily 10-Year Regression Channel Screener
 
 on:
   schedule:
-    - cron: "50 7 * * 1-5"   # 7:50 AM UTC, weekdays — offset from Rev Revision Screener (7:35)
+    - cron: "50 7 * * 1-6"   # 7:50 AM UTC, Mon-Sat (Sat picks up Friday's close) — offset from Rev Revision Screener (7:35)
   workflow_dispatch:
 
 permissions:

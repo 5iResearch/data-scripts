@@ -2,7 +2,7 @@ name: Daily Revenue Revision Screener (Website)
 
 on:
   schedule:
-    - cron: "50 7 * * 1-5"   # 7:50 AM UTC, weekdays — after the Revenue Revision Screener (7:35), same revision CSVs
+    - cron: "50 7 * * 1-6"   # 7:50 AM UTC, Mon-Sat (Sat picks up Friday's close) — after the Revenue Revision Screener (7:35), same revision CSVs
   workflow_dispatch:
 
 permissions:

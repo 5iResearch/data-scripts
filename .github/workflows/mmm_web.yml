@@ -2,7 +2,7 @@ name: Daily Macro Market Model (Website)
 
 on:
   schedule:
-    - cron: "0 9 * * 1-5"    # 9:00 AM UTC, weekdays — after the original MMM charts (Daily Python Scripts, 6:00)
+    - cron: "0 9 * * 1-6"    # 9:00 AM UTC, Mon-Sat (Sat picks up Friday's close) — after the original MMM charts (Daily Python Scripts, 6:00)
   workflow_dispatch:
 
 permissions:

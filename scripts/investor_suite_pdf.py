@@ -269,6 +269,47 @@ def _render(page, rect, avoid=(), inner=None):
     return im
 
 
+def _embedded(doc, xref):
+    """A placed picture as it was pasted in, before the page's tab and footer were laid over it."""
+    try:
+        pix = fitz.Pixmap(doc, xref)
+        smask = doc.xref_get_key(xref, "SMask")
+        if smask[0] == "xref":
+            pix = fitz.Pixmap(pix, fitz.Pixmap(doc, int(smask[1].split()[0])))
+        if pix.colorspace is None or pix.colorspace.n != 3:
+            pix = fitz.Pixmap(fitz.csRGB, pix)
+        mode = "RGBA" if pix.alpha else "RGB"
+        im = Image.frombytes(mode, (pix.width, pix.height), pix.samples)
+    except Exception:
+        return None
+    if mode == "RGBA":
+        flat = Image.new("RGB", im.size, "white")
+        flat.paste(im, mask=im.split()[3])
+        im = flat
+    if im.width > MAX_IMAGE_PX:
+        im = im.resize((MAX_IMAGE_PX, round(im.height * MAX_IMAGE_PX / im.width)), Image.LANCZOS)
+    return im
+
+
+def _same_colours(page, bbox, im):
+    """Whether the picture on its own looks like it does on the page (the middle, clear of tabs and footer)."""
+    x0, y0, x1, y1 = bbox
+    mid = fitz.Rect(x0 + (x1 - x0) * 0.15, y0 + (y1 - y0) * 0.1, x1 - (x1 - x0) * 0.15, y1 - (y1 - y0) * 0.1)
+    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=mid, alpha=False)
+    seen = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    w, h = im.size
+    own = im.crop((round(w * 0.15), round(h * 0.1), round(w * 0.85), round(h * 0.9))).resize(seen.size)
+    # Judge by the average of the coloured parts (lines, bars, fills): grey text and white space match either way.
+    def tint(img):
+        px = [p for p in img.getdata() if max(p) - min(p) > 60]
+        return [sum(c) / len(px) for c in zip(*px)] if len(px) >= 50 else None
+
+    a, b = tint(seen), tint(own)
+    if a is None or b is None:
+        return a is None and b is None
+    return max(abs(x - y) for x, y in zip(a, b)) < 10
+
+
 def _reading_order(items, width):
     """Left column top to bottom, then the right; anything spanning both columns splits the page in bands."""
     mid = width / 2
@@ -325,8 +366,36 @@ def _segments(lines, words, bullet):
         elif t:
             merged.append([t, b, i])
     for m in merged:
-        m[0] = re.sub(r"\s{2,}", " ", m[0])
+        m[0] = NEXT_PAGE.sub("", re.sub(r"\s{2,}", " ", m[0]))    # a web page has no next page
     return merged
+
+
+def _prose(members, starts):
+    """Lines in a foreign font that read as a paragraph of the article, not a pasted table or a caption."""
+    text = " ".join(l["text"] for l in members)
+    if CAPTION.match(members[0]["text"]):
+        return False
+    if len(norm(text)) >= 18 and norm(text)[:18] in starts:
+        return True                             # the draft has a paragraph starting this way
+    digits = sum(c.isdigit() for c in text)
+    return (len(members) >= 3 and len(text) >= 150 and digits < len(text) * 0.08
+            and len(text) / len(members) >= 35 and bool(TERMINAL.search(members[-1]["text"])))
+
+
+NEXT_PAGE = re.compile(r"\s*\((?:see\s+)?(?:on\s+)?(?:the\s+)?(?:next|previous|following|prior)\s+page\)", re.I)
+
+
+def _undouble(runs):
+    """Drop a passage printed twice in a row (text that overflowed and was set again on the next page)."""
+    for r in runs:
+        words = list(re.finditer(r"\S+", r[0]))
+        for k in range(min(40, len(words) // 2), 7, -1):
+            for i in range(len(words) - 2 * k + 1):
+                if [w.group() for w in words[i:i + k]] == [w.group() for w in words[i + k:i + 2 * k]]:
+                    cut = r[0][words[i + k].start():words[i + 2 * k - 1].end()]
+                    r[0] = r[0][:words[i + k].start()] + r[0][words[i + 2 * k - 1].end():].lstrip()
+                    return cut
+    return None
 
 
 def _text(runs):
@@ -566,7 +635,21 @@ def read_article(pdf_path, kind, draft_blocks=None, draft_title="", draft_dir=""
                     if (l["role"] == "body" and l["font"] == f["font"] and abs(l["x0"] - f["x0"]) < 4
                             and 0 < l["y0"] - prev["y0"] < 1.6 * l["size"]):
                         l["role"], prev = "fine", l
-            loose = [l for l in lines if l["role"] == "body" and CAPTION_LINE.match(l["text"])]
+            # A paragraph the layout set in another font (often the caption font) is still article text.
+            foreign = [l for l in lines if l["role"] == "foreign"]
+            for fam in {l["family"] for l in foreign}:
+                group = [l for l in foreign if l["family"] == fam]
+                for idx in _cluster([_rect(l) for l in group], 16):
+                    members = sorted((group[k] for k in idx), key=lambda l: (l["y0"], l["x0"]))
+                    if _prose(members, hints["starts"]):
+                        for l in members:
+                            l["role"] = "body"
+            def mid_sentence(c):                # "...for each sector in / Figure 4. In the top row..." is running text
+                return any(p is not c and p["role"] == "body" and abs(p["x0"] - c["x0"]) < 4
+                           and 0 < c["y0"] - p["y0"] < 1.6 * c["size"] and not TERMINAL.search(p["text"])
+                           for p in lines)
+
+            loose = [l for l in lines if l["role"] == "body" and CAPTION_LINE.match(l["text"]) and not mid_sentence(l)]
             for l in loose:
                 l["role"] = "caption"
 
@@ -592,11 +675,24 @@ def read_article(pdf_path, kind, draft_blocks=None, draft_title="", draft_dir=""
                     l["role"] = "figure"
                 if "investor considerations" in " ".join(l["text"] for l in inside).lower():
                     continue                    # rebuilt as a box from its figures, not shown as a picture
+                # A picture placed edge to edge sits under the side tab and footer: take the picture itself.
+                im = None
+                own = [v for v in images_by_page[i]
+                       if _inside(((v["bbox"][0] + v["bbox"][2]) / 2, (v["bbox"][1] + v["bbox"][3]) / 2), r)]
+                if (len(own) == 1 and not inside and all(abs(a - b) <= 6 for a, b in zip(own[0]["bbox"], r))
+                        and (r[0] < 20 or r[2] > page.rect.width - 20)):
+                    im = _embedded(doc, own[0]["xref"])
+                    if im and not _same_colours(page, own[0]["bbox"], im):
+                        im = None               # the page blends it to other colours; keep what members saw
                 figures.append(dict(t="img", x0=r[0], y0=r[1], x1=r[2], y1=r[3], page=i, caption=[],
-                                    im=_render(page, r, fixed, inner),
+                                    im=im or _render(page, r, fixed, inner),
                                     share=min(1.0, (r[2] - r[0]) / max(page.rect.width - 56, 1))))
+            def reach(f, c):                    # captions sit under their chart: a chart below one is a weaker match
+                d = _distance(_rect(f), c)
+                return d * 1.5 if f["y0"] >= c[3] - 2 else d
+
             for c in captions:
-                near = min(figures, key=lambda f: _distance(_rect(f), c["rect"]), default=None)
+                near = min(figures, key=lambda f: reach(f, c["rect"]), default=None)
                 if near and (len(figures) == 1 or _distance(_rect(near), c["rect"]) <= 80):
                     parts = []
                     for l in c["lines"]:
@@ -741,6 +837,8 @@ def read_article(pdf_path, kind, draft_blocks=None, draft_title="", draft_dir=""
                 final.append(b)
                 continue
             runs = _segments(b["lines"], hints["words"], b["t"] == "li")
+            if b["t"] == "p" and (cut := _undouble(runs)):
+                notes.append(f'The PDF prints this twice in a row; the repeat was dropped: "{cut}"')
             text = _text(runs)
             if not text:
                 continue

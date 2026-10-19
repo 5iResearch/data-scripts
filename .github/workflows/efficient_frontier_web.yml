@@ -2,7 +2,7 @@ name: Daily Efficient Frontier (Website)
 
 on:
   schedule:
-    - cron: "40 8 * * 1-5"   # 8:40 AM UTC, weekdays — after the Stock Screener (8:20), which downloads the same ~1,000 tickers
+    - cron: "40 8 * * 1-6"   # 8:40 AM UTC, Mon-Sat (Sat picks up Friday's close) — after the Stock Screener (8:20), which downloads the same ~1,000 tickers
   workflow_dispatch:
 
 permissions:

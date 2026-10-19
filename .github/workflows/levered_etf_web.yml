@@ -2,7 +2,7 @@ name: Daily Levered ETF Sentiment (Website)
 
 on:
   schedule:
-    - cron: "45 7 * * 1-5"   # 7:45 AM UTC, weekdays — after the Offense vs Defense website report (7:30)
+    - cron: "45 7 * * 1-6"   # 7:45 AM UTC, Mon-Sat (Sat picks up Friday's close) — after the Offense vs Defense website report (7:30)
   workflow_dispatch:
 
 permissions:

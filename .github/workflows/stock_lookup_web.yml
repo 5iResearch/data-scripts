@@ -2,7 +2,7 @@ name: Daily Stock Lookup (Website)
 
 on:
   schedule:
-    - cron: "30 9 * * 1-5"   # 9:30 AM UTC, weekdays — after the Efficient Frontier (8:40) and MMM (9:00) pages
+    - cron: "30 9 * * 1-6"   # 9:30 AM UTC, Mon-Sat (Sat picks up Friday's close) — after the Efficient Frontier (8:40) and MMM (9:00) pages
   workflow_dispatch:
 
 permissions:

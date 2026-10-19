@@ -2,7 +2,7 @@ name: Daily VIX (Website)
 
 on:
   schedule:
-    - cron: "15 7 * * 1-5"   # 7:15 AM UTC, weekdays — after the Index 200-week MA website report (7:00)
+    - cron: "15 7 * * 1-6"   # 7:15 AM UTC, Mon-Sat (Sat picks up Friday's close) — after the Index 200-week MA website report (7:00)
   workflow_dispatch:
 
 permissions:
