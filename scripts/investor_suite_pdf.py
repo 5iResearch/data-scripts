@@ -600,13 +600,25 @@ def read_article(pdf_path, kind, draft_blocks=None, draft_title="", draft_dir=""
             page, lines = doc[i], lines_by_page[i]
             fills = [r for r, f in drawings_by_page[i] if f and min(f) < 0.94]
             pics = [tuple(v["bbox"]) for v in images_by_page[i]]
+            # A bullet's wrapped lines (Suite Spot bullets are set larger than the text) are not headings.
+            for l in sorted(lines, key=lambda l: l["y0"]):
+                l["cont"] = not l["bullet"] and any(
+                    (p["bullet"] or p.get("cont")) and p["font"] == l["font"] and p["size"] == l["size"]
+                    and 0 < l["y0"] - p["y0"] < 1.6 * l["size"] and 2 < l["x0"] - p["x0"] < 40 for p in lines)
+
+            def covered(l, r):                  # white text sits on a dark box only if the box holds most of it
+                w = max(0, min(l["x1"], r[2]) - max(l["x0"], r[0]))
+                h = max(0, min(l["y1"], r[3]) - max(l["y0"], r[1]))
+                return w * h >= 0.6 * max((l["x1"] - l["x0"]) * (l["y1"] - l["y0"]), 1)
+
             for l in lines:
-                white = l["color"] == 0xFFFFFF and not any(_inside(_centre(l), r) for r in fills + pics)
+                # White on white is a stale text frame left behind something else, invisible on the page.
+                white = l["color"] == 0xFFFFFF and not any(covered(l, r) for r in fills + pics)
                 if l["glyph"]:
                     l["role"] = "glyph"
                 elif not l["flat"] or _line_key(l) in fixed_lines or PAGE_NO.match(l["text"]) or white:
                     l["role"] = "skip"
-                elif l["size"] >= body_size + 2 and not l["bullet"] and (l["font"] != body_font or len(l["text"]) < 60):
+                elif l["size"] >= body_size + 2 and not l["bullet"] and not l["cont"] and (l["font"] != body_font or len(l["text"]) < 60):
                     l["role"] = "big"
                 elif l["family"] != family:
                     l["role"] = "foreign"
