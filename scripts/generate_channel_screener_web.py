@@ -28,7 +28,7 @@ import yfinance as yf
 import generate_channel_screener as us
 import generate_channel_screener_cdn as ca
 from common_screening import CAP_FILTER_CONTROL_HTML, CAP_FILTER_JS, cap_tier
-from generate_index_rsi_web import FULLSCREEN_HTML, LOGO_B64
+from generate_index_rsi_web import FULLSCREEN_HTML, JUMP_HTML, LOGO_B64, jump_nav
 from generate_stock_lookup_web import download_both, load_info, norm
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -138,7 +138,7 @@ def build_body(markets):
         for pos, title in (("Bottom", "bottom of its channel"), ("Top", "top of its channel")):
             rows = [r for r in m["rows"] if r["pos"] == pos]
             sid = f'{m["key"]}-{pos.lower()}'
-            nav.append(f'<a href="#{sid}">{m["label"]}: {pos.lower()} ({len(rows)})</a>')
+            nav.append((sid, f'{m["label"]} &middot; {pos.lower()}', len(rows)))
             parts.append(f'<div class="section" id="{sid}"><h2>{m["label"]}: at the {title}</h2>'
                          f'<p class="sub">{len(rows)} names, best trend fit first &middot; benchmark {m["bench"]}</p></div>')
             if not rows:
@@ -147,7 +147,7 @@ def build_body(markets):
             parts.append(table(rows, m["bench"], sid))
             parts += [f'<div class="spot" id="{sid}-{escape(r["t"])}" data-cap="{r["cap"]}" data-m="{m["key"]}" '
                       f'data-i="{m["rows"].index(r)}"></div>' for r in rows]
-    return '<div class="nav">' + "".join(nav) + "</div>" + "\n".join(parts)
+    return jump_nav(nav) + "\n".join(parts)
 
 
 def main():
@@ -163,7 +163,7 @@ def main():
     html = (PAGE.replace("%%BODY%%", build_body(markets))
             .replace("%%DATA%%", json.dumps(data, separators=(",", ":"), ensure_ascii=False).replace("</", "<\\/"))
             .replace("%%LOGO%%", LOGO_B64).replace("%%CAP_JS%%", CAP_FILTER_JS)
-            .replace("%%CAP_CONTROL%%", CAP_FILTER_CONTROL_HTML).replace("%%FULLSCREEN%%", FULLSCREEN_HTML)
+            .replace("%%CAP_CONTROL%%", CAP_FILTER_CONTROL_HTML).replace("%%FULLSCREEN%%", FULLSCREEN_HTML + "\n" + JUMP_HTML)
             .replace("%%ASOF%%", datetime.strptime(asof, "%Y-%m-%d").strftime("%B %d, %Y"))
             .replace("%%SIGMA%%", f"{us.CHANNEL_SIGMA:.0f}").replace("%%ZTHRESH%%", f"{us.TOP_Z_THRESHOLD:g}"))
     out_path = os.path.join(OUTPUT_DIR, "Channel_Screener.html")
@@ -191,9 +191,8 @@ PAGE = r"""<!DOCTYPE html>
   .cap-filter { margin-top: 12px; font-size: 15px; }
   .cap-filter label { color: #555555; margin-right: 6px; }
   .cap-filter select { background: #FFFFFF; color: #363636; border: 1px solid #CFCFCF; border-radius: 4px; padding: 4px 10px; font-size: 15px; }
-  .nav { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 12px 16px 0; font-size: 15px; }
-  .nav a, .tbl a { color: #1F79BE; text-decoration: none; }
-  .nav a:hover, .tbl a:hover { text-decoration: underline; }
+  .tbl a { color: #1F79BE; text-decoration: none; }
+  .tbl a:hover { text-decoration: underline; }
   .section { padding: 22px 16px 0; }
   .section h2 { margin: 0; font-size: 23px; border-bottom: 3px solid #C67A29; display: inline-block; padding-bottom: 4px; }
   .section .sub { margin: 6px 0 0; color: #555555; font-size: 15px; }

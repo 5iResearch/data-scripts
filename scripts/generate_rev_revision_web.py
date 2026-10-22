@@ -25,7 +25,7 @@ import plotly.io as pio
 from plotly.subplots import make_subplots
 
 from common_screening import CAP_FILTER_CONTROL_HTML, CAP_FILTER_JS, load_sp500_symbols
-from generate_index_rsi_web import BLUE, GREEN, GRID, INK, MUTED, ORANGE, RED, with_fullscreen
+from generate_index_rsi_web import BLUE, GREEN, GRID, INK, JUMP_HTML, MUTED, ORANGE, RED, jump_nav, with_fullscreen
 from generate_rev_revision_screener import (
     ALL_WIN_KEYS, ALL_WIN_LABELS, CDN_CSV_PATH, CHART_CUTOFF, PRICE_YEARS, SPOTLIGHT_TOP_N, US_CSV_PATH,
     compute_vs_bench_10y, download_bench_series, download_spotlight_prices, load_rev_csv, rank_by_revisions,
@@ -181,8 +181,8 @@ def fetch_us_prices(tickers: list) -> dict:
     return download_spotlight_prices(list(tickers), label="US")
 
 
-def build_section(ranked, title, bench_series, bench_label, sector_map, fetch_prices=fetch_us_prices) -> str:
-    parts = [f'<div class="section"><h2>{title}</h2></div>']
+def build_section(sid, ranked, title, bench_series, bench_label, sector_map, fetch_prices=fetch_us_prices) -> str:
+    parts = [f'<div class="section" id="{sid}"><h2>{title}</h2></div>']
     if ranked.empty:
         parts.append('<p class="empty">No names passed the screen today.</p>')
         return "\n".join(parts)
@@ -215,10 +215,14 @@ def build_report() -> str:
     sp500_ranked = rank_by_revisions(us[us["ticker"].isin(sp500)].reset_index(drop=True))
     all_us_ranked = rank_by_revisions(us)
 
+    nav = jump_nav([("cdn", "Canada", min(len(cdn_ranked), SPOTLIGHT_TOP_N)),
+                    ("sp500", "US &middot; S&amp;P 500", min(len(sp500_ranked), SPOTLIGHT_TOP_N)),
+                    ("allus", "US &middot; All ~2,000", min(len(all_us_ranked), SPOTLIGHT_TOP_N))])
     return "\n".join([
-        build_section(cdn_ranked, "Canada", xic, "XIC", cdn_sectors, fetch_cdn_prices),
-        build_section(sp500_ranked, "US: S&amp;P 500", spy, "SPY", us_sectors),
-        build_section(all_us_ranked, "US: All (~2,000 names)", qqq, "QQQ", us_sectors),
+        nav,
+        build_section("cdn", cdn_ranked, "Canada", xic, "XIC", cdn_sectors, fetch_cdn_prices),
+        build_section("sp500", sp500_ranked, "US: S&amp;P 500", spy, "SPY", us_sectors),
+        build_section("allus", all_us_ranked, "US: All (~2,000 names)", qqq, "QQQ", us_sectors),
     ])
 
 
@@ -284,6 +288,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 </div>
 {body}
 <div class="source">Source: 5i Research, analyst revenue estimates, Yahoo Finance.</div>
+{jump}
 </body>
 </html>
 """
@@ -292,7 +297,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     html = PAGE_TEMPLATE.format(date_str=datetime.now().strftime("%B %d, %Y"), body=build_report(),
-                                cap_js=CAP_FILTER_JS, cap_control=CAP_FILTER_CONTROL_HTML)
+                                cap_js=CAP_FILTER_JS, cap_control=CAP_FILTER_CONTROL_HTML, jump=JUMP_HTML)
     out_path = os.path.join(OUTPUT_DIR, "Rev_Revision_Screener.html")
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(with_fullscreen(html))

@@ -106,6 +106,53 @@ def with_fullscreen(html: str) -> str:
     head, sep, tail = html.rpartition("</body>")
     return head + FULLSCREEN_HTML + "\n" + sep + tail if sep else html + FULLSCREEN_HTML
 
+
+# "Jump to" pill buttons for long multi-market pages (screeners). jump_nav() builds the row; JUMP_HTML (drop in
+# before </body>) styles it and adds the floating "Top" button. Jumps are instant rather than smooth: a smooth
+# scroll passes charts that draw as they come into view, which grows the page mid-scroll and stops it short.
+# After a jump it re-snaps for 2s while those charts settle, and stops as soon as the reader scrolls themselves.
+JUMP_HTML = """<style>
+  .jump { padding: 14px 16px 0; }
+  .jump .lbl { font-size: 13px; color: #555555; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .jump .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+  .jump a { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #1F79BE; color: #1F79BE; background: #FFFFFF;
+            border-radius: 20px; padding: 6px 14px; font-size: 15px; text-decoration: none; }
+  .jump a:hover { background: #1F79BE; color: #FFFFFF; }
+  .jump a .n { background: #EAF2F9; color: #1F79BE; border-radius: 10px; padding: 0 7px; font-size: 13px; font-weight: bold; }
+  .jump a:hover .n { background: #FFFFFF; }
+  .to-top { position: fixed; right: 16px; bottom: 16px; background: #1F79BE; color: #FFFFFF; border: 0; border-radius: 20px;
+            padding: 8px 14px; font: bold 14px Arial, sans-serif; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.25);
+            opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 50; }
+  .to-top.show { opacity: 1; pointer-events: auto; }
+</style>
+<button class="to-top" type="button" onclick="window.scrollTo(0, 0)">&uarr; Top</button>
+<script>
+(function () {
+  var b = document.querySelector(".to-top"), timers = [];
+  window.addEventListener("scroll", function () { b.classList.toggle("show", window.scrollY > 500); }, { passive: true });
+  function stop() { timers.forEach(clearTimeout); timers = []; }
+  ["wheel", "touchstart", "keydown", "mousedown"].forEach(function (ev) { window.addEventListener(ev, stop, { passive: true }); });
+  document.querySelectorAll(".jump a").forEach(function (a) {
+    a.addEventListener("click", function (e) {
+      var sec = document.getElementById(a.getAttribute("href").slice(1));
+      if (!sec) return;
+      e.preventDefault();
+      stop();
+      var t = sec.querySelector("h2") || sec;   // section title 8px below the top, table right under it
+      function snap() { window.scrollTo(0, window.scrollY + t.getBoundingClientRect().top - 8); }
+      snap();
+      [50, 200, 500, 1000, 2000].forEach(function (ms) { timers.push(setTimeout(snap, ms)); });
+    });
+  });
+})();
+</script>"""
+
+
+def jump_nav(items) -> str:
+    """The "Jump to" row: items are (section id, label, count) and each section's id must be on its .section div."""
+    links = "".join(f'<a href="#{sid}">{label} <span class="n">{count}</span></a>' for sid, label, count in items)
+    return f'<div class="jump"><div class="lbl">Jump to</div><div class="btns">{links}</div></div>'
+
 # Index levels rather than ETFs, so the charts show the benchmarks by name.
 # (oversold, overbought) per index for the weekly RSI-14 and the 1-year RSI-52. Defaults are
 # 40/75 and 45/65; S&P 500 1-year and both Russell 2000 views are tightened because they
