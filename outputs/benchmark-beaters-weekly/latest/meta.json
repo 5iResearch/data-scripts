@@ -1,32 +1,32 @@
 {
-  "as_of": "2026-10-22",
-  "blog_title": "Benchmark Beaters Weekly: 97 Stocks Beating Their Benchmarks (October 22, 2026)",
-  "email_subject": "Benchmark Beaters: DCBO & MRNA lead 97 stocks beating the market",
-  "preview_text": "29 Canadian and 68 U.S. names at six-month relative highs. Full table and charts inside.",
+  "as_of": "2026-10-26",
+  "blog_title": "Benchmark Beaters Weekly: 104 Stocks Beating Their Benchmarks (October 26, 2026)",
+  "email_subject": "Benchmark Beaters: HLF & MRNA lead 104 stocks beating the market",
+  "preview_text": "34 Canadian and 70 U.S. names at six-month relative highs. Full table and charts inside.",
   "intro": [
-    "The latest Benchmark Beaters screen (as of October 22, 2026) found 97 Canadian and U.S. stocks outperforming their benchmarks, each hitting a new six-month relative high in the last five trading days.",
-    "In Canada, 29 stocks made a fresh six-month high relative to the TSX Composite, 15 of them new to the list this week. Docebo Inc. (DCBO) leads with a +72% six-month return, and Energy is the most represented sector with 12 names.",
-    "In the U.S., 68 stocks made a fresh six-month high relative to the S&P 500, 39 of them new to the list this week. Moderna Inc. (MRNA) leads with a +362% six-month return, and Health Care is the most represented sector with 27 names."
+    "The latest Benchmark Beaters screen (as of October 26, 2026) found 104 Canadian and U.S. stocks outperforming their benchmarks, each hitting a new six-month relative high in the last five trading days.",
+    "In Canada, 34 stocks made a fresh six-month high relative to the TSX Composite, 11 of them new to the list this week. High Liner Foods Incorporated (HLF) leads with a +102% six-month return, and Energy is the most represented sector with 14 names.",
+    "In the U.S., 70 stocks made a fresh six-month high relative to the S&P 500, 32 of them new to the list this week. Moderna Inc. (MRNA) leads with a +332% six-month return, and Health Care is the most represented sector with 26 names."
   ],
-  "total": 97,
+  "total": 104,
   "stats": {
     "cdn": {
-      "count": 29,
-      "new": 15,
-      "streak": 3,
+      "count": 34,
+      "new": 11,
+      "streak": 4,
       "top_sector": "Energy",
-      "top_sector_n": 12
+      "top_sector_n": 14
     },
     "us": {
-      "count": 68,
-      "new": 39,
-      "streak": 0,
+      "count": 70,
+      "new": 32,
+      "streak": 3,
       "top_sector": "Health Care",
-      "top_sector_n": 27
+      "top_sector_n": 26
     }
   },
-  "workbook": "Benchmark_Beaters_2026-10-22.xlsx",
-  "image_url": "https://5iresearch.github.io/data-scripts/outputs/benchmark-beaters-weekly/2026-10-22/teaser.png",
+  "workbook": "Benchmark_Beaters_2026-10-26.xlsx",
+  "image_url": "https://5iresearch.github.io/data-scripts/outputs/benchmark-beaters-weekly/2026-10-26/teaser.png",
   "table_url": "{{TABLE_PDF_URL}}",
   "charts_url": "{{CHARTS_PDF_URL}}"
 }
