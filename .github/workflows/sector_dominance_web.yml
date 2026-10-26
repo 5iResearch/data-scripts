@@ -1,0 +1,47 @@
+name: Weekly Sector Head-to-Heads (Website)
+
+on:
+  schedule:
+    - cron: "15 10 * * 6"   # 10:15 AM UTC Saturdays (picks up Friday's close); the 12-month windows only move monthly
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-sector-dominance-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Sector Head-to-Heads (Website)
+        timeout-minutes: 35
+        run: |
+          python scripts/generate_sector_dominance_web.py
+
+      - name: Commit outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add outputs/sector-dominance/
+          git diff --cached --quiet || git commit -m "chore: update sector head-to-heads website report [skip ci]"
+          for i in 1 2 3 4 5; do
+            git push && break
+            echo "Push rejected, rebasing onto origin/main and retrying ($i)..."
+            git fetch origin main
+            git rebase origin/main
+            sleep $((RANDOM % 10 + 1))
+          done
