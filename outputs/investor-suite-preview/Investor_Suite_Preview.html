@@ -22,6 +22,10 @@
   #ispv .bar .sub { font-size:13px; color:var(--muted); margin-top:3px; }
   #ispv .days { font-size:14px; font-weight:bold; color:var(--blue); white-space:nowrap; }
   #ispv .bar.late .days { color:var(--orange); }
+  #ispv .right { display:flex; align-items:center; gap:14px; }
+  #ispv .fs { display:none; align-items:center; gap:6px; border:1px solid var(--line); background:#fff; color:var(--ink);
+              border-radius:5px; padding:6px 11px; font-size:13px; cursor:pointer; font-family:inherit; white-space:nowrap; }
+  #ispv .fs:hover { border-color:var(--blue); color:var(--blue); }
   #ispv .btn { display:inline-block; background:var(--blue); color:#fff !important; text-decoration:none;
                font-weight:bold; font-size:14px; padding:9px 16px; border-radius:5px; white-space:nowrap; }
   #ispv .btn:hover { background:#17639c; }
@@ -49,11 +53,14 @@
         <b>Free preview: Investor Suite tools</b>
         <div class="sub" id="ispv-endtxt"></div>
       </div>
-      <div class="days" id="ispv-days"></div>
+      <div class="right">
+        <div class="days" id="ispv-days"></div>
+        <button type="button" class="fs" id="ispv-fs" title="Full screen">&#x26F6; <span>Full screen</span></button>
+      </div>
     </div>
     <div class="tabs" id="ispv-tabs"></div>
     <div class="note" id="ispv-note"></div>
-    <div class="frame"><iframe id="ispv-frame" title="Investor Suite preview chart" allowfullscreen loading="lazy"></iframe></div>
+    <div class="frame"><iframe id="ispv-frame" title="Investor Suite preview chart" loading="lazy"></iframe></div>
     <div class="foot">
       <span>Like these tools? They're part of <b>Investor Suite</b>, along with the rest of our charts, screeners and research.</span>
       <a class="btn ispv-signup" href="#" target="_top">Learn about Investor Suite</a>
@@ -71,7 +78,7 @@
 <script>
 (function () {
   var END_DATE = "2026-11-30T23:59:00-05:00";   // last moment of the preview (Eastern)
-  var SIGNUP_URL = "https://www.5iresearch.ca/";  // TODO: Investor Suite sign-up page
+  var SIGNUP_URL = "https://www.5iresearch.ca/join-investor-suite";
   var BASE = "https://5iresearch.github.io/data-scripts/outputs/";
   var TABS = [
     { name: "Stock Lookup", path: "stock-lookup/Stock_Lookup.html?t=RY.TO",
@@ -124,6 +131,23 @@
   var start = 0;
   try { var s = parseInt(localStorage.getItem("ispv-tab"), 10); if (s >= 0 && s < TABS.length) start = s; } catch (e) {}
   show(start);
+
+  // Full-screen button: only shown when the website embed allows it (iframe needs allowfullscreen)
+  var fsBtn = document.getElementById("ispv-fs"), root = document.documentElement;
+  if (document.fullscreenEnabled || document.webkitFullscreenEnabled) {
+    fsBtn.style.display = "inline-flex";
+    fsBtn.onclick = function () {
+      var on = document.fullscreenElement || document.webkitFullscreenElement;
+      if (on) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      else (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
+    };
+    var label = function () {
+      var on = document.fullscreenElement || document.webkitFullscreenElement;
+      fsBtn.querySelector("span").textContent = on ? "Exit full screen" : "Full screen";
+    };
+    document.addEventListener("fullscreenchange", label);
+    document.addEventListener("webkitfullscreenchange", label);
+  }
 })();
 </script>
 </body>
