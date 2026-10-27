@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Investor Suite Preview</title>
+<title>Free Tools Preview</title>
 <!-- Free preview of Investor Suite tools for Basic members. Embedded on the 5i site with one iframe.
      To change: END_DATE, SIGNUP_URL and TABS in the script below. Add ?preview=ended to see the after-expiry view. -->
 </head>
@@ -50,7 +50,7 @@
   <div id="ispv-live">
     <div class="bar" id="ispv-bar">
       <div>
-        <b>Free preview: Investor Suite tools</b>
+        <b>Free Tools Preview</b>
         <div class="sub" id="ispv-endtxt"></div>
       </div>
       <div class="right">
@@ -62,15 +62,15 @@
     <div class="note" id="ispv-note"></div>
     <div class="frame"><iframe id="ispv-frame" title="Investor Suite preview chart" loading="lazy"></iframe></div>
     <div class="foot">
-      <span>Like these tools? They're part of <b>Investor Suite</b>, along with the rest of our charts, screeners and research.</span>
+      <span>Like these tools? They're part of the <b>Portfolio Risk Lab</b> in <b>Investor Suite</b>, along with the rest of our charts, screeners and research.</span>
       <a class="btn ispv-signup" href="#" target="_top">Learn about Investor Suite</a>
     </div>
   </div>
 
   <div class="ended" id="ispv-ended" style="display:none">
-    <h2>The free preview has ended</h2>
+    <h2>The Free Tools Preview has ended</h2>
     <p>Thanks for trying Stock Lookup, the Regression Channel Screener, Index RSI and Offense vs Defense.
-       To keep using them, along with the rest of our charts, screeners and research, sign up for Investor Suite.</p>
+       They live in the Portfolio Risk Lab in Investor Suite. To keep using them, along with the rest of our charts, screeners and research, sign up for Investor Suite.</p>
     <a class="btn ispv-signup" href="#" target="_top">Sign up for Investor Suite</a>
   </div>
 </div>
@@ -108,7 +108,7 @@
 
   var days = Math.ceil((end - now) / 86400000);
   document.getElementById("ispv-endtxt").textContent =
-    "Open to all 5i members until " + end.toLocaleDateString("en-CA", { month: "long", day: "numeric", year: "numeric", timeZone: "America/Toronto" }) +
+    "Tools from the Portfolio Risk Lab in Investor Suite, open to all 5i members until " + end.toLocaleDateString("en-CA", { month: "long", day: "numeric", year: "numeric", timeZone: "America/Toronto" }) +
     ". Pick a tool below to try it.";
   document.getElementById("ispv-days").textContent = days === 1 ? "Last day" : days + " days left";
   if (days <= 7) document.getElementById("ispv-bar").className = "bar late";
