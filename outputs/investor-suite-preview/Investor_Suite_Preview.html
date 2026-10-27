@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Investor Suite Preview</title>
+<!-- Free preview of Investor Suite tools for Basic members. Embedded on the 5i site with one iframe.
+     To change: END_DATE, SIGNUP_URL and TABS in the script below. Add ?preview=ended to see the after-expiry view. -->
+</head>
+<body>
+<style>
+  #ispv { --blue:#1F79BE; --orange:#C67A29; --ink:#363636; --muted:#6b7280; --line:#e5e7eb;
+          font-family: Arial, sans-serif; color: var(--ink); max-width: 1400px; margin: 0 auto; height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; padding: 12px 16px; }
+  #ispv-live { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  html, body { margin: 0; background: #fff; }
+  #ispv * { box-sizing: border-box; }
+  #ispv .bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px;
+               background:#eef5fb; border:1px solid #cfe2f3; border-left:4px solid var(--blue);
+               border-radius:6px; padding:12px 16px; margin-bottom:14px; }
+  #ispv .bar.late { background:#fbf3ea; border-color:#efd8bf; border-left-color:var(--orange); }
+  #ispv .bar b { font-size:16px; }
+  #ispv .bar .sub { font-size:13px; color:var(--muted); margin-top:3px; }
+  #ispv .days { font-size:14px; font-weight:bold; color:var(--blue); white-space:nowrap; }
+  #ispv .bar.late .days { color:var(--orange); }
+  #ispv .btn { display:inline-block; background:var(--blue); color:#fff !important; text-decoration:none;
+               font-weight:bold; font-size:14px; padding:9px 16px; border-radius:5px; white-space:nowrap; }
+  #ispv .btn:hover { background:#17639c; }
+  #ispv .tabs { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
+  #ispv .tab { border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:999px;
+               padding:8px 15px; font-size:14px; cursor:pointer; font-family:inherit; }
+  #ispv .tab:hover { border-color:var(--blue); }
+  #ispv .tab.on { background:var(--blue); border-color:var(--blue); color:#fff; font-weight:bold; }
+  #ispv .note { font-size:14px; line-height:1.45; margin:4px 0 10px; }
+  #ispv .note .how { color:var(--muted); }
+  #ispv .frame { flex:1; min-height:480px; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:#fff; }
+  #ispv iframe { display:block; width:100%; height:100%; border:0; }
+  #ispv .foot { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px;
+                margin-top:14px; padding:14px 16px; border-top:1px solid var(--line); font-size:14px; }
+  #ispv .ended { text-align:center; padding:48px 16px; border:1px solid var(--line); border-radius:6px; }
+  #ispv .ended h2 { margin:0 0 10px; font-size:22px; }
+  #ispv .ended p { margin:0 auto 18px; max-width:620px; line-height:1.5; }
+  @media (max-width:600px) { #ispv .tab { font-size:13px; padding:7px 12px; } }
+</style>
+
+<div id="ispv">
+  <div id="ispv-live">
+    <div class="bar" id="ispv-bar">
+      <div>
+        <b>Free preview: Investor Suite tools</b>
+        <div class="sub" id="ispv-endtxt"></div>
+      </div>
+      <div class="days" id="ispv-days"></div>
+    </div>
+    <div class="tabs" id="ispv-tabs"></div>
+    <div class="note" id="ispv-note"></div>
+    <div class="frame"><iframe id="ispv-frame" title="Investor Suite preview chart" allowfullscreen loading="lazy"></iframe></div>
+    <div class="foot">
+      <span>Like these tools? They're part of <b>Investor Suite</b>, along with the rest of our charts, screeners and research.</span>
+      <a class="btn ispv-signup" href="#" target="_top">Learn about Investor Suite</a>
+    </div>
+  </div>
+
+  <div class="ended" id="ispv-ended" style="display:none">
+    <h2>The free preview has ended</h2>
+    <p>Thanks for trying Stock Lookup, the Regression Channel Screener, Index RSI and Offense vs Defense.
+       To keep using them, along with the rest of our charts, screeners and research, sign up for Investor Suite.</p>
+    <a class="btn ispv-signup" href="#" target="_top">Sign up for Investor Suite</a>
+  </div>
+</div>
+
+<script>
+(function () {
+  var END_DATE = "2026-11-30T23:59:00-05:00";   // last moment of the preview (Eastern)
+  var SIGNUP_URL = "https://www.5iresearch.ca/";  // TODO: Investor Suite sign-up page
+  var BASE = "https://5iresearch.github.io/data-scripts/outputs/";
+  var TABS = [
+    { name: "Stock Lookup", path: "stock-lookup/Stock_Lookup.html?t=RY.TO",
+      what: "Look up any TSX, S&P 500 or Nasdaq 100 stock: its long-term trend, earnings and estimates, risk, and stocks that pair well with it.",
+      how: "It opens on Royal Bank; type any ticker or company name in the search box to switch." },
+    { name: "Regression Channel Screener", path: "channel-screener-web/Channel_Screener.html",
+      what: "Long-term uptrend stocks sitting near the top or bottom of their 10-year price channel, with price compared against earnings.",
+      how: "Names near the bottom of their channel have pulled back within an intact uptrend; names near the top have run ahead of it." },
+    { name: "Index RSI", path: "index-rsi/Index_RSI_Report.html",
+      what: "Whether the major indices look stretched or washed out, using RSI with overbought and oversold zones.",
+      how: "Use the timeframe buttons to zoom in or out." },
+    { name: "Offense vs Defense", path: "offense-defense/Offense_Defense_Report.html",
+      what: "Whether investors are leaning toward risk-on sectors (offense) or safer ones (defense), shown as a single oscillator.",
+      how: "Rising means investors are leaning into growth sectors; falling means they are hiding in staples, utilities and health care." }
+  ];
+
+  var end = new Date(END_DATE), now = new Date();
+  var forceEnded = /[?&]preview=ended\b/.test(location.search);
+  var links = document.querySelectorAll("#ispv .ispv-signup");
+  for (var i = 0; i < links.length; i++) links[i].href = SIGNUP_URL;
+
+  if (forceEnded || now >= end) {
+    document.getElementById("ispv-live").style.display = "none";
+    document.getElementById("ispv-ended").style.display = "";
+    return;
+  }
+
+  var days = Math.ceil((end - now) / 86400000);
+  document.getElementById("ispv-endtxt").textContent =
+    "Open to all 5i members until " + end.toLocaleDateString("en-CA", { month: "long", day: "numeric", year: "numeric", timeZone: "America/Toronto" }) +
+    ". Pick a tool below to try it.";
+  document.getElementById("ispv-days").textContent = days === 1 ? "Last day" : days + " days left";
+  if (days <= 7) document.getElementById("ispv-bar").className = "bar late";
+
+  var tabsEl = document.getElementById("ispv-tabs"), frame = document.getElementById("ispv-frame"),
+      note = document.getElementById("ispv-note"), btns = [];
+  function show(k) {
+    var t = TABS[k];
+    for (var j = 0; j < btns.length; j++) btns[j].className = "tab" + (j === k ? " on" : "");
+    note.innerHTML = "";
+    note.appendChild(document.createTextNode(t.what + " "));
+    var how = document.createElement("span"); how.className = "how"; how.textContent = t.how; note.appendChild(how);
+    frame.src = BASE + t.path;
+    try { localStorage.setItem("ispv-tab", k); } catch (e) {}
+  }
+  TABS.forEach(function (t, k) {
+    var b = document.createElement("button"); b.type = "button"; b.className = "tab"; b.textContent = t.name;
+    b.onclick = function () { show(k); }; tabsEl.appendChild(b); btns.push(b);
+  });
+  var start = 0;
+  try { var s = parseInt(localStorage.getItem("ispv-tab"), 10); if (s >= 0 && s < TABS.length) start = s; } catch (e) {}
+  show(start);
+})();
+</script>
+</body>
+</html>
