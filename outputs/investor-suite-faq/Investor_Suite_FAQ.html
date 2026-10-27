@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Investor Suite FAQ</title>
+<!-- Investor Suite FAQ. Embedded on the 5i site with one iframe, like the Free Tools Preview.
+     Unconfirmed answers are wrapped in <mark class="tbd"> and show in yellow: search for "tbd" to find them.
+     The page posts its height to the parent (message {isfaqHeight: n}) so the embed can resize itself. -->
+</head>
+<body>
+<style>
+  html, body { margin: 0; background: #fff; }
+  #isfaq { --blue:#1F79BE; --orange:#C67A29; --ink:#363636; --muted:#6b7280; --line:#e5e7eb; --navy:#13243A;
+           font-family: Arial, sans-serif; color: var(--ink); max-width: 980px; margin: 0 auto; padding: 16px 16px 28px; box-sizing: border-box; }
+  #isfaq * { box-sizing: border-box; }
+  #isfaq h1 { font-size: 26px; font-weight: normal; margin: 4px 0 4px; }
+  #isfaq .lede { font-size: 15px; color: var(--muted); margin: 0 0 16px; line-height: 1.5; }
+
+  #isfaq .jump { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; padding: 0; list-style: none; }
+  #isfaq .jump a { display: inline-block; border: 1px solid var(--line); background: #fff; color: var(--ink); text-decoration: none;
+                   border-radius: 999px; padding: 8px 15px; font-size: 14px; }
+  #isfaq .jump a:hover { border-color: var(--blue); color: var(--blue); }
+
+  #isfaq h2 { font-size: 20px; margin: 30px 0 12px; padding-bottom: 6px; display: inline-block; border-bottom: 3px solid var(--orange); }
+  #isfaq section { scroll-margin-top: 12px; }
+
+  #isfaq details { border: 1px solid var(--line); border-radius: 6px; margin: 0 0 8px; background: #fff; }
+  #isfaq details[open] { border-color: #cfe2f3; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+  #isfaq summary { list-style: none; cursor: pointer; padding: 13px 44px 13px 16px; font-size: 15px; font-weight: bold;
+                   line-height: 1.4; position: relative; }
+  #isfaq summary::-webkit-details-marker { display: none; }
+  #isfaq summary::after { content: ""; position: absolute; right: 18px; top: 50%; width: 8px; height: 8px; margin-top: -6px;
+                          border-right: 2px solid var(--blue); border-bottom: 2px solid var(--blue); transform: rotate(45deg); transition: transform .15s; }
+  #isfaq details[open] > summary::after { transform: rotate(-135deg); margin-top: -2px; }
+  #isfaq summary:hover { color: var(--blue); }
+  #isfaq summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 6px; }
+  #isfaq .a { padding: 0 16px 14px; font-size: 15px; line-height: 1.55; }
+  #isfaq .a p { margin: 0 0 10px; }
+  #isfaq .a p:last-child, #isfaq .a ul:last-child { margin-bottom: 0; }
+  #isfaq .a ul { margin: 0 0 10px; padding-left: 20px; }
+  #isfaq .a li { margin: 0 0 5px; }
+  #isfaq .a a { color: var(--blue); }
+  #isfaq .ui { font-weight: bold; }
+
+  #isfaq .tbd { background: #fff3a3; color: var(--ink); padding: 0 3px; border-radius: 2px; }
+
+  #isfaq .cols { width: 100%; border-collapse: collapse; font-size: 14px; margin: 4px 0 10px; }
+  #isfaq .cols th, #isfaq .cols td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  #isfaq .cols th { width: 34%; font-weight: bold; }
+
+  #isfaq .groups { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 6px 0 12px; }
+  #isfaq .group { border: 1px solid var(--line); border-top: 3px solid var(--blue); border-radius: 6px; padding: 12px 14px; }
+  #isfaq .group b { display: block; font-size: 15px; margin-bottom: 2px; }
+  #isfaq .group .d { font-size: 13px; color: var(--muted); font-style: italic; margin-bottom: 8px; }
+  #isfaq .group ul { margin: 0; padding-left: 18px; font-size: 14px; }
+  #isfaq .group li { margin: 0 0 3px; }
+
+  #isfaq .cta { margin: 34px 0 0; background: var(--navy); color: #fff; border-radius: 8px; padding: 26px 24px;
+                display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+  #isfaq .cta h3 { margin: 0 0 6px; font-size: 20px; }
+  #isfaq .cta p { margin: 0; font-size: 15px; line-height: 1.5; color: #c9d3e0; max-width: 560px; }
+  #isfaq .btn { display: inline-block; background: var(--orange); color: #fff !important; text-decoration: none;
+                font-weight: bold; font-size: 15px; padding: 12px 20px; border-radius: 5px; white-space: nowrap; }
+  #isfaq .btn:hover { background: #ad6a22; }
+  #isfaq .disc { font-size: 12px; color: var(--muted); margin: 16px 0 0; line-height: 1.5; }
+
+  @media (max-width: 700px) {
+    #isfaq h1 { font-size: 23px; }
+    #isfaq .groups { grid-template-columns: 1fr; }
+    #isfaq .jump a { font-size: 13px; padding: 7px 12px; }
+    #isfaq .cols th { width: 40%; }
+    #isfaq .cta { padding: 22px 18px; }
+  }
+</style>
+
+<div id="isfaq">
+  <h1>Investor Suite FAQ</h1>
+  <p class="lede">Answers to common questions about the new Investor Suite platform, the Portfolio Risk Lab and membership.</p>
+
+  <ul class="jump">
+    <li><a href="#move">The move online</a></li>
+    <li><a href="#around">Finding your way around</a></li>
+    <li><a href="#risklab">Portfolio Risk Lab</a></li>
+    <li><a href="#access">Access and pricing</a></li>
+  </ul>
+
+  <!-- ===================== The move online ===================== -->
+  <section id="move">
+    <h2>The move online</h2>
+
+    <details open>
+      <summary>What's changing with Investor Suite?</summary>
+      <div class="a">
+        <p>There's no more monthly PDF. Investor Suite now lives on one interactive platform on the 5i Research website: Our Current View, Market Memes, Market Musings, Stock of Interest, Chart of Interest, the Watchlist and Suite Screens, all in one place.</p>
+        <p>Every past piece is in the archive, a click away. New with the platform is the <b>Portfolio Risk Lab</b>: interactive charts on market risk and exposure, updated every weekday.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>I'm already a subscriber. Do I need to do anything?</summary>
+      <div class="a">
+        <p>No. Your access carries over automatically. Log in as usual and choose Investor Suite from the left-hand menu <mark class="tbd">[confirm exact menu path]</mark>.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Will I still get a monthly PDF?</summary>
+      <div class="a">
+        <p>No. New research is published to the platform each month <mark class="tbd">[around the 27th, confirm]</mark>, and we email you with links when it's live.</p>
+        <p><mark class="tbd">[Can pieces be downloaded or printed? Answer or remove.]</mark></p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Where are past issues?</summary>
+      <div class="a">
+        <ul>
+          <li><b>Market Musings:</b> see <span class="ui">Recent Market Musings</span>, or click <span class="ui">Show all</span> for the full list.</li>
+          <li><b>Chart of Interest:</b> the <span class="ui">Recent Charts of Interest</span> gallery under this month's chart.</li>
+          <li><b>Stock of Interest:</b> the <span class="ui">2026 Cohort</span> table links to every report, and <span class="ui">Past Stock of Interest Cohorts</span> covers earlier years.</li>
+        </ul>
+        <p><mark class="tbd">[Where do old PDF issues live, if anywhere?]</mark></p>
+      </div>
+    </details>
+
+    <details>
+      <summary>How do I know what's new?</summary>
+      <div class="a">
+        <p>The home page shows when it was last updated, at the top right. Section cards are tagged <span class="ui">Updated</span>, <span class="ui">New Coverage</span> or <span class="ui">New Chart</span> when something changes, and we email you when each month's research is live.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ===================== Finding your way around ===================== -->
+  <section id="around">
+    <h2>Finding your way around</h2>
+
+    <details>
+      <summary>What's on the home page?</summary>
+      <div class="a">
+        <ul>
+          <li><b>Our Current View:</b> our market view in one line.</li>
+          <li><b>Market Memes:</b> what the market consensus is currently saying.</li>
+          <li><b>Section cards:</b> Market Musings, Stock of Interest, Portfolio Risk Lab and Chart of Interest. Hover over a card for a short description, or click to open it.</li>
+          <li><b>Investor Suite Watchlist:</b> company, ticker, price, forward P/E, yield, market cap and our comments.</li>
+          <li><b>Suite Screens:</b> top-five lists refreshed with each monthly update, covering 52-week highs and lows, the largest changes in insider positions, short interest, dividends and target prices.</li>
+        </ul>
+        <p>A disclosure sits at the bottom of the page.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>How do I read a full article?</summary>
+      <div class="a">
+        <p>Click a section card to see a summary of the latest piece with its chart, then click <span class="ui">Open Full Market Musing</span>, <span class="ui">Open Full Research Note</span> or <span class="ui">Open Full Chart of Interest</span>. The full piece opens across the whole page. Click the <span class="ui">X</span> at the top right to close it.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>How do I read the Stock of Interest cohort table?</summary>
+      <div class="a">
+        <p>Each row is one Stock of Interest from the year's cohort:</p>
+        <table class="cols">
+          <tr><th>Company</th><td>The company and its ticker.</td></tr>
+          <tr><th>Price at Release</th><td>The share price when we published the report.</td></tr>
+          <tr><th>Target Price</th><td>Our target price in the report.</td></tr>
+          <tr><th>Current Price</th><td>The latest share price.</td></tr>
+          <tr><th>Release Date</th><td>When the report was published.</td></tr>
+          <tr><th>Confidence in Target Being Reached</th><td>Our confidence that the target will be reached. Once a stock hits its target, this shows <span class="ui">Target price achieved on [date]</span>.</td></tr>
+          <tr><th>Research Report</th><td>Click <span class="ui">View Report</span> to read the full report.</td></tr>
+        </table>
+        <p>Prices at release are as of each report's release date.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ===================== Portfolio Risk Lab ===================== -->
+  <section id="risklab">
+    <h2>Portfolio Risk Lab</h2>
+
+    <details open>
+      <summary>What is the Portfolio Risk Lab?</summary>
+      <div class="a">
+        <p>Twelve interactive charts and tools in three groups. Each chart opens with a short explanation of what it shows.</p>
+        <div class="groups">
+          <div class="group">
+            <b>Market Conditions</b>
+            <div class="d">Where the market stands in its long-term cycle</div>
+            <ul>
+              <li>200-Week Moving Average</li>
+              <li>Index RSI Report</li>
+              <li>Macro Market Model: Canada</li>
+              <li>Macro Market Model: US</li>
+            </ul>
+          </div>
+          <div class="group">
+            <b>Investor Sentiment</b>
+            <div class="d">Fear, greed and risk appetite</div>
+            <ul>
+              <li>Volatility Index (VIX) Report</li>
+              <li>Offense vs. Defense</li>
+              <li>Levered ETF Sentiment</li>
+            </ul>
+          </div>
+          <div class="group">
+            <b>Stock Tools</b>
+            <div class="d">Research individual stocks</div>
+            <ul>
+              <li>Stock Lookup Tool</li>
+              <li>Sharpe Ratio</li>
+              <li>Sector Head-to-Heads</li>
+              <li>Regression Channel Screener</li>
+              <li>Revenue Revision Screener</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <details>
+      <summary>How often is it updated?</summary>
+      <div class="a">
+        <p>Most charts update every weekday overnight. Sector Head-to-Heads updates weekly, on Saturdays. Each chart shows its as-of date under its title.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>How do I use the charts?</summary>
+      <div class="a">
+        <ul>
+          <li><b>Switch charts</b> from the list on the left, or step through all 12 with the arrows at the top right.</li>
+          <li><b>Change the time frame</b> with the <span class="ui">YTD</span>, <span class="ui">1Y</span>, <span class="ui">3Y</span>, <span class="ui">5Y</span>, <span class="ui">10Y</span> and <span class="ui">All</span> buttons.</li>
+          <li><b>Zoom in</b> by clicking and dragging across the chart. Double-click to zoom back out.</li>
+          <li><b>Hover</b> over a line to see its values on that date.</li>
+          <li><b>Full screen:</b> Stock Tools pages have a <span class="ui">Full screen</span> button. Press Esc to exit.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>What can I do with Stock Lookup?</summary>
+      <div class="a">
+        <p>Enter a ticker or company name to see a stock's long-term trend, what analysts are doing with their revenue forecasts, how its risk and return compare with the rest of its market, and whether it has beaten simply owning the index.</p>
+        <p>It covers stocks in the TSX, S&amp;P 500 and Nasdaq 100. Canadian tickers end in .TO, for example RY.TO, SHOP.TO or CNQ.TO; U.S. tickers are entered as they are, such as AAPL, NVDA or JPM. Results show the last price, the percentage above or below the 200-week average, the one-year return, volatility and the Sharpe ratio.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Are the charts buy or sell signals?</summary>
+      <div class="a">
+        <p>No. They're tools for understanding market conditions, sentiment and individual stocks, and they work best alongside our research and your own judgment.</p>
+        <p>Some are deliberately contrarian. The Macro Market Model, for example, tends to read most positive when news and sentiment are at their worst. Past patterns don't guarantee future results.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ===================== Access and pricing ===================== -->
+  <section id="access">
+    <h2>Access and pricing</h2>
+
+    <details>
+      <summary>I'm a 5i member without Investor Suite. Can I try it?</summary>
+      <div class="a">
+        <p>Yes. From November 17 to December 17, 2026, all 5i members can try a free preview of four Portfolio Risk Lab tools: Stock Lookup, the Regression Channel Screener, Index RSI and Offense vs. Defense. <mark class="tbd">[Link to free preview]</mark></p>
+        <p>The rest of the Risk Lab and the monthly research come with Investor Suite.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>How much does Investor Suite cost?</summary>
+      <div class="a">
+        <p>$1,999 a year at the launch price, until December 17, 2026. The regular price is $2,499 a year. Membership is capped at 150.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>I'm a current subscriber. What will I pay when I renew?</summary>
+      <div class="a">
+        <p><mark class="tbd">[Pending decision: do current subscribers get $1,999 if they renew or extend before Dec 17?]</mark></p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Does it work on my phone or tablet?</summary>
+      <div class="a">
+        <p><mark class="tbd">[Confirm after testing. Suggested: "Yes, in any modern browser. For the Risk Lab charts, a tablet or larger screen gives the best view."]</mark></p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Who can I contact with questions?</summary>
+      <div class="a">
+        <p>Email us at <mark class="tbd">[support email]</mark>. We reply within <mark class="tbd">[timeframe]</mark>.</p>
+      </div>
+    </details>
+  </section>
+
+  <div class="cta">
+    <div>
+      <h3>Join Investor Suite at the launch price</h3>
+      <p>$1,999 until December 17, 2026, regularly $2,499. Membership is capped at 150.</p>
+    </div>
+    <a class="btn" href="https://www.5iresearch.ca/join-investor-suite" target="_top">Join Investor Suite</a>
+  </div>
+
+  <p class="disc">The Portfolio Risk Lab and Investor Suite research are for informational purposes only and are not personalized investment advice.</p>
+</div>
+
+<script>
+(function () {
+  var root = document.getElementById("isfaq");
+
+  // Jump links: open the group's first question and scroll to it (also scrolls the host page when embedded)
+  var jumps = root.querySelectorAll(".jump a");
+  for (var i = 0; i < jumps.length; i++) {
+    jumps[i].addEventListener("click", function (e) {
+      var sec = document.getElementById(this.getAttribute("href").slice(1));
+      if (!sec) return;
+      e.preventDefault();
+      var first = sec.querySelector("details");
+      if (first) first.open = true;
+      sec.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  // Tell the host page how tall we are, so an embed that listens can size the iframe to fit
+  function post() {
+    try { parent.postMessage({ isfaqHeight: document.documentElement.scrollHeight }, "*"); } catch (e) {}
+  }
+  var ds = root.querySelectorAll("details");
+  for (var j = 0; j < ds.length; j++) ds[j].addEventListener("toggle", post);
+  window.addEventListener("load", post);
+  window.addEventListener("resize", post);
+  post();
+})();
+</script>
+</body>
+</html>
