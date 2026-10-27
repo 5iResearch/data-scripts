@@ -50,7 +50,7 @@
   <div id="ispv-live">
     <div class="bar" id="ispv-bar">
       <div>
-        <b>Free Tools Preview</b>
+        <b>Free Tools Preview: a sample from the Investor Suite Portfolio Risk Lab</b>
         <div class="sub" id="ispv-endtxt"></div>
       </div>
       <div class="right">
@@ -108,7 +108,8 @@
 
   var days = Math.ceil((end - now) / 86400000);
   document.getElementById("ispv-endtxt").textContent =
-    "Tools from the Portfolio Risk Lab in Investor Suite, open to all 5i members until " + end.toLocaleDateString("en-CA", { month: "long", day: "numeric", year: "numeric", timeZone: "America/Toronto" }) +
+    "These " + TABS.length + " tools are only a small subset of the Portfolio Risk Lab, which Investor Suite members get in full. " +
+    "Open to all 5i members until " + end.toLocaleDateString("en-CA", { month: "long", day: "numeric", year: "numeric", timeZone: "America/Toronto" }) +
     ". Pick a tool below to try it.";
   document.getElementById("ispv-days").textContent = days === 1 ? "Last day" : days + " days left";
   if (days <= 7) document.getElementById("ispv-bar").className = "bar late";
