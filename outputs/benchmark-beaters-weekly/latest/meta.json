@@ -1,32 +1,32 @@
 {
-  "as_of": "2026-10-26",
-  "blog_title": "Benchmark Beaters Weekly: 104 Stocks Beating Their Benchmarks (October 26, 2026)",
-  "email_subject": "Benchmark Beaters: HLF & MRNA lead 104 stocks beating the market",
-  "preview_text": "34 Canadian and 70 U.S. names at six-month relative highs. Full table and charts inside.",
+  "as_of": "2026-10-27",
+  "blog_title": "Benchmark Beaters Weekly: 101 Stocks Beating Their Benchmarks (October 27, 2026)",
+  "email_subject": "Benchmark Beaters: HLF & MRNA lead 101 stocks beating the market",
+  "preview_text": "32 Canadian and 69 U.S. names at six-month relative highs. Full table and charts inside.",
   "intro": [
-    "The latest Benchmark Beaters screen (as of October 26, 2026) found 104 Canadian and U.S. stocks outperforming their benchmarks, each hitting a new six-month relative high in the last five trading days.",
-    "In Canada, 34 stocks made a fresh six-month high relative to the TSX Composite, 11 of them new to the list this week. High Liner Foods Incorporated (HLF) leads with a +102% six-month return, and Energy is the most represented sector with 14 names.",
-    "In the U.S., 70 stocks made a fresh six-month high relative to the S&P 500, 32 of them new to the list this week. Moderna Inc. (MRNA) leads with a +332% six-month return, and Health Care is the most represented sector with 26 names."
+    "The latest Benchmark Beaters screen (as of October 27, 2026) found 101 Canadian and U.S. stocks outperforming their benchmarks, each hitting a new six-month relative high in the last five trading days.",
+    "In Canada, 32 stocks made a fresh six-month high relative to the TSX Composite, 10 of them new to the list this week. High Liner Foods Incorporated (HLF) leads with a +99% six-month return, and Energy is the most represented sector with 16 names.",
+    "In the U.S., 69 stocks made a fresh six-month high relative to the S&P 500, 28 of them new to the list this week. Moderna Inc. (MRNA) leads with a +328% six-month return, and Health Care is the most represented sector with 23 names."
   ],
-  "total": 104,
+  "total": 101,
   "stats": {
     "cdn": {
-      "count": 34,
-      "new": 11,
+      "count": 32,
+      "new": 10,
       "streak": 4,
       "top_sector": "Energy",
-      "top_sector_n": 14
+      "top_sector_n": 16
     },
     "us": {
-      "count": 70,
-      "new": 32,
-      "streak": 3,
+      "count": 69,
+      "new": 28,
+      "streak": 2,
       "top_sector": "Health Care",
-      "top_sector_n": 26
+      "top_sector_n": 23
     }
   },
-  "workbook": "Benchmark_Beaters_2026-10-26.xlsx",
-  "image_url": "https://5iresearch.github.io/data-scripts/outputs/benchmark-beaters-weekly/2026-10-26/teaser.png",
+  "workbook": "Benchmark_Beaters_2026-10-27.xlsx",
+  "image_url": "https://5iresearch.github.io/data-scripts/outputs/benchmark-beaters-weekly/2026-10-27/teaser.png",
   "table_url": "{{TABLE_PDF_URL}}",
   "charts_url": "{{CHARTS_PDF_URL}}"
 }
