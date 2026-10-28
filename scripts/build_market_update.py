@@ -481,6 +481,10 @@ def is_podcast(title):
     return "podcast" in tl or "exponent" in tl
 
 
+def is_icymi(title):
+    return title.lower().startswith("in case you missed it")
+
+
 def youtube_thumb(vid):
     """maxresdefault is sharp but only exists for HD uploads; hqdefault always does."""
     url = f"https://img.youtube.com/vi/{vid}/maxresdefault.jpg"
@@ -555,8 +559,14 @@ def build_rows(meta, sections, mu_title, mu_html, report_card_src, warnings):
         if c and is_podcast(t):
             rows.append(section("The Exponent Podcast", html.escape(t), podcast_block(c, warnings), accent=BLUE))
             rows.append(divider())
+    # "In Case You Missed It: <title>" also leads the issue, e.g. when there's no new episode
+    for t, c in sections:
+        if c and is_icymi(t):
+            title = t.split(":", 1)[1].strip() if ":" in t else t
+            rows.append(section("In Case You Missed It", html.escape(title), md_blocks(c), accent=BLUE))
+            rows.append(divider())
 
-    research =[(t, c, research_accent(t)) for t, c in sections if c and research_accent(t)]
+    research =[(t, c, research_accent(t)) for t, c in sections if c and research_accent(t) and not is_icymi(t)]
     for i, (title, content, accent) in enumerate(research):
         body = card(md_blocks(content), left=accent)
         if i == len(research) - 1:
@@ -568,7 +578,8 @@ def build_rows(meta, sections, mu_title, mu_html, report_card_src, warnings):
 
     for t, c in sections:
         tl = t.lower()
-        if tl == "market intro" or research_accent(t) or is_podcast(t) or tl.startswith(("model portfolio", "call to action")):
+        if (tl == "market intro" or research_accent(t) or is_podcast(t) or is_icymi(t)
+                or tl.startswith(("model portfolio", "call to action"))):
             continue
         rows.append(section("", html.escape(t), md_blocks(c)))
         rows.append(divider())

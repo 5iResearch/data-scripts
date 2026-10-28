@@ -10,6 +10,7 @@ interactive (hover, zoom, time frames) but the data stops at the live page's "as
 Run after generate_stock_lookup_web.py so the snapshot uses that day's data:
     python scripts/make_stock_lookup_snapshot.py
 Output: outputs/market-update-snapshots/stock-lookup-<as of date>/Stock_Lookup_Snapshot.html (one self-contained file)
+plus the blog's iframe code next to it
 """
 
 import json
@@ -24,9 +25,10 @@ JOIN_URL = "https://www.5iresearch.ca/join-investor-suite"
 
 # (ticker, held in a 5i model portfolio). Model names are from the Sept 30, 2026 factsheets.
 CDN = [("CLS.TO", True), ("CSU.TO", True), ("WPM.TO", True), ("ENB.TO", True),
-       ("RY.TO", False), ("TD.TO", False), ("CNQ.TO", False), ("BCE.TO", False), ("CNR.TO", False), ("MFC.TO", False)]
+       ("RY.TO", False), ("TD.TO", True), ("CNQ.TO", True), ("BCE.TO", False), ("CNR.TO", True), ("MFC.TO", False)]
 US = [(t, False) for t in ("NVDA", "MSFT", "AAPL", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "JPM", "LLY")]
 MODEL_ASOF = "September 30, 2026"
+SHOW_JOIN = False   # turn on once the join page is live (launch is Nov 17, 2026)
 
 
 def swap(html: str, old: str, new: str) -> str:
@@ -62,6 +64,8 @@ def main():
         if thin:
             print(f"  note: {t} has no {', '.join(thin)} data; that section will show as unavailable")
 
+    # "more than 1,100 Canadian and U.S. stocks": the live page's coverage, rounded down
+    coverage = f"more than {len(meta['index']) // 100 * 100:,} Canadian and U.S. stocks"
     meta["index"] = [by_sym[t] for t, _ in picks]
     asof = datetime.strptime(meta["asof"], "%Y-%m-%d")
     asof_txt = f"{asof:%B} {asof.day}, {asof.year}"
@@ -79,16 +83,23 @@ def main():
                   lambda _: chips("Canada", CDN, by_sym) + chips("U.S.", US, by_sym) +
                   f'<div class="key"><span class="dot"></span> Held in a 5i model portfolio as of {MODEL_ASOF}</div>',
                   html, count=1, flags=re.S)
-    html = swap(html, "<h1>Stock Lookup</h1>", "<h1>Stock Lookup: 20 stocks</h1>")
-    html = re.sub(r'<div class="meta">Prices as of .*?</div>',
-                  f'<div class="meta">A snapshot from the Portfolio Risk Lab &middot; prices as of {asof_txt}. '
-                  f'This page does not update.</div>', html, count=1)
+    html = re.sub(r"<header>.*?</header>",
+                  lambda _: '<header class="banner"><div class="kicker">Investor Suite &middot; Portfolio Risk Lab preview</div>'
+                  f'<h1>Stock Lookup: {len(picks)} stocks</h1>'
+                  f'<div class="meta">A snapshot with prices as of {asof_txt}. This page does not update.</div></header>',
+                  html, count=1, flags=re.S)
     html = re.sub(r"<p>Enter a ticker or company name to see.*?</p>",
-                  "<p>Pick a stock to see its long-term trend, what analysts are doing with their revenue forecasts, "
-                  "how its risk and return compare with the rest of its market, and whether it has beaten simply "
-                  "owning the index.</p>", html, count=1, flags=re.S)
-    cta = ('<div class="cta"><p>In the Portfolio Risk Lab, Stock Lookup covers every TSX, S&amp;P 500 and Nasdaq 100 '
-           'stock and updates every weekday.</p><a href="' + JOIN_URL + '" target="_top">Join Investor Suite</a></div>')
+                  lambda _: "<p>Stock Lookup is one of the interactive tools Investor Suite members will have in a "
+                  "new section called the <b>Portfolio Risk Lab</b> when our research platform goes live in the coming weeks.</p>"
+                  f"<p>This is a snapshot of the tool with {len(picks)} stocks, so you can try it before launch. Pick a "
+                  "stock to see its long-term trend, what analysts are doing with their revenue forecasts, how its risk "
+                  "and return compare with the rest of its market, and whether it has beaten simply owning the index. "
+                  f"The full version covers {coverage} and updates every weekday; this page stays as of {asof_txt}.</p>",
+                  html, count=1, flags=re.S)
+    cta = (f'<div class="cta"><p><b>Coming soon to Investor Suite.</b> The full Stock Lookup covers {coverage} and '
+           'updates every weekday, alongside the rest of the Portfolio Risk Lab. Watch for an announcement about the '
+           'new platform in the coming weeks.</p>'
+           + (f'<a href="{JOIN_URL}" target="_top">Join Investor Suite</a>' if SHOW_JOIN else "") + '</div>')
     html = re.sub(r'(<div class="source">)(.*?)(</div>)',
                   lambda g: cta + g.group(1) + "Source: 5i Research, Koyfin, Yahoo Finance. Prices as of " + asof_txt +
                   ". For information only; not a recommendation to buy or sell any security." + g.group(3),
@@ -104,6 +115,11 @@ def main():
   .cta { margin: 24px 16px 8px; padding: 16px 18px; background: #13243A; color: #FFFFFF; border-radius: 6px;
          display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
   .cta p { margin: 0; flex: 1 1 320px; font-size: 15px; }
+  header.banner { background: #13243A; color: #FFFFFF; border-bottom: 4px solid #C67A29; padding: 20px 16px 16px; }
+  header.banner .kicker { color: #E8B07A; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: .05em; margin: 0 0 4px; }
+  header.banner h1 { color: #FFFFFF; padding-right: 130px; }
+  header.banner .meta { color: #D5DCE6; }
+  @media (max-width: 600px) { header.banner h1 { padding-right: 0; font-size: 24px; } header.banner { padding-top: 52px; } }
   .cta a { background: #C67A29; color: #FFFFFF; font-weight: bold; text-decoration: none; padding: 9px 18px; border-radius: 4px; white-space: nowrap; }
   @media (max-width: 600px) { .chips .lbl { width: 100%; } }
 </style>""")
@@ -122,6 +138,12 @@ def main():
     with open(out, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"Wrote {out} ({os.path.getsize(out) / 1e6:.1f} MB, prices as of {asof_txt})")
+    url = f"https://5iresearch.github.io/data-scripts/outputs/market-update-snapshots/stock-lookup-{meta['asof']}/Stock_Lookup_Snapshot.html"
+    with open(os.path.join(out_dir, "Stock Lookup Snapshot - blog embed code.html"), "w", encoding="utf-8") as f:
+        f.write(f'<p><iframe id="slsnap-frame" src="{url}" width="100%" height="2600" style="border:0" '
+                f'title="Stock Lookup: {len(picks)} stocks"></iframe></p>\n<script>\nwindow.addEventListener("message", function (e) {{\n'
+                '  if (e.origin !== "https://5iresearch.github.io" || !e.data || !e.data.slsnapHeight) return;\n'
+                '  document.getElementById("slsnap-frame").style.height = (e.data.slsnapHeight + 4) + "px";\n});\n</script>\n')
 
 
 if __name__ == "__main__":
