@@ -16,6 +16,8 @@ draws the charts in the browser. Link to a stock directly with ?t=RY.TO.
 Universe and frontier logic are shared with the Efficient Frontier page (generate_stock_screener's universes,
 generate_efficient_frontier_web.compute_frontier). TSX symbols that don't resolve as <symbol>.TO are retried as
 TSX Venture / CSE / Cboe Canada listings and with their dropped punctuation restored (QSPUN -> QSP-UN.TO).
+Canadian names in the Koyfin revision export (data/cdn_1w_rev_est_screener.csv) but in neither TSX list are added
+as lookup-only: they get a page, but are left out of the TSX frontier and its dots.
 Output: outputs/stock-lookup/Stock_Lookup.html + outputs/stock-lookup/data/*.json
 """
 
@@ -101,6 +103,14 @@ def load_prices():
     # The TSX list drops punctuation (BEPUN); data/TSX.csv keeps it (BEP.UN), so add those forms too
     tsx_extra = pd.read_csv(os.path.join(REPO_ROOT, "data", "TSX.csv"), converters={"Symbol": str})["Symbol"]
     tsx = list(dict.fromkeys(universes["TSX"] + [s.strip().replace(".", "-") + ".TO" for s in tsx_extra if s.strip()]))
+    # Lookup-only Canadian names: anything in the Koyfin revision export (data/cdn_1w_rev_est_screener.csv) that the
+    # TSX lists don't have, e.g. Venture names held in the model portfolios (Topicus, HIVE). They get a page but stay
+    # out of the TSX frontier and its grey dots, so the frontier keeps measuring the same market.
+    have = {norm(s) for s in tsx}
+    rev_cdn = pd.read_csv(CDN_CSV_PATH, converters={"Ticker": lambda v: str(v).strip()})["Ticker"]
+    lookup_only = list(dict.fromkeys(t.replace(".", "-") + ".TO" for t in rev_cdn if t and norm(t) not in have))
+    print(f"  {len(lookup_only)} lookup-only Canadian names from the revision export")
+    tsx += lookup_only
     us = list(dict.fromkeys(universes["S&P 500"] + universes["NASDAQ-100"]))
     benches = [b for b, _ in BENCH.values()]
 
@@ -128,8 +138,12 @@ def load_prices():
     tsx_final = list(dict.fromkeys(resolved.values()))
     # Duplicates from the two TSX lists (e.g. BEPUN.TO failing and BEP-UN.TO working) collapse to one symbol
     print(f"  TSX usable: {len(tsx_final)} (recovered {len(tsx_final) - len([s for s in tsx if s in prices.columns])})")
+    extra = {resolved[s] for s in lookup_only if s in resolved}
+    frontier_cdn = list(dict.fromkeys(resolved[s] for s in tsx if s in resolved and s not in lookup_only))
+    extra -= set(frontier_cdn)
+    print(f"  of which lookup-only: {len(extra)} ({len(lookup_only) - len(extra)} didn't resolve or were duplicates)")
     market = {**{s: "cdn" for s in tsx_final}, **{s: "us" for s in us if s in prices.columns}}
-    universe = {"cdn": tsx_final, "us": [s for s in universes["S&P 500"] if s in prices.columns]}
+    universe = {"cdn": frontier_cdn, "us": [s for s in universes["S&P 500"] if s in prices.columns]}
     return prices, actual, market, universe
 
 
