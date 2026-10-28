@@ -7,7 +7,11 @@ which holds:
   issue.md                  subject, preview, report updates, coverage drops,
                             market intro, model portfolio trades, call to action
                             (a starter template is written if it's missing)
-  Market Update - *.docx    the market update, written as usual in Word
+  Market Update - *.docx    the market update, written as usual in Word; a paragraph that is
+                            just [button: Label](https://...) becomes a button, and one that is
+                            just [interactive: Label](https://...page.html) embeds that page in
+                            the blog (iframe at #interactive) and becomes a Label button in the
+                            email, pointing at that spot in the blog (needs "Blog URL:" in issue.md)
   Report Card.png           the Macro Economic Report Card export
 
 Writes <issue>/_build/ (kit.html, email.html, post.html, images) and copies
@@ -114,6 +118,7 @@ ISSUE_TEMPLATE = """Subject: Market, Model Portfolio, and Report Updates!
 Preview: One line that shows next to the subject in the inbox
 Header:
 Blog title:
+Blog URL:
 Date:
 
 ## New Podcast Episode!
@@ -163,7 +168,7 @@ Text for this issue's call to action. Links look like [this](https://www.5iresea
 # --------------------------------------------------------------------------- inline text
 
 # Set by main(): where issue.md images live and where they'll be hosted.
-ISSUE = {"folder": "", "build_dir": "", "img_prefix": "", "images": [], "warnings": []}
+ISSUE = {"folder": "", "build_dir": "", "img_prefix": "", "images": [], "warnings": [], "blog_url": ""}
 MD_IMAGE = r"!\[([^\]]*)\]\(([^)]+)\)"
 MD_BUTTON = r"\[button:\s*(.+?)\]\((https?://[^)\s]+)\)"
 
@@ -355,10 +360,22 @@ def read_docx(path, img_dir, img_prefix):
             list_items.append(inner)
             continue
         flush_list()
-        if re.fullmatch(r"(Figure|Chart|Table)\s+\d+[.:]?.{0,120}", text):
+        # A paragraph that is just "[button: Label](https://...)" becomes a button; a [LINK: ...]
+        # placeholder still gets the button (pointing nowhere) plus a warning to fill it in.
+        btn = re.fullmatch(r"\[button:\s*(.+?)\]\(\s*(.+?)\s*\)", text)
+        embed = re.fullmatch(r"\[interactive:\s*(.+?)\]\(\s*(https?://\S+?)\s*\)", text)
+        if embed:
+            blocks.append(interactive(embed.group(2), embed.group(1)))
+        elif btn:
+            url = btn.group(2)
+            if not re.fullmatch(r"https?://\S+", url):
+                ISSUE["warnings"].append(f"Market Update button '{btn.group(1)}' has no link yet: {url}")
+                url = "#"
+            blocks.append(button(url, html.escape(btn.group(1), quote=False), BLUE))
+        elif re.fullmatch(r"(Figure|Chart|Table)\s+\d+[.:]?.{0,120}", text):
             blocks.append(p(f"<em>{html.escape(text)}</em>", size=13, color=MUTED, align="center",
                             margin="-6px 0 18px"))
-        elif all_bold and len(text) <= 140:
+        elif (all_bold or para.style.name.lower().startswith("heading")) and len(text) <= 140:
             blocks.append(f'<h3 style="margin:22px 0 8px;font-family:{FONT};font-size:19px;line-height:1.35;'
                           f'color:{BLUE};">{html.escape(text)}</h3>')
         else:
@@ -384,6 +401,24 @@ def button(url, label, bg):
             f'<a href="{html.escape(url)}" target="_blank" style="display:inline-block;padding:13px 26px;'
             f'font-family:{FONT};font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;">{label}</a>'
             f'</td></tr></table>')
+
+
+def interactive(src, label):
+    """Blog: the page in an iframe that grows to fit (the page posts its height). Email can't run
+    it, so it gets a button to the same spot in the blog post."""
+    if not LAYOUT["web"]:
+        if not ISSUE["blog_url"]:
+            ISSUE["warnings"].append(f"Add 'Blog URL:' to issue.md so the '{label}' button can link to the blog.")
+        return button(f'{ISSUE["blog_url"]}#interactive' if ISSUE["blog_url"] else "#",
+                      html.escape(label, quote=False), BLUE)
+    return (f'<div id="interactive" style="margin:6px 0 18px;"><iframe id="interactive-frame" src="{html.escape(src)}" '
+            f'width="100%" height="2600" style="display:block;width:100%;border:0;" '
+            f'title="{html.escape(label)}"></iframe></div>\n<script>\n'
+            'window.addEventListener("message", function (e) {\n'
+            '  var h = e.data && (e.data.slsnapHeight || e.data.frameHeight);\n'
+            '  if (e.origin !== "https://5iresearch.github.io" || !h) return;\n'
+            '  document.getElementById("interactive-frame").style.height = (h + 4) + "px";\n'
+            '});\n</script>\n')
 
 
 def image(src, alt):
@@ -618,9 +653,11 @@ def build_rows(meta, sections, mu_title, mu_html, report_card_src, warnings):
     else:
         warnings.append("No Call to Action section in issue.md.")
 
-    rows.append(f'<tr><td style="padding:14px 32px 26px;"><p style="margin:0;font-family:{FONT};font-size:17px;'
-                f'color:{INK};">With precision and insight,</p><p style="margin:2px 0 0;font-family:{FONT};'
-                f'font-size:24px;font-weight:bold;color:{DBLUE};">The 5i Research Team</p></td></tr>')
+    sign = (f'<p style="margin:0;font-family:{FONT};font-size:17px;color:{INK};">With precision and insight,</p>'
+            f'<p style="margin:2px 0 0;font-family:{FONT};font-size:24px;font-weight:bold;color:{DBLUE};">'
+            f'The 5i Research Team</p>')
+    rows.append(f'<div style="padding:14px 0 26px;">{sign}</div>' if LAYOUT["web"]
+                else f'<tr><td style="padding:14px 32px 26px;">{sign}</td></tr>')
     return "".join(rows)
 
 
@@ -732,7 +769,8 @@ def main():
     shutil.rmtree(build_dir, ignore_errors=True)
     os.makedirs(build_dir, exist_ok=True)
     img_prefix = f"{PAGES_BASE}/{date_str}"
-    ISSUE.update(folder=folder, build_dir=build_dir, img_prefix=img_prefix, images=[], warnings=warnings)
+    ISSUE.update(folder=folder, build_dir=build_dir, img_prefix=img_prefix, images=[], warnings=warnings,
+                 blog_url=meta.get("blog url", "").split("#")[0])
 
     docs = [d for d in glob.glob(os.path.join(folder, "Market Update*.docx"))
             if not os.path.basename(d).startswith("~$")]
@@ -756,10 +794,14 @@ def main():
     has_mu = bool(mu_html or any(t.lower() == "market intro" and c for t, c in sections))
     email_html = build_email(meta, rows, date_label, header_label(meta, sections, has_mu))
     LAYOUT["web"] = True
+    ISSUE["warnings"] = []   # the blog pass would repeat the email pass's warnings
     try:
+        if docs:  # again in blog layout: buttons and embeds differ between email and blog
+            mu_html = read_docx(docs[0], build_dir, img_prefix)[1]
         post_html = build_post(build_rows(meta, sections, mu_title, mu_html, report_card_src, []))
     finally:
         LAYOUT["web"] = False
+        ISSUE["warnings"] = warnings
     # Stamp each image URL with its content hash: a replaced image (same name)
     # otherwise keeps showing the old copy from browser / Mailchimp caches.
     for name in dict.fromkeys(images + ISSUE["images"]):
