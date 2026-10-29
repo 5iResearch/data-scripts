@@ -162,6 +162,7 @@ and the email will say there were no changes to the model portfolios.
 Text for this issue's call to action. Links look like [this](https://www.5iresearch.ca).
 
 [button: Button text](https://www.5iresearch.ca)
+[button: Button text](#interactive) links to the tool embedded in this issue's blog post (uses Blog URL)
 """
 
 
@@ -170,7 +171,7 @@ Text for this issue's call to action. Links look like [this](https://www.5iresea
 # Set by main(): where issue.md images live and where they'll be hosted.
 ISSUE = {"folder": "", "build_dir": "", "img_prefix": "", "images": [], "warnings": [], "blog_url": ""}
 MD_IMAGE = r"!\[([^\]]*)\]\(([^)]+)\)"
-MD_BUTTON = r"\[button:\s*(.+?)\]\((https?://[^)\s]+)\)"
+MD_BUTTON = r"\[button:\s*(.+?)\]\(((?:https?://|#)[^)\s]+)\)"  # "#interactive" = that spot in this blog post
 
 
 def issue_image_src(src):
@@ -231,7 +232,12 @@ def md_blocks(text):
         m = re.fullmatch(MD_BUTTON, " ".join(lines))
         fig = re.fullmatch(MD_IMAGE, " ".join(lines))
         if m:
-            out.append(button(m.group(2), html.escape(m.group(1), quote=False), BLUE))
+            url = m.group(2)
+            if url.startswith("#"):
+                if not ISSUE["blog_url"]:
+                    ISSUE["warnings"].append(f"Add 'Blog URL:' to issue.md so the '{m.group(1)}' button can link to the blog.")
+                url = ISSUE["blog_url"] + url
+            out.append(button(url, html.escape(m.group(1), quote=False), BLUE))
         elif fig:
             src = issue_image_src(fig.group(2))
             if src:
