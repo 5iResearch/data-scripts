@@ -66,7 +66,12 @@ $("blogTitle").textContent = DATA.blog_title;
 DATA.warnings.forEach(w => { const li = document.createElement("li"); li.textContent = w; $("warnings").appendChild(li); });
 
 // Previews load images from the local _build folder so they work before the push.
-const local = s => s.split(DATA.pages_prefix).join("");
+// YouTube's player shows Error 153 here because a local preview sends no referrer,
+// so the preview shows the thumbnail instead. The copied blog HTML keeps the real player.
+const YT_EMBED = /<iframe src="https:\/\/www\.youtube\.com\/embed\/([\w-]{11})"[^>]*><\/iframe>/g;
+const YT_STANDIN = '<a href="https://www.youtube.com/watch?v=$1" target="_blank"><img src="https://img.youtube.com/vi/$1/hqdefault.jpg" alt="YouTube video" style="width:100%;display:block;"></a>'
+  + '<span style="font-size:13px;color:#6b6b6b;">Preview only: the video player appears on the live post.</span>';
+const local = s => s.split(DATA.pages_prefix).join("").replace(YT_EMBED, YT_STANDIN);
 function show(view) {
   $("frame").srcdoc = local(view === "post" ? DATA.post : DATA.email);
   document.querySelectorAll("[data-view]").forEach(b => b.classList.toggle("on", b.dataset.view === view));

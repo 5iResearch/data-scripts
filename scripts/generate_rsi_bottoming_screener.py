@@ -4,16 +4,23 @@ Weekly RSI Bottoming Screener.
 Idea: find names that look like they could be putting in a bottom after a
 real decline — not just noise. Four filters:
 
-  1. Weekly RSI(14) recently crossed back above 30 (oversold -> recovering).
+  1. Weekly RSI(14) recently crossed back above its oversold level (35 for US,
+     30 for Canada) and the latest weekly close is a 3-week high, so price
+     has actually turned.
   2. Sometime in the past 2 years, weekly RSI was above 75 (proves the name
      has real momentum in it when it runs, i.e. not a perpetual laggard).
   3. Over the full 10-year lookback, the stock has cumulatively
-     outperformed QQQ (ratio of stock/QQQ higher today than 10y ago).
+     outperformed its benchmark (QQQ for US, XIU for Canada).
   4. Analyst sales (revenue) estimate revision trend charted alongside,
      same panel as the Rev Revision Screener / Channel Screener.
 
-Universe: S&P 500 + Nasdaq-100 + every ticker in data/us_1w_rev_est_screener.csv
-(same universe as generate_channel_screener.py).
+US universe: S&P 500 + Nasdaq-100 + every ticker in data/us_1w_rev_est_screener.csv
+(same universe as generate_channel_screener.py). Canada universe: data/tsx_universe.csv.
+
+Thresholds come from the Oct 2026 backtest in Documents/Ad-Hoc/RSI Bottoming Study:
+35 cut US drawdowns but clearly hurt Canada, so the markets differ. Each section
+also shows whether the index is above its 40-week average, because signals did
+better in both markets when it was below.
 """
 
 import base64
@@ -33,20 +40,25 @@ from ta.momentum import RSIIndicator
 warnings.filterwarnings("ignore")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common_screening import load_nasdaq100_symbols, load_sp500_symbols
+from common_screening import load_nasdaq100_symbols, load_sp500_symbols, load_tsx_symbols
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT_DIR = os.path.join(REPO_ROOT, "outputs", "rsi-bottoming-screener")
 LOGO_PATH = os.path.join(REPO_ROOT, "assets", "Logo_Transparent_1200px.png")
 REV_SCREENER_PATH = os.path.join(REPO_ROOT, "data", "us_1w_rev_est_screener.csv")
+CA_REV_SCREENER_PATH = os.path.join(REPO_ROOT, "data", "cdn_1w_rev_est_screener.csv")
 
-BENCH_TICKER = "QQQ"
+MARKETS = [
+    {"name": "Canada", "bench": "XIU.TO", "index": "XIU.TO", "index_name": "the TSX 60 (XIU)", "oversold": 30},
+    {"name": "US", "bench": "QQQ", "index": "SPY", "index_name": "the S&P 500 (SPY)", "oversold": 35},
+]
 LOOKBACK_PERIOD = "10y"
 MIN_TRADING_DAYS = 2400  # ~95% of the ~2520 trading days in 10y; excludes recent IPOs
 RSI_LENGTH = 14
-OVERSOLD = 30
 OVERBOUGHT = 75
-RECENT_CROSS_WEEKS = 16  # the RSI>30 crossover must have happened within this many weeks
+RECENT_CROSS_WEEKS = 16  # the oversold crossover must have happened within this many weeks
+NEW_HIGH_WEEKS = 3  # latest weekly close must be the highest of this many weeks
+REGIME_WEEKS = 40  # index moving average used for the market-state line
 OVERBOUGHT_LOOKBACK_YEARS = 2  # RSI must have touched OVERBOUGHT sometime in this window
 CHUNK_SIZE = 250  # yfinance batch download size
 
@@ -80,7 +92,7 @@ with open(LOGO_PATH, "rb") as f:
     LOGO_B64 = "data:image/png;base64," + base64.b64encode(f.read()).decode()
 
 
-def load_universe():
+def load_us_universe():
     sp500 = load_sp500_symbols()
     nasdaq100 = load_nasdaq100_symbols()
     rev_df = pd.read_csv(REV_SCREENER_PATH)
@@ -92,15 +104,21 @@ def load_universe():
     return normalized, name_map
 
 
-def load_revision_map():
-    raw = pd.read_csv(REV_SCREENER_PATH)
+def load_ca_universe():
+    rev_df = pd.read_csv(CA_REV_SCREENER_PATH, keep_default_na=False)
+    tickers = rev_df["Ticker"].astype(str).str.strip().str.upper().str.replace(".", "-", regex=False) + ".TO"
+    return load_tsx_symbols(), dict(zip(tickers, rev_df["Name"].astype(str)))
+
+
+def load_revision_map(path=REV_SCREENER_PATH, suffix=""):
+    raw = pd.read_csv(path, keep_default_na=False)
     df = raw.rename(columns=REV_COL_MAP)
     keep = [c for c in REV_COL_MAP.values() if c in df.columns]
     df = df[keep].copy()
     for c in keep:
         if c != "ticker":
             df[c] = pd.to_numeric(df[c], errors="coerce")
-    df["ticker"] = df["ticker"].astype(str).str.strip().str.upper().str.replace(".", "-", regex=False)
+    df["ticker"] = df["ticker"].astype(str).str.strip().str.upper().str.replace(".", "-", regex=False) + suffix
     return df.set_index("ticker").to_dict("index")
 
 
@@ -141,22 +159,32 @@ def batch_download_closes(tickers, period, chunk_size):
     return close_map
 
 
-def score_ticker(close, bench_close, today):
+def completed_weeks(close, today):
+    weekly_close = close.resample("W").last().dropna()
+    # on a weekday the last bar is an unfinished week, so a price check would flicker
+    if today.weekday() < 5 and weekly_close.index[-1] >= pd.Timestamp(today.date()):
+        weekly_close = weekly_close.iloc[:-1]
+    return weekly_close
+
+
+def score_ticker(close, bench_close, today, oversold):
     if len(close) < MIN_TRADING_DAYS:
         return None
 
-    weekly_close = close.resample("W").last().dropna()
+    weekly_close = completed_weeks(close, today)
+    if weekly_close.iloc[-1] < weekly_close.iloc[-NEW_HIGH_WEEKS:].max():
+        return None
     rsi = RSIIndicator(weekly_close, RSI_LENGTH).rsi().dropna()
     if len(rsi) < RSI_LENGTH * 2:
         return None
 
-    crossed_above = (rsi.shift(1) < OVERSOLD) & (rsi >= OVERSOLD)
+    crossed_above = (rsi.shift(1) < oversold) & (rsi >= oversold)
     cross_dates = rsi.index[crossed_above]
     if len(cross_dates) == 0:
         return None
     last_cross = cross_dates[-1]
     weeks_since_cross = (today - last_cross.to_pydatetime()).days / 7
-    if weeks_since_cross > RECENT_CROSS_WEEKS or rsi.iloc[-1] < OVERSOLD:
+    if weeks_since_cross > RECENT_CROSS_WEEKS or rsi.iloc[-1] < oversold:
         return None
 
     two_year_cutoff = today - timedelta(days=365 * OVERBOUGHT_LOOKBACK_YEARS)
@@ -166,6 +194,7 @@ def score_ticker(close, bench_close, today):
     max_rsi_date = past_rsi.idxmax()
 
     aligned = pd.DataFrame({"stock": close, "bench": bench_close}).dropna()
+    aligned = aligned[aligned.index <= weekly_close.index[-1]]
     if len(aligned) < MIN_TRADING_DAYS:
         return None
     ratio_start = aligned["stock"].iloc[0] / aligned["bench"].iloc[0]
@@ -182,17 +211,18 @@ def score_ticker(close, bench_close, today):
         "Weeks_Since_Cross": weeks_since_cross,
         "Max_RSI_2Y": past_rsi.max(),
         "10Y_Return_%": stock_return_10y,
-        f"10Y_{BENCH_TICKER}_Return_%": bench_return_10y,
+        "10Y_Bench_Return_%": bench_return_10y,
         "Outperformance_%": stock_return_10y - bench_return_10y,
         "_weekly_close": weekly_close,
         "_rsi": rsi,
         "_last_cross": last_cross,
         "_max_rsi_date": max_rsi_date,
+        "_oversold": oversold,
     }
 
 
-def build_chart(row, company_name, revision_row=None):
-    weekly_close, rsi = row["_weekly_close"], row["_rsi"]
+def build_chart(row, company_name, revision_row, bench):
+    weekly_close, rsi, oversold = row["_weekly_close"], row["_rsi"], row["_oversold"]
 
     fig = make_subplots(
         rows=2, cols=2,
@@ -216,8 +246,8 @@ def build_chart(row, company_name, revision_row=None):
     fig.add_trace(go.Scatter(
         x=[row["_last_cross"]], y=[rsi.loc[row["_last_cross"]]], mode="markers",
         marker=dict(color=GREEN, size=10, line=dict(color=TEXTCLR, width=1)),
-        name="Cross > 30", showlegend=False,
-        hovertemplate=f"Crossed above {OVERSOLD}<extra></extra>",
+        name=f"Cross > {oversold}", showlegend=False,
+        hovertemplate=f"Crossed above {oversold}<extra></extra>",
     ), row=2, col=1)
     fig.add_trace(go.Scatter(
         x=[row["_max_rsi_date"]], y=[rsi.loc[row["_max_rsi_date"]]], mode="markers",
@@ -227,8 +257,8 @@ def build_chart(row, company_name, revision_row=None):
     ), row=2, col=1)
 
     fig.add_hrect(y0=OVERBOUGHT, y1=100, row=2, col=1, fillcolor=RED, opacity=0.08, line_width=0)
-    fig.add_hrect(y0=0, y1=OVERSOLD, row=2, col=1, fillcolor=GREEN, opacity=0.08, line_width=0)
-    fig.add_hline(y=OVERSOLD, line_dash="dash", line_color=GREEN, line_width=1.2, row=2, col=1)
+    fig.add_hrect(y0=0, y1=oversold, row=2, col=1, fillcolor=GREEN, opacity=0.08, line_width=0)
+    fig.add_hline(y=oversold, line_dash="dash", line_color=GREEN, line_width=1.2, row=2, col=1)
     fig.add_hline(y=OVERBOUGHT, line_dash="dash", line_color=RED, line_width=1.2, row=2, col=1)
 
     if revision_row:
@@ -252,9 +282,9 @@ def build_chart(row, company_name, revision_row=None):
         title=dict(
             text=(
                 f"<b>{row['Ticker']}</b>  ·  {company_name}  ·  "
-                f"RSI={row['Current_RSI']:.0f} (crossed >{OVERSOLD} {row['Weeks_Since_Cross']:.1f}w ago)  ·  "
+                f"RSI={row['Current_RSI']:.0f} (crossed >{oversold} {row['Weeks_Since_Cross']:.1f}w ago)  ·  "
                 f"{OVERBOUGHT_LOOKBACK_YEARS}Y peak RSI={row['Max_RSI_2Y']:.0f}  ·  "
-                f"10Y Outperformance vs {BENCH_TICKER}: {row['Outperformance_%']:+.0f}%"
+                f"10Y Outperformance vs {bench}: {row['Outperformance_%']:+.0f}%"
             ),
             font=dict(size=14, color=TEXTCLR), x=0.03, y=0.97,
         ),
@@ -279,13 +309,13 @@ def fig_to_div(fig):
     return pio.to_html(fig, include_plotlyjs=False, full_html=False, config={"responsive": True})
 
 
-def build_summary_table(rows):
+def build_summary_table(rows, bench):
     df = pd.DataFrame(rows).drop(columns=[c for c in rows[0] if c.startswith("_")])
     df = df.sort_values(["Weeks_Since_Cross", "Outperformance_%"], ascending=[True, False]).reset_index(drop=True)
-    cols = ["Ticker", "Current_RSI", "Weeks_Since_Cross", "Max_RSI_2Y", "10Y_Return_%", f"10Y_{BENCH_TICKER}_Return_%", "Outperformance_%"]
+    cols = ["Ticker", "Current_RSI", "Weeks_Since_Cross", "Max_RSI_2Y", "10Y_Return_%", "10Y_Bench_Return_%", "Outperformance_%"]
     df = df[cols]
     html = ['<table class="summary"><thead><tr>']
-    html.append("".join(f"<th>{c.replace('_', ' ')}</th>" for c in cols))
+    html.append("".join(f"<th>{c.replace('_', ' ').replace('Bench', bench)}</th>" for c in cols))
     html.append("</tr></thead><tbody>")
     for _, r in df.iterrows():
         html.append(
@@ -295,7 +325,7 @@ def build_summary_table(rows):
             f"<td>{r['Weeks_Since_Cross']:.1f}</td>"
             f"<td>{r['Max_RSI_2Y']:.0f}</td>"
             f"<td>{r['10Y_Return_%']:.0f}%</td>"
-            f"<td>{r[f'10Y_{BENCH_TICKER}_Return_%']:.0f}%</td>"
+            f"<td>{r['10Y_Bench_Return_%']:.0f}%</td>"
             f"<td>{r['Outperformance_%']:+.0f}%</td>"
             "</tr>"
         )
@@ -303,19 +333,34 @@ def build_summary_table(rows):
     return "".join(html)
 
 
-def main():
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    today = datetime.now()
+def regime_line(market, today):
+    raw = yf.download(market["index"], period=LOOKBACK_PERIOD, auto_adjust=True, progress=False)
+    close = close_series_single(market["index"], raw)
+    if close is None:
+        return ""
+    weekly_close = completed_weeks(close, today)
+    average = weekly_close.rolling(REGIME_WEEKS).mean().iloc[-1]
+    if weekly_close.iloc[-1] > average:
+        return (f"{market['index_name']} is above its {REGIME_WEEKS}-week average. In the backtest, signals in this state "
+                "did not beat the index, so these are more likely stock-specific breakdowns than a market-wide washout.")
+    return f"{market['index_name']} is below its {REGIME_WEEKS}-week average, the state in which signals did better in the backtest."
 
-    universe, name_map = load_universe()
-    revision_map = load_revision_map()
-    print(f"Universe: {len(universe)} unique tickers")
 
-    print(f"Downloading {BENCH_TICKER} ({LOOKBACK_PERIOD})...")
-    bench_raw = yf.download(BENCH_TICKER, period=LOOKBACK_PERIOD, auto_adjust=True, progress=False)
-    bench_close = close_series_single(BENCH_TICKER, bench_raw)
+def build_market_section(market, today):
+    bench, oversold = market["bench"].replace(".TO", ""), market["oversold"]
+    if market["name"] == "US":
+        universe, name_map = load_us_universe()
+        revision_map = load_revision_map()
+    else:
+        universe, name_map = load_ca_universe()
+        revision_map = load_revision_map(CA_REV_SCREENER_PATH, ".TO")
+    print(f"{market['name']} universe: {len(universe)} unique tickers")
+
+    print(f"Downloading {market['bench']} ({LOOKBACK_PERIOD})...")
+    bench_raw = yf.download(market["bench"], period=LOOKBACK_PERIOD, auto_adjust=True, progress=False)
+    bench_close = close_series_single(market["bench"], bench_raw)
     if bench_close is None:
-        raise RuntimeError(f"Could not download {BENCH_TICKER} close prices")
+        raise RuntimeError(f"Could not download {market['bench']} close prices")
 
     print(f"Downloading {len(universe)} tickers ({LOOKBACK_PERIOD})...")
     close_map = batch_download_closes(universe, LOOKBACK_PERIOD, CHUNK_SIZE)
@@ -325,7 +370,7 @@ def main():
     for ticker, close in close_map.items():
         try:
             close = close.rename(ticker)
-            row = score_ticker(close, bench_close, today)
+            row = score_ticker(close, bench_close, today, oversold)
             if row is not None:
                 rows.append(row)
         except Exception as exc:
@@ -333,25 +378,42 @@ def main():
 
     print(f"{len(rows)} tickers pass the RSI-bottoming + outperformance filters")
 
+    regime = regime_line(market, today)
     parts = []
     if rows:
         rows_sorted = sorted(rows, key=lambda r: (r["Weeks_Since_Cross"], -r["Outperformance_%"]))
         parts.append(
-            f'<div class="section"><h2>Candidates</h2><div class="section-sub">'
-            f"{len(rows_sorted)} names: weekly RSI crossed back above {OVERSOLD} within {RECENT_CROSS_WEEKS} weeks, "
-            f"touched {OVERBOUGHT}+ sometime in the past {OVERBOUGHT_LOOKBACK_YEARS}Y, and have outperformed "
-            f"{BENCH_TICKER} over 10Y &mdash; sorted by freshest crossover first</div>{build_summary_table(rows_sorted)}</div>"
+            f'<div class="section"><h2>{market["name"]} Candidates</h2><div class="section-sub">'
+            f"{len(rows_sorted)} names: weekly RSI crossed back above {oversold} within {RECENT_CROSS_WEEKS} weeks, "
+            f"at a {NEW_HIGH_WEEKS}-week closing high, touched {OVERBOUGHT}+ sometime in the past {OVERBOUGHT_LOOKBACK_YEARS}Y, "
+            f"and have outperformed {bench} over 10Y &mdash; sorted by freshest crossover first. {regime}</div>"
+            f"{build_summary_table(rows_sorted, bench)}</div>"
         )
         for row in rows_sorted:
             company_name = name_map.get(row["Ticker"], row["Ticker"])
             revision_row = revision_map.get(row["Ticker"])
             try:
-                fig = build_chart(row, company_name, revision_row)
+                fig = build_chart(row, company_name, revision_row, bench)
                 parts.append(f'<div class="chart-wrap">{fig_to_div(fig)}</div>')
             except Exception as exc:
                 print(f"  chart error {row['Ticker']}: {exc}")
     else:
-        parts.append('<div class="section"><h2>Candidates</h2><div class="section-sub">No tickers passed all filters today.</div></div>')
+        parts.append(
+            f'<div class="section"><h2>{market["name"]} Candidates</h2><div class="section-sub">'
+            f"No tickers passed all filters today. {regime}</div></div>"
+        )
+    return parts, rows
+
+
+def main():
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    today = datetime.now()
+
+    parts = []
+    for market in MARKETS:
+        market_parts, rows = build_market_section(market, today)
+        parts.extend(market_parts)
+        print(market["name"], [(r["Ticker"], round(r["Current_RSI"]), round(r["Weeks_Since_Cross"], 1)) for r in rows])
 
     html = PAGE_TEMPLATE.format(date_str=today.strftime("%B %d, %Y"), body="\n".join(parts))
     out_path = os.path.join(OUTPUT_DIR, "RSI_Bottoming_Screener_latest.html")
@@ -384,7 +446,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <body>
 <header>
   <h1>Weekly RSI Bottoming Screener</h1>
-  <div class="meta">Generated {date_str} &middot; Weekly RSI recently recovered above 30, was overbought (75+) within the past 2 years, 10Y outperformer vs QQQ &middot; Universe: S&amp;P 500 + Nasdaq-100 + revenue-revision screener</div>
+  <div class="meta">Generated {date_str} &middot; Weekly RSI recently recovered above its oversold level at a 3-week high, was overbought (75+) within the past 2 years, 10Y outperformer vs benchmark &middot; Canada: TSX, RSI 30, vs XIU &middot; US: S&amp;P 500 + Nasdaq-100 + revenue-revision screener, RSI 35, vs QQQ</div>
 </header>
 {body}
 </body>

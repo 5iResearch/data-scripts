@@ -262,13 +262,13 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   <div class="meta">Updated {date_str} &middot; TSX, S&amp;P 500 and Nasdaq 100 &middot; last {years} years of daily prices</div>
 </header>
 <div class="intro">
-  <p>Each dot is a stock, plotted by how much it has returned per year over the last {years} years (up) against how
+  <p>Each dot is a stock, plotted by its compound annual return over the last {years} years (up) against how
   bumpy the ride has been (right). The best risk/reward sits toward the top-left: high return for the volatility
   taken on. The {top_n} stocks with the highest <b>Sharpe ratio</b>, meaning return above the risk-free rate per unit of
   volatility, are labelled and coloured from red (lowest of the group) to green (highest). To keep the comparison fair, only
   stocks with the full {years} years of history qualify for the top {top_n} and the frontier.</p>
   <p>The orange <b>efficient frontier</b> shows the best trade-off available by combining those {top_n} stocks: for each
-  level of volatility, the highest return a long-only mix of them has delivered. Points on the line beat any single
+  level of volatility, the highest compound return a long-only mix of them has delivered, rebalanced once a year. Points on the line beat any single
   stock at the same risk, which is the case for diversification. It describes the past, not a recommended portfolio.</p>
   <p class="legend">Grey dots are every other stock in the index (newer listings are measured since they began
   trading). A few extreme outliers sit off the chart; double-click a chart to zoom out and see them. The dotted blue line is the risk-free rate

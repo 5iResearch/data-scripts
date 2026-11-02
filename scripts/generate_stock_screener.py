@@ -196,7 +196,11 @@ def compute_signals(prices: pd.DataFrame) -> pd.DataFrame:
             ma200 = p.rolling(200).mean().iloc[-1] if len(p) >= 200 else float("nan")
             hi52 = p.rolling(252).max().iloc[-1]
             lo52 = p.rolling(252).min().iloc[-1]
-            ann_ret = ret.mean() * 252 * 100
+            # Compound return, not mean daily return x 252: the average overstates volatile stocks, and on a
+            # penny stock one-cent ticks ($0.01 <-> $0.02 is +100% then -50%) can show a big gain on a falling price.
+            # Histories under a year are not annualized up.
+            years = max((p.index[-1] - p.index[0]).days / 365.25, 1)
+            ann_ret = ((last / p.iloc[0]) ** (1 / years) - 1) * 100
             ann_vol = ret.std() * (252 ** 0.5) * 100
             sharpe = (ann_ret / 100 - RISK_FREE) / (ann_vol / 100) if ann_vol else float("nan")
 
@@ -268,6 +272,7 @@ def efficient_frontier(returns: pd.DataFrame, tickers: list, n_points: int = 40,
     n = len(mu)
     w0 = np.ones(n) / n
     bounds = [(0, 1)] * n
+    yearly = ((1 + ret).groupby(ret.index.year).prod() - 1).values
 
     ef_vol, ef_ret = [], []
     for target in np.linspace(mu.min(), mu.max(), n_points):
@@ -281,7 +286,14 @@ def efficient_frontier(returns: pd.DataFrame, tickers: list, n_points: int = 40,
         )
         if res.success:
             ef_vol.append(np.sqrt(max(res.fun, 0)) * 100)
-            ef_ret.append(target * 100)
+            # The optimiser needs mean returns; report the compound return of that mix so the line is on the
+            # same basis as the stock dots from compute_signals(). Rebalanced yearly: daily rebalancing of a few
+            # volatile, uncorrelated stocks adds return nobody could capture (TSX: 64% daily vs 55% yearly).
+            ef_ret.append((np.prod(1 + yearly @ res.x) ** (252 / len(ret)) - 1) * 100)
+    # Past the peak, more risk only lowers compound return, so those mixes aren't efficient
+    if ef_ret:
+        peak = int(np.argmax(ef_ret)) + 1
+        ef_vol, ef_ret = ef_vol[:peak], ef_ret[:peak]
     return ef_vol, ef_ret
 
 
@@ -414,7 +426,7 @@ def make_scatter_frontier(
     fig.update_layout(
         title=dict(text=f"<b>{title} — Risk vs. Return + Efficient Frontier</b>",
                     font=dict(color=TEXTCLR, size=15)),
-        xaxis_title="Annualized Volatility (%)", yaxis_title=f"Annualized Return % ({DATA_YEARS}yr daily avg)",
+        xaxis_title="Annualized Volatility (%)", yaxis_title=f"Annualized Return % ({DATA_YEARS}yr compound)",
         paper_bgcolor=BG, plot_bgcolor=LGREY, font=dict(color=TEXTCLR), height=680,
         legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(size=10), x=0.01, y=0.99),
     )

@@ -562,8 +562,9 @@ def podcast_block(content, warnings):
         # Same plain players as the Exponent episode posts: full-width video,
         # then Spotify's compact bar. The blog editor keeps these as they are.
         if yt:
-            body += (f'<p><iframe src="https://www.youtube.com/embed/{yt.group(1)}" width="100%" height="450">'
-                     f'</iframe></p>')
+            # YouTube refuses embeds with no referrer (Error 153), so ask for one explicitly.
+            body += (f'<p><iframe src="https://www.youtube.com/embed/{yt.group(1)}" width="100%" height="450" '
+                     f'referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></p>')
         if sp:
             body += (f'<p><iframe src="https://open.spotify.com/embed/{sp.group(1)}/{sp.group(2)}" width="100%" '
                      f'height="85"></iframe></p>')
