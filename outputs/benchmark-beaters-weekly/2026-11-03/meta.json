@@ -1,0 +1,32 @@
+{
+  "as_of": "2026-11-03",
+  "blog_title": "Benchmark Beaters Weekly: 141 Stocks Beating Their Benchmarks (November 3, 2026)",
+  "email_subject": "Benchmark Beaters: HLF & CRL lead 141 stocks beating the market",
+  "preview_text": "37 Canadian and 104 U.S. names at six-month relative highs. Full table and charts inside.",
+  "intro": [
+    "The latest Benchmark Beaters screen (as of November 3, 2026) found 141 Canadian and U.S. stocks outperforming their benchmarks, each hitting a new six-month relative high in the last five trading days.",
+    "In Canada, 37 stocks made a fresh six-month high relative to the TSX Composite, 21 of them new to the list this week. High Liner Foods Incorporated (HLF) leads with a +95% six-month return, and Energy is the most represented sector with 15 names.",
+    "In the U.S., 104 stocks made a fresh six-month high relative to the S&P 500, 49 of them new to the list this week. Charles River Laboratories International Inc. (CRL) leads with a +94% six-month return, and Health Care is the most represented sector with 26 names."
+  ],
+  "total": 141,
+  "stats": {
+    "cdn": {
+      "count": 37,
+      "new": 21,
+      "streak": 7,
+      "top_sector": "Energy",
+      "top_sector_n": 15
+    },
+    "us": {
+      "count": 104,
+      "new": 49,
+      "streak": 5,
+      "top_sector": "Health Care",
+      "top_sector_n": 26
+    }
+  },
+  "workbook": "Benchmark_Beaters_2026-11-03.xlsx",
+  "image_url": "https://5iresearch.github.io/data-scripts/outputs/benchmark-beaters-weekly/2026-11-03/teaser.png",
+  "table_url": "{{TABLE_PDF_URL}}",
+  "charts_url": "{{CHARTS_PDF_URL}}"
+}
