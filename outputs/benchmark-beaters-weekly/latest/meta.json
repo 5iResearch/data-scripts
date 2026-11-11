@@ -1,32 +1,32 @@
 {
-  "as_of": "2026-11-06",
-  "blog_title": "Benchmark Beaters Weekly: 182 Stocks Beating Their Benchmarks (November 6, 2026)",
-  "email_subject": "Benchmark Beaters: HLF & MRNA lead 182 stocks beating the market",
-  "preview_text": "34 Canadian and 148 U.S. names at six-month relative highs. Full table and charts inside.",
+  "as_of": "2026-11-10",
+  "blog_title": "Benchmark Beaters Weekly: 174 Stocks Beating Their Benchmarks (November 10, 2026)",
+  "email_subject": "Benchmark Beaters: DCBO & MRNA lead 174 stocks beating the market",
+  "preview_text": "30 Canadian and 144 U.S. names at six-month relative highs. Full table and charts inside.",
   "intro": [
-    "The latest Benchmark Beaters screen (as of November 6, 2026) found 182 Canadian and U.S. stocks outperforming their benchmarks, each hitting a new six-month relative high in the last five trading days.",
-    "In Canada, 34 stocks made a fresh six-month high relative to the TSX Composite, 22 of them new to the list this week. High Liner Foods Incorporated (HLF) leads with a +96% six-month return, and Financials is the most represented sector with 6 names.",
-    "In the U.S., 148 stocks made a fresh six-month high relative to the S&P 500, 91 of them new to the list this week. Moderna Inc. (MRNA) leads with a +387% six-month return, and Health Care is the most represented sector with 40 names."
+    "The latest Benchmark Beaters screen (as of November 10, 2026) found 174 Canadian and U.S. stocks outperforming their benchmarks, each hitting a new six-month relative high in the last five trading days.",
+    "In Canada, 30 stocks made a fresh six-month high relative to the TSX Composite, 14 of them new to the list this week. Docebo Inc. (DCBO) leads with a +99% six-month return, and Financials is the most represented sector with 6 names.",
+    "In the U.S., 144 stocks made a fresh six-month high relative to the S&P 500, 64 of them new to the list this week. Moderna Inc. (MRNA) leads with a +416% six-month return, and Health Care is the most represented sector with 39 names."
   ],
-  "total": 182,
+  "total": 174,
   "stats": {
     "cdn": {
-      "count": 34,
-      "new": 22,
+      "count": 30,
+      "new": 14,
       "streak": 3,
       "top_sector": "Financials",
       "top_sector_n": 6
     },
     "us": {
-      "count": 148,
-      "new": 91,
-      "streak": 16,
+      "count": 144,
+      "new": 64,
+      "streak": 23,
       "top_sector": "Health Care",
-      "top_sector_n": 40
+      "top_sector_n": 39
     }
   },
-  "workbook": "Benchmark_Beaters_2026-11-06.xlsx",
-  "image_url": "https://5iresearch.github.io/data-scripts/outputs/benchmark-beaters-weekly/2026-11-06/teaser.png",
+  "workbook": "Benchmark_Beaters_2026-11-10.xlsx",
+  "image_url": "https://5iresearch.github.io/data-scripts/outputs/benchmark-beaters-weekly/2026-11-10/teaser.png",
   "table_url": "{{TABLE_PDF_URL}}",
   "charts_url": "{{CHARTS_PDF_URL}}"
 }
