@@ -55,7 +55,6 @@
       </div>
       <div class="right">
         <div class="days" id="ispv-days"></div>
-        <button type="button" class="fs" id="ispv-fs" title="Full screen">&#x26F6; <span>Full screen</span></button>
       </div>
     </div>
     <div class="tabs" id="ispv-tabs"></div>
@@ -132,23 +131,6 @@
   var start = 0;
   try { var s = parseInt(localStorage.getItem("ispv-tab"), 10); if (s >= 0 && s < TABS.length) start = s; } catch (e) {}
   show(start);
-
-  // Full-screen button: only shown when the website embed allows it (iframe needs allowfullscreen)
-  var fsBtn = document.getElementById("ispv-fs"), root = document.documentElement;
-  if (document.fullscreenEnabled || document.webkitFullscreenEnabled) {
-    fsBtn.style.display = "inline-flex";
-    fsBtn.onclick = function () {
-      var on = document.fullscreenElement || document.webkitFullscreenElement;
-      if (on) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-      else (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
-    };
-    var label = function () {
-      var on = document.fullscreenElement || document.webkitFullscreenElement;
-      fsBtn.querySelector("span").textContent = on ? "Exit full screen" : "Full screen";
-    };
-    document.addEventListener("fullscreenchange", label);
-    document.addEventListener("webkitfullscreenchange", label);
-  }
 })();
 </script>
 </body>
