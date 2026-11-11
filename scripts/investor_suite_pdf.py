@@ -136,6 +136,7 @@ def _box_key(r):
 # Sections that shared an article's side tab in some issues but are not part of it and were not carried over.
 OTHER_SECTIONS = ("EARNINGS UPDATE",)
 COHORT_TABLE = re.compile(r"\d{4}\s+COHORT\s*$")      # "STOCK OF INTEREST - 2025 COHORT", the table page
+PROMO = re.compile(r"^(COMING SOON|WHAT'?S NEXT)\b")     # a teaser page under a section's tab, not the article
 
 
 def article_pages(lines_by_page, kind):
@@ -143,23 +144,35 @@ def article_pages(lines_by_page, kind):
     that follow (some issues only tab the opening page), up to the next section or the cohort table.
 
     Where another section sits under the same tab (the Earnings Update ran under MARKET MUSINGS), the article
-    is the part that opens with its own section heading."""
-    pages, openers, others = [], [], []
+    is the part that opens with its own section heading.
+
+    When the tab shows up in more than one place (Oct 2026 ran a one-page "Coming Soon" promo under the
+    MARKET MUSINGS tab ahead of the real article), the run that isn't a promo and runs longest wins."""
+    runs, cur = [], None
     for i, lines in enumerate(lines_by_page):
         upper = [(" ".join(l["text"].upper().split()), l) for l in lines]
         tabs = [t for t, l in upper if not l["flat"] and l["size"] >= 15]
         heads = [t for t, l in upper if l["flat"] and l["size"] >= 17]
         mine = any(lbl in t for t in tabs for lbl in LABELS[kind])
         cohort = any(COHORT_TABLE.search(t) for t in heads)
-        if (mine and not cohort and (not pages or i - pages[-1] == 1)) or \
-                (pages and not tabs and not cohort and i - pages[-1] == 1):
-            pages.append(i)
+        if (mine and not cohort and (not cur or i - cur["pages"][-1] == 1)) or \
+                (cur and not tabs and not cohort and i - cur["pages"][-1] == 1):
+            if cur is None:
+                cur = {"pages": [], "openers": [], "others": [], "promo": False}
+                runs.append(cur)
+            cur["pages"].append(i)
             if any(t in LABELS[kind] for t in heads):
-                openers.append(i)
+                cur["openers"].append(i)
             if any(t in OTHER_SECTIONS for t in heads):
-                others.append(i)
-        elif pages:
-            break
+                cur["others"].append(i)
+            if any(PROMO.search(t) for t, _ in upper):
+                cur["promo"] = True
+        else:
+            cur = None
+    if not runs:
+        return []
+    best = max(runs, key=lambda r: (not r["promo"], len(r["pages"]), -r["pages"][0]))
+    pages, openers, others = best["pages"], best["openers"], best["others"]
     if openers:
         pages = [i for i in pages if i >= openers[0]]
     later = [i for i in others if pages and i > pages[0]]
