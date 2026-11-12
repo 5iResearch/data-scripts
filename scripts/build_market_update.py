@@ -526,6 +526,11 @@ def is_icymi(title):
     return title.lower().startswith("in case you missed it")
 
 
+def is_announcement(title):
+    """'## Announcement: <title>' leads the issue, above the podcast."""
+    return title.lower().startswith("announcement")
+
+
 def youtube_thumb(vid):
     """maxresdefault is sharp but only exists for HD uploads; hqdefault always does."""
     url = f"https://img.youtube.com/vi/{vid}/maxresdefault.jpg"
@@ -596,14 +601,23 @@ def build_rows(meta, sections, mu_title, mu_html, report_card_src, warnings):
     rows = []
     by_key = {t.lower(): c for t, c in sections}
 
+    for t, c in sections:
+        if c and is_announcement(t):
+            title = t.split(":", 1)[1].strip() if ":" in t else t
+            rows.append(section("Announcement", html.escape(title), md_blocks(c), accent=BLUE))
+            rows.append(divider())
     # A new podcast episode leads the issue, ahead of the research.
+    # "In Case You Missed It: The Exponent ..." keeps the players but takes the ICYMI label.
     for t, c in sections:
         if c and is_podcast(t):
-            rows.append(section("The Exponent Podcast", html.escape(t), podcast_block(c, warnings), accent=BLUE))
+            kicker, title = "The Exponent Podcast", t
+            if is_icymi(t):
+                kicker, title = "In Case You Missed It", (t.split(":", 1)[1].strip() if ":" in t else t)
+            rows.append(section(kicker, html.escape(title), podcast_block(c, warnings), accent=BLUE))
             rows.append(divider())
     # "In Case You Missed It: <title>" also leads the issue, e.g. when there's no new episode
     for t, c in sections:
-        if c and is_icymi(t):
+        if c and is_icymi(t) and not is_podcast(t):
             title = t.split(":", 1)[1].strip() if ":" in t else t
             rows.append(section("In Case You Missed It", html.escape(title), md_blocks(c), accent=BLUE))
             rows.append(divider())
@@ -620,7 +634,7 @@ def build_rows(meta, sections, mu_title, mu_html, report_card_src, warnings):
 
     for t, c in sections:
         tl = t.lower()
-        if (tl == "market intro" or research_accent(t) or is_podcast(t) or is_icymi(t)
+        if (tl == "market intro" or research_accent(t) or is_podcast(t) or is_icymi(t) or is_announcement(t)
                 or tl.startswith(("model portfolio", "call to action"))):
             continue
         rows.append(section("", html.escape(t), md_blocks(c)))
