@@ -1,32 +1,32 @@
 {
-  "as_of": "2026-11-11",
-  "blog_title": "Benchmark Beaters Weekly: 169 Stocks Beating Their Benchmarks (November 11, 2026)",
-  "email_subject": "Benchmark Beaters: DCBO & MRNA lead 169 stocks beating the market",
-  "preview_text": "29 Canadian and 140 U.S. names at six-month relative highs. Full table and charts inside.",
+  "as_of": "2026-11-12",
+  "blog_title": "Benchmark Beaters Weekly: 78 Stocks Beating Their Benchmarks (November 12, 2026)",
+  "email_subject": "Benchmark Beaters: DCBO & MRNA lead 78 stocks beating the market",
+  "preview_text": "24 Canadian and 54 U.S. names at six-month relative highs. Full table and charts inside.",
   "intro": [
-    "The latest Benchmark Beaters screen (as of November 11, 2026) found 169 Canadian and U.S. stocks outperforming their benchmarks, each hitting a new six-month relative high in the last five trading days.",
-    "In Canada, 29 stocks made a fresh six-month high relative to the TSX Composite, 13 of them new to the list this week. Docebo Inc. (DCBO) leads with a +94% six-month return, and Consumer Discretionary is the most represented sector with 5 names.",
-    "In the U.S., 140 stocks made a fresh six-month high relative to the S&P 500, 39 of them new to the list this week. Moderna Inc. (MRNA) leads with a +406% six-month return, and Health Care is the most represented sector with 37 names."
+    "The latest Benchmark Beaters screen (as of November 12, 2026) found 78 Canadian and U.S. stocks outperforming their benchmarks, each hitting a new six-month relative high in the last five trading days.",
+    "In Canada, 24 stocks made a fresh six-month high relative to the TSX Composite, 8 of them new to the list this week. Docebo Inc. (DCBO) leads with a +95% six-month return, and Consumer Discretionary is the most represented sector with 4 names.",
+    "In the U.S., 54 stocks made a fresh six-month high relative to the S&P 500, 10 of them new to the list this week. Moderna Inc. (MRNA) leads with a +393% six-month return, and Health Care is the most represented sector with 22 names."
   ],
-  "total": 169,
+  "total": 78,
   "stats": {
     "cdn": {
-      "count": 29,
-      "new": 13,
-      "streak": 3,
+      "count": 24,
+      "new": 8,
+      "streak": 4,
       "top_sector": "Consumer Discretionary",
-      "top_sector_n": 5
+      "top_sector_n": 4
     },
     "us": {
-      "count": 140,
-      "new": 39,
-      "streak": 30,
+      "count": 54,
+      "new": 10,
+      "streak": 13,
       "top_sector": "Health Care",
-      "top_sector_n": 37
+      "top_sector_n": 22
     }
   },
-  "workbook": "Benchmark_Beaters_2026-11-11.xlsx",
-  "image_url": "https://5iresearch.github.io/data-scripts/outputs/benchmark-beaters-weekly/2026-11-11/teaser.png",
+  "workbook": "Benchmark_Beaters_2026-11-12.xlsx",
+  "image_url": "https://5iresearch.github.io/data-scripts/outputs/benchmark-beaters-weekly/2026-11-12/teaser.png",
   "table_url": "{{TABLE_PDF_URL}}",
   "charts_url": "{{CHARTS_PDF_URL}}"
 }
