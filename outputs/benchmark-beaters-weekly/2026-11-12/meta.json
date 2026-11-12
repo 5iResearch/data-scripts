@@ -1,0 +1,32 @@
+{
+  "as_of": "2026-11-12",
+  "blog_title": "Benchmark Beaters Weekly: 78 Stocks Beating Their Benchmarks (November 12, 2026)",
+  "email_subject": "Benchmark Beaters: DCBO & MRNA lead 78 stocks beating the market",
+  "preview_text": "24 Canadian and 54 U.S. names at six-month relative highs. Full table and charts inside.",
+  "intro": [
+    "The latest Benchmark Beaters screen (as of November 12, 2026) found 78 Canadian and U.S. stocks outperforming their benchmarks, each hitting a new six-month relative high in the last five trading days.",
+    "In Canada, 24 stocks made a fresh six-month high relative to the TSX Composite, 8 of them new to the list this week. Docebo Inc. (DCBO) leads with a +95% six-month return, and Consumer Discretionary is the most represented sector with 4 names.",
+    "In the U.S., 54 stocks made a fresh six-month high relative to the S&P 500, 10 of them new to the list this week. Moderna Inc. (MRNA) leads with a +393% six-month return, and Health Care is the most represented sector with 22 names."
+  ],
+  "total": 78,
+  "stats": {
+    "cdn": {
+      "count": 24,
+      "new": 8,
+      "streak": 4,
+      "top_sector": "Consumer Discretionary",
+      "top_sector_n": 4
+    },
+    "us": {
+      "count": 54,
+      "new": 10,
+      "streak": 13,
+      "top_sector": "Health Care",
+      "top_sector_n": 22
+    }
+  },
+  "workbook": "Benchmark_Beaters_2026-11-12.xlsx",
+  "image_url": "https://5iresearch.github.io/data-scripts/outputs/benchmark-beaters-weekly/2026-11-12/teaser.png",
+  "table_url": "{{TABLE_PDF_URL}}",
+  "charts_url": "{{CHARTS_PDF_URL}}"
+}
