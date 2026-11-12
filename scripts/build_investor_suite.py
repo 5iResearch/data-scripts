@@ -45,6 +45,7 @@ import re
 import shutil
 import subprocess
 import sys
+import unicodedata
 import webbrowser
 from datetime import datetime
 
@@ -76,6 +77,24 @@ COLUMNS_WIDTH = 1120       # px, the whole post in the "columns" layout
 COLUMN_MIN = 340           # px, below two of these the "columns" layout drops to one column
 LAYOUTS = ("single", "columns", "sections", "sidebar", "wide")
 MAX_IMAGE_PX = 1800
+
+PLAIN_PUNCT = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"', "–": "-",
+                             "—": "-", "·": "-", "…": "...", " ": " "})
+
+
+def ascii_html(markup):
+    """The site's editor now rejects non-ASCII characters (curly quotes, dashes, middle dots...) with a
+    server error, so every one is written as a numeric HTML entity; it displays the same."""
+    return markup.encode("ascii", "xmlcharrefreplace").decode("ascii") if markup else markup
+
+
+def ascii_text(text):
+    """For plain-text fields (post title, chart title) where entities would show literally."""
+    if not text:
+        return text
+    text = unicodedata.normalize("NFKD", text.translate(PLAIN_PUNCT))   # é -> e + accent, accent dropped below
+    return text.encode("ascii", "ignore").decode("ascii")
+
 
 KINDS = {"coi": "Chart of Interest", "musings": "Market Musings", "soi": "Stock of Interest"}
 MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
@@ -1006,12 +1025,12 @@ def build_article(folder, kind, docs, open_kit, source="", teaser=True):
     summary = "\n".join(filter(None, [summary_look, f"[[embedchart:{embed} height={height}]]" if embed else ""]))
     if summary:
         with open(os.path.join(build_dir, "summary.txt"), "w", encoding="utf-8") as f:
-            f.write(summary + "\n")
+            f.write(ascii_html(summary) + "\n")
     elif os.path.exists(os.path.join(build_dir, "summary.txt")):
         os.remove(os.path.join(build_dir, "summary.txt"))
 
     month_label = f"{MONTHS[month - 1]} {year}"
-    post_title = f"{KINDS[kind]}: {title}"
+    post_title = ascii_text(f"{KINDS[kind]}: {title}")
     layout = (os.environ.get("INVESTOR_SUITE_LAYOUT") or settings.get("layout") or LAYOUTS[0]).lower()
     if layout not in LAYOUTS:
         warnings.append(f'Layout "{layout}" is not one of {", ".join(LAYOUTS)}; used {LAYOUTS[0]}.')
@@ -1019,7 +1038,7 @@ def build_article(folder, kind, docs, open_kit, source="", teaser=True):
     post_html = build_post(kind, title, blocks, f"{KINDS[kind]} · {month_label}", disclosure, thesis,
                            considerations, layout)
     with open(os.path.join(build_dir, "post.html"), "w", encoding="utf-8") as f:
-        f.write(post_html)
+        f.write(ascii_html(post_html))
     data = {"title": post_title, "kind": KINDS[kind], "month": month_label, "post": post_html,
             "warnings": warnings, "document": chosen, "others": others,
             "pdf": os.path.basename(pdf_path) if pages else "", "match": None if score is None else round(score * 100),
@@ -1032,6 +1051,9 @@ def build_article(folder, kind, docs, open_kit, source="", teaser=True):
             "words": sum(len(b["text"].split()) for b in blocks if b["t"] in ("p", "li")),
             "images": [{"name": b["name"], "w": b["w"], "h": b["h"], "caption": " · ".join(b["caption"])}
                        for b in images + ([preview] if preview else [])]}
+    for key in ("post", "summary", "summary_look"):      # what the kit's copy buttons hand to the site
+        data[key] = ascii_html(data[key])
+    data["chart_title"] = ascii_text(data["chart_title"])
     with open(KIT_TEMPLATE, encoding="utf-8") as f:
         page = f.read()
     kit_path = os.path.join(build_dir, "kit.html")
@@ -1295,17 +1317,21 @@ def build_home(month, open_kit):
     footer = footer_markup(values["watchlist tag"], values["suite screens text"], shots, note,
                            values["disclosure"], label)
     with open(os.path.join(build_dir, "home-bottom.html"), "w", encoding="utf-8") as f:
-        f.write(footer)
+        f.write(ascii_html(footer))
 
     args = (view, values["heading"], values["subheading"], memes)
     block = home_markup(style, *args)
     with open(os.path.join(build_dir, "home.html"), "w", encoding="utf-8") as f:
-        f.write(block)
+        f.write(ascii_html(block))
     data = {"month": label, "block": block, "footer": footer, "images": shots,
             "watchlist_tag": values["watchlist tag"], "listing": listing, "view": view, "memes_block": home_markup(style, "", *args[1:]),
             "memes": memes, "source": source, "settings": os.path.basename(settings_path), "style": style,
             "warnings": warnings, "others": [{"style": o, "block": home_markup(o, *args)}
                                              for o in HOME_STYLES if o != style]}
+    for key in ("block", "footer", "memes_block"):       # what the kit's copy buttons hand to the site
+        data[key] = ascii_html(data[key])
+    for other in data["others"]:
+        other["block"] = ascii_html(other["block"])
     with open(HOME_TEMPLATE, encoding="utf-8") as f:
         page = f.read()
     kit_path = os.path.join(build_dir, "kit.html")
