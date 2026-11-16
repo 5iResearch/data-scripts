@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Join Investor Suite | 5i Research</title>
+<style>
+body { margin: 0; background: #FFFFFF; }
+
+.isj, .isj * { box-sizing: border-box; }
+.isj { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #4A5260; font-size: 16px; line-height: 1.6; background: #FFFFFF; }
+.isj img { display: block; max-width: 100%; height: auto; border: 0; }
+.isj a { color: #1F79BE; }
+.isj h1, .isj h2, .isj h3 { font-family: Arial, Helvetica, sans-serif; color: #13243A; margin: 0; }
+.isj-wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+.isj-sec { padding: 72px 0; }
+.isj-sec.alt { background: #F4F6F9; }
+.isj-eyebrow { margin: 0 0 10px; font-size: 12px; font-weight: bold; letter-spacing: 2px; text-transform: uppercase; color: #1F79BE; }
+.isj-h2 { font-size: 32px; line-height: 1.2; margin-bottom: 14px !important; }
+.isj-lead { max-width: 720px; margin: 0 0 36px; font-size: 17px; color: #4A5260; }
+.isj-btn { display: inline-block; background: #C67A29; color: #FFFFFF !important; text-decoration: none; font-weight: bold; font-size: 16px; padding: 15px 30px; border-radius: 4px; }
+.isj-btn:hover { background: #B06A1F; }
+.isj-link { font-weight: bold; text-decoration: none; }
+
+/* header */
+.isj-top { border-bottom: 4px solid #C67A29; background: #FFFFFF; }
+.isj-top .isj-wrap { display: flex; align-items: center; justify-content: space-between; padding-top: 14px; padding-bottom: 14px; gap: 16px; }
+.isj-top img { width: 210px; }
+.isj-top .isj-btn { padding: 11px 22px; font-size: 14px; }
+
+/* hero */
+.isj-hero { background: #13243A; padding: 64px 0 70px; }
+.isj-hero .isj-wrap { display: grid; grid-template-columns: 1fr 1.1fr; gap: 48px; align-items: center; }
+.isj-hero .isj-eyebrow { color: #E0A060; }
+.isj-hero h1 { color: #FFFFFF; font-size: 44px; line-height: 1.12; margin-bottom: 18px; }
+.isj-hero p.sub { color: #C9D3E0; font-size: 17px; margin: 0 0 28px; }
+.isj-hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 22px; }
+.isj-hero-actions .isj-link { color: #FFFFFF; }
+.isj-price-line { margin: 22px 0 0; color: #AEB9C8; font-size: 14px; }
+.isj-price-line strong { color: #FFFFFF; }
+.isj-shot { border-radius: 6px; overflow: hidden; border: 1px solid #2C4060; box-shadow: 0 18px 40px rgba(0,0,0,0.35); background: #FFFFFF; }
+.isj-cap { margin: 10px 0 0; font-size: 13px; color: #8E9AAB; font-style: italic; }
+
+/* research cards */
+.isj-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.isj-card { background: #FFFFFF; border: 1px solid #DDE1E7; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; }
+.isj-card-img { background: #FFFFFF; border-bottom: 1px solid #DDE1E7; height: 250px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.isj-card-img img { width: 100%; height: 100%; object-fit: cover; object-position: top center; }
+.isj-card-body { padding: 24px 26px 26px; }
+.isj-kicker { margin: 0 0 6px; font-size: 12px; font-weight: bold; letter-spacing: 1.5px; text-transform: uppercase; color: #C67A29; }
+.isj-card h3 { font-size: 21px; line-height: 1.25; margin-bottom: 10px; }
+.isj-card p { margin: 0 0 16px; font-size: 15px; }
+.isj-sample { background: #F4F6F9; border-left: 4px solid #C67A29; padding: 12px 16px; font-size: 14px; color: #13243A; border-radius: 0 4px 4px 0; }
+.isj-sample span { display: block; font-size: 11px; font-weight: bold; letter-spacing: 1.5px; text-transform: uppercase; color: #7A8494; margin-bottom: 3px; }
+.isj-note { margin: 28px 0 0; font-size: 15px; }
+
+/* platform strip */
+.isj-grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.isj-frame { border: 1px solid #DDE1E7; border-radius: 6px; overflow: hidden; background: #FFFFFF; height: 300px; }
+.isj-frame img { width: 100%; height: 100%; object-fit: cover; object-position: top left; }
+.isj-frame-cap { margin: 10px 0 0; font-size: 14px; color: #4A5260; }
+.isj-frame-cap strong { color: #13243A; }
+
+/* risk lab */
+.isj-big { border: 1px solid #DDE1E7; border-radius: 6px; overflow: hidden; box-shadow: 0 10px 30px rgba(19,36,58,0.10); margin-bottom: 40px; }
+.isj-groups { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 48px; }
+.isj-group { background: #FFFFFF; border: 1px solid #DDE1E7; border-top: 4px solid #1F79BE; border-radius: 4px; padding: 22px 22px 8px; }
+.isj-group.o { border-top-color: #C67A29; }
+.isj-group.n { border-top-color: #13243A; }
+.isj-group h3 { font-size: 19px; margin-bottom: 4px; }
+.isj-group .q { margin: 0 0 12px; font-size: 14px; color: #7A8494; }
+.isj-bul { list-style: none; margin: 0; padding: 0; }
+.isj-bul li { position: relative; padding: 0 0 12px 22px; font-size: 15px; line-height: 1.5; }
+.isj-bul li::before { content: ""; position: absolute; left: 0; top: 7px; width: 8px; height: 8px; background: #C67A29; }
+.isj-bul li strong { color: #13243A; }
+.isj-charts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.isj-chart { margin: 0; background: #FFFFFF; border: 1px solid #DDE1E7; border-radius: 6px; overflow: hidden; }
+.isj-chart img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+.isj-chart figcaption { padding: 12px 16px 14px; font-size: 14px; line-height: 1.5; border-top: 1px solid #EDF0F4; }
+.isj-chart figcaption strong { color: #13243A; }
+.isj-gifs { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 40px; }
+
+/* included */
+.isj-inc { background: #FFFFFF; border: 1px solid #DDE1E7; border-radius: 6px; padding: 24px; }
+.isj-inc h3 { font-size: 18px; margin-bottom: 8px; }
+.isj-inc p { margin: 0 0 12px; font-size: 15px; }
+.isj-inc .v { font-size: 13px; font-weight: bold; color: #C67A29; letter-spacing: 0.5px; }
+
+/* audience */
+.isj-grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+.isj-aud { border-top: 4px solid #1F79BE; background: #FFFFFF; border-left: 1px solid #DDE1E7; border-right: 1px solid #DDE1E7; border-bottom: 1px solid #DDE1E7; border-radius: 4px; padding: 20px; }
+.isj-aud h3 { font-size: 17px; margin-bottom: 6px; }
+.isj-aud p { margin: 0; font-size: 14px; }
+
+/* pricing */
+.isj-pricing { display: grid; grid-template-columns: 1.35fr 1fr; gap: 28px; align-items: start; }
+.isj-offer { background: #F4F6F9; border-left: 4px solid #C67A29; border-radius: 6px; padding: 32px 34px; }
+.isj-price { font-size: 52px; font-weight: bold; color: #13243A; line-height: 1; margin: 0 0 6px; }
+.isj-price small { font-size: 18px; color: #7A8494; font-weight: normal; }
+.isj-offer .meta { margin: 0 0 22px; font-size: 15px; }
+.isj-offer .isj-btn { display: block; text-align: center; margin-top: 10px; }
+.isj-fine { margin: 14px 0 0; font-size: 13px; color: #7A8494; text-align: center; }
+.isj-aside { display: grid; gap: 18px; }
+.isj-aside div { border: 1px solid #DDE1E7; border-radius: 6px; padding: 20px 22px; }
+.isj-aside h3 { font-size: 17px; margin-bottom: 6px; }
+.isj-aside p { margin: 0 0 8px; font-size: 14px; }
+
+/* closing band */
+.isj-band { background: #13243A; padding: 56px 0; text-align: center; }
+.isj-band h2 { color: #FFFFFF; font-size: 30px; margin-bottom: 10px; }
+.isj-band p { color: #C9D3E0; margin: 0 0 24px; }
+
+@media (max-width: 900px) {
+  .isj-hero .isj-wrap, .isj-grid2, .isj-pricing, .isj-gifs { grid-template-columns: 1fr; }
+  .isj-grid3, .isj-groups, .isj-charts { grid-template-columns: 1fr; }
+  .isj-grid4 { grid-template-columns: 1fr 1fr; }
+  .isj-hero h1 { font-size: 34px; }
+  .isj-sec { padding: 52px 0; }
+}
+@media (max-width: 560px) {
+  .isj-wrap { padding: 0 16px; }
+  .isj-grid4 { grid-template-columns: 1fr; }
+  .isj-top img { width: 160px; }
+  .isj-h2 { font-size: 26px; }
+  .isj-price { font-size: 42px; }
+}
+
+</style>
+</head>
+<body>
+
+<div class="isj">
+
+<div class="isj-top"><div class="isj-wrap">
+  <a href="https://www.5iresearch.ca" target="_top"><img src="https://gallery.mailchimp.com/70a01e3dae2f947876a36d9c2/images/81fb7627-9447-4f7f-87e1-71771a7146e7.png" alt="5i Research"></a>
+  <a href="https://www.5iresearch.ca/my-account/subscription" target="_top" class="isj-btn">Join Investor Suite</a>
+</div></div>
+
+<section class="isj-hero"><div class="isj-wrap">
+  <div>
+    <p class="isj-eyebrow">Investor Suite &middot; Now an interactive platform</p>
+    <h1>Research that goes beyond the market</h1>
+    <p class="sub">In-depth monthly US and Canadian stock ideas, market commentary and charts of interest, now on one platform with the new Portfolio Risk Lab: 12 interactive charts on market conditions, investor sentiment and individual stocks, updated every weekday.</p>
+    <div class="isj-hero-actions">
+      <a href="https://www.5iresearch.ca/my-account/subscription" target="_top" class="isj-btn">Join for $2,499 a year &rarr;</a>
+      <a href="https://www.youtube.com/watch?v=6D4S7g1yODg" target="_blank" rel="noopener" class="isj-link">Watch the 40-second tour &rarr;</a>
+    </div>
+    <p class="isj-price-line"><strong>$2,499 a year, everything included:</strong> 5i, Portfolio Analytics, the ETF Update and Canadian MoneySaver. 15-day money-back guarantee.</p>
+  </div>
+  <div>
+    <div class="isj-shot"><img src="https://mcusercontent.com/70a01e3dae2f947876a36d9c2/images/b76e5df9-43cd-73c6-89a6-edb9ffbf8f3e.gif" alt="The Investor Suite home page with Our Current View, Market Memes and cards for each section"></div>
+    <p class="isj-cap">The new Investor Suite home page.</p>
+  </div>
+</div></section>
+
+<section class="isj-sec"><div class="isj-wrap">
+  <p class="isj-eyebrow">Monthly in-depth research</p>
+  <h2 class="isj-h2">Four pillars of institutional-grade insight</h2>
+  <p class="isj-lead">Every month, original research on US and Canadian markets and stocks, with every past piece in the archive.</p>
+  <div class="isj-grid2">
+    
+      <div class="isj-card">
+        <div class="isj-card-img"><img src="https://5iresearch.github.io/data-scripts/outputs/investor-suite-preview/img/is-preview-2026-10-korea-fig1.png" alt="Chart from the October 2026 Market Musings on Korea" loading="lazy"></div>
+        <div class="isj-card-body">
+          <p class="isj-kicker">Market Musings</p>
+          <h3>Original analytical deep dives</h3>
+          <p>Topical analysis and views on current market trends and themes to pay attention to, built on original research and historical data.</p>
+          <div class="isj-sample"><span>October 2026 &middot; When Korea Peaks</span>Does Korea's market warn us before the S&amp;P 500 turns, and how reliably? Plus which US sectors rotate in and out once it peaks.</div>
+        </div>
+      </div>
+    
+      <div class="isj-card">
+        <div class="isj-card-img"><img src="https://5iresearch.github.io/data-scripts/outputs/investor-suite-preview/img/investor-suite-2026-10-soi-fig1.png" alt="Chart from the October 2026 Stock of Interest on Howmet Aerospace" loading="lazy"></div>
+        <div class="isj-card-body">
+          <p class="isj-kicker">Stock of Interest</p>
+          <h3>A full stock thesis, every month</h3>
+          <p>A monthly deep dive on one stock: industry economics, competitive advantages, financials, two DCF valuation methods, key risks and a price target. US and Canadian names beyond the standard 5i universe.</p>
+          <div class="isj-sample"><span>October 2026 pick</span>Howmet Aerospace (HWM) &middot; Target $219.50 &middot; Implied return 14.3%</div>
+        </div>
+      </div>
+    
+      <div class="isj-card">
+        <div class="isj-card-img"><img src="https://5iresearch.github.io/data-scripts/outputs/investor-suite-preview/img/investor-suite-2026-10-coi-fig1.png" alt="The VIX/VIX3M ratio chart from the October 2026 Chart of Interest" loading="lazy"></div>
+        <div class="isj-card-body">
+          <p class="isj-kicker">Chart of Interest</p>
+          <h3>The one chart to pay attention to</h3>
+          <p>A short, data-driven piece built around a single chart that you and the market need to pay attention to.</p>
+          <div class="isj-sample"><span>October 2026</span>When near-term fear overtakes the future: what the VIX/VIX3M ratio says about when fear peaks.</div>
+        </div>
+      </div>
+    
+      <div class="isj-card">
+        <div class="isj-card-img"><img src="https://5iresearch.github.io/data-scripts/outputs/investor-suite-join/img/platform-home.jpg" alt="Our Current View and Market Memes on the Investor Suite home page" loading="lazy"></div>
+        <div class="isj-card-body">
+          <p class="isj-kicker">Our Current View, Market Memes &amp; Watchlist</p>
+          <h3>What the market is saying</h3>
+          <p>A concise read of the macro backdrop: rate decisions, trade policy, inflation and central bank signals, plus our current view and a Watchlist of stocks to keep an eye on.</p>
+          <div class="isj-sample"><span>Every month</span>Our Current View and Market Memes open the home page, with the Watchlist just below.</div>
+        </div>
+      </div>
+  </div>
+</div></section>
+
+<section class="isj-sec alt"><div class="isj-wrap">
+  <p class="isj-eyebrow">One platform</p>
+  <h2 class="isj-h2">Every section, and its archive, a click away</h2>
+  <p class="isj-lead">No more scrolling through a monthly PDF. Each section has its own page with the latest piece up top and past research below.</p>
+  <div class="isj-grid3">
+    <div><div class="isj-frame"><img src="https://5iresearch.github.io/data-scripts/outputs/investor-suite-join/img/musings-page.jpg" alt="A Market Musings article on the Investor Suite platform" loading="lazy"></div>
+      <p class="isj-frame-cap"><strong>Market Musings.</strong> Full articles with interactive charts.</p></div>
+    <div><div class="isj-frame"><img src="https://5iresearch.github.io/data-scripts/outputs/investor-suite-join/img/soi-page.jpg" alt="The Stock of Interest page with the investment thesis and the 2026 cohort" loading="lazy"></div>
+      <p class="isj-frame-cap"><strong>Stock of Interest.</strong> The thesis up top, and every pick tracked against its target.</p></div>
+    <div><div class="isj-frame"><img src="https://5iresearch.github.io/data-scripts/outputs/investor-suite-join/img/coi-page.jpg" alt="The Chart of Interest page with recent charts below" loading="lazy"></div>
+      <p class="isj-frame-cap"><strong>Chart of Interest.</strong> The latest chart, plus a gallery of past ones.</p></div>
+  </div>
+</div></section>
+
+<section class="isj-sec"><div class="isj-wrap">
+  <p class="isj-eyebrow">New &middot; Portfolio Risk Lab</p>
+  <h2 class="isj-h2">12 interactive charts, updated every weekday</h2>
+  <p class="isj-lead">See where the market stands without waiting for the next issue. Zoom in, change the time frame and look up any stock on the TSX, S&amp;P 500 or Nasdaq 100.</p>
+  <div class="isj-big"><img src="https://5iresearch.github.io/data-scripts/outputs/investor-suite-join/img/risk-lab.jpg" alt="The Portfolio Risk Lab showing the S&amp;P 500 200-week moving average chart" loading="lazy"></div>
+  <div class="isj-groups">
+    <div class="isj-group"><h3>Market Conditions</h3><p class="q">Where is the market in its long-term cycle?</p>
+      <ul class="isj-bul"><li><strong>Macro Market Model</strong>, US and Canada</li><li><strong>Index 200-Week Moving Average</strong></li><li><strong>Index RSI</strong>: how stretched the major indexes are</li></ul></div>
+    <div class="isj-group n"><h3>Investor Sentiment</h3><p class="q">How is the market feeling?</p>
+      <ul class="isj-bul"><li><strong>VIX</strong></li><li><strong>Offense vs. Defense</strong>: leaning into risk or hiding in defensive sectors?</li><li><strong>Levered ETF Sentiment</strong></li></ul></div>
+    <div class="isj-group o"><h3>Stock Tools</h3><p class="q">Research any stock you own or are watching.</p>
+      <ul class="isj-bul"><li><strong>Stock Lookup</strong>: trend, earnings estimates and risk on one page</li><li><strong>Sharpe Ratio</strong> and <strong>Sector Head-to-Heads</strong></li><li><strong>Regression Channel Screener</strong></li><li><strong>Revenue Revision Screener</strong></li></ul></div>
+  </div>
+  <div class="isj-charts">
+    
+        <figure class="isj-chart">
+          <img src="https://5iresearch.github.io/data-scripts/outputs/investor-suite-join/img/chart-macro-model.jpg" alt="Macro Market Model chart in the Portfolio Risk Lab" loading="lazy">
+          <figcaption><strong>Macro Market Model.</strong> Where the S&amp;P 500 sits in its long-term cycle.</figcaption>
+        </figure>
+    
+        <figure class="isj-chart">
+          <img src="https://5iresearch.github.io/data-scripts/outputs/investor-suite-join/img/chart-200wma.jpg" alt="200-Week Moving Average chart in the Portfolio Risk Lab" loading="lazy">
+          <figcaption><strong>200-Week Moving Average.</strong> How far the index has stretched from its long-term trend.</figcaption>
+        </figure>
+    
+        <figure class="isj-chart">
+          <img src="https://5iresearch.github.io/data-scripts/outputs/investor-suite-join/img/chart-vix.jpg" alt="VIX chart in the Portfolio Risk Lab" loading="lazy">
+          <figcaption><strong>VIX.</strong> Fear spikes against the S&amp;P 500 over the decades.</figcaption>
+        </figure>
+    
+        <figure class="isj-chart">
+          <img src="https://5iresearch.github.io/data-scripts/outputs/investor-suite-join/img/chart-offense-defense.jpg" alt="Offense vs. Defense chart in the Portfolio Risk Lab" loading="lazy">
+          <figcaption><strong>Offense vs. Defense.</strong> Whether investors are leaning into risk or hiding in defensive sectors.</figcaption>
+        </figure>
+    
+        <figure class="isj-chart">
+          <img src="https://5iresearch.github.io/data-scripts/outputs/investor-suite-join/img/chart-price-eps.jpg" alt="Price vs. Earnings chart in the Portfolio Risk Lab" loading="lazy">
+          <figcaption><strong>Price vs. Earnings.</strong> From Stock Lookup: a stock's price against its earnings per share and estimates.</figcaption>
+        </figure>
+    
+        <figure class="isj-chart">
+          <img src="https://5iresearch.github.io/data-scripts/outputs/investor-suite-join/img/chart-efficient-frontier.jpg" alt="Efficient Frontier chart in the Portfolio Risk Lab" loading="lazy">
+          <figcaption><strong>Efficient Frontier.</strong> From Stock Lookup: risk against return across the TSX.</figcaption>
+        </figure>
+  </div>
+  <div class="isj-gifs">
+    <div><div class="isj-shot"><img src="https://mcusercontent.com/70a01e3dae2f947876a36d9c2/images/a9055500-e42b-e21e-f0c6-a2cda503ad70.gif" alt="Scrolling through Stock Lookup for one stock" loading="lazy"></div>
+      <p class="isj-cap">Stock Lookup: pick a stock and scroll through its trend, estimates and risk.</p></div>
+    <div><div class="isj-shot"><img src="https://mcusercontent.com/70a01e3dae2f947876a36d9c2/images/9f8ced97-d81a-88bd-e8e7-bd651c0c32a4.gif" alt="Zooming into the Offense vs. Defense chart" loading="lazy"></div>
+      <p class="isj-cap">Offense vs. Defense: change the time frame or drag across the chart to zoom in.</p></div>
+  </div>
+</div></section>
+
+<section class="isj-sec alt"><div class="isj-wrap">
+  <p class="isj-eyebrow">More of 5i &middot; $483 value</p>
+  <h2 class="isj-h2">Three memberships. One price.</h2>
+  <p class="isj-lead">Investor Suite includes everything in a 5i membership, plus two more services. No separate subscriptions needed.</p>
+  <div class="isj-grid3">
+    <div class="isj-inc"><h3>5i Research + Portfolio Analytics</h3><p>Full access to 5i's core platform: stock reports, Q&amp;A, portfolio analytics and model portfolios for Canadian and US equities.</p><span class="v">$430 / year value</span></div>
+    <div class="isj-inc"><h3>ETF Update</h3><p>Monthly ETF research covering fund picks, sector rotation and portfolio construction with exchange-traded products.</p><span class="v">$27 / year value</span></div>
+    <div class="isj-inc"><h3>Canadian MoneySaver</h3><p>Canada's independent investor magazine: practical guidance on personal finance, tax efficiency and Canadian investing.</p><span class="v">$26 / year value</span></div>
+  </div>
+</div></section>
+
+<section class="isj-sec"><div class="isj-wrap">
+  <p class="isj-eyebrow">Who it's for</p>
+  <h2 class="isj-h2">Built for serious investors</h2>
+  <div class="isj-grid4" style="margin-top:28px;">
+    <div class="isj-aud"><h3>Depth seekers</h3><p>Investors who want more than headlines: full analytical frameworks, original research and ideas they can act on.</p></div>
+    <div class="isj-aud"><h3>High net worth investors</h3><p>Those managing meaningful capital who expect institutional-calibre thinking, not surface-level coverage.</p></div>
+    <div class="isj-aud"><h3>Financial advisors</h3><p>Professionals who need independent, unbiased research and risk tools to supplement their own process.</p></div>
+    <div class="isj-aud"><h3>Broader universe hunters</h3><p>Investors looking for US names, thematic ideas and coverage outside the standard 5i Canadian universe.</p></div>
+  </div>
+</div></section>
+
+<section class="isj-sec alt" id="pricing"><div class="isj-wrap">
+  <p class="isj-eyebrow">Pricing</p>
+  <h2 class="isj-h2" style="margin-bottom:28px !important;">One membership. Everything included.</h2>
+  <div class="isj-pricing">
+    <div class="isj-offer">
+      <p class="isj-price">$2,499 <small>/ year</small></p>
+      <p class="meta">15-day money-back guarantee. Membership is limited: we are opening 150 additional spots.</p>
+      <ul class="isj-bul"><li><strong>Monthly research</strong> on one platform: Our Current View, Market Memes, Market Musings, Stock of Interest and Chart of Interest</li><li><strong>12 Stock of Interest deep dives</strong> a year, with full DCF valuation models</li><li><strong>A Watchlist</strong> of Canadian and US names to keep an eye on</li><li><strong>The Portfolio Risk Lab:</strong> 12 interactive charts, updated every weekday</li><li><strong>The full archive</strong> of past research</li><li><strong>5i Research with Portfolio Analytics</strong> ($430 value), <strong>the ETF Update</strong> ($27) and <strong>Canadian MoneySaver</strong> ($26)</li></ul>
+      <a href="https://www.5iresearch.ca/my-account/subscription" target="_top" class="isj-btn">Join Investor Suite &rarr;</a>
+      <p class="isj-fine">Cancel within 15 days for a full refund. Questions? See the <a href="https://www.5iresearch.ca/is-faq" target="_top">Investor Suite FAQ</a>.</p>
+    </div>
+    <div class="isj-aside">
+      <div><h3>15-day money-back guarantee</h3><p>Not the right fit? Cancel within 15 days of joining for a full refund.</p></div>
+      <!-- FREE PREVIEW: remove this card after December 17, 2026 -->
+      <div><h3>5i members: try it free</h3><p>Until December 17, 5i members can try four Portfolio Risk Lab tools and read a first look at the October research.</p>
+        <a href="https://www.5iresearch.ca/is-free-tools" target="_top" class="isj-link">Open the free preview &rarr;</a></div>
+      <div><h3>See it in action</h3><p>A 40-second tour of the new platform and the Portfolio Risk Lab.</p>
+        <a href="https://www.youtube.com/watch?v=6D4S7g1yODg" target="_blank" rel="noopener" class="isj-link">Watch the tour &rarr;</a></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="isj-band"><div class="isj-wrap">
+  <h2>Ready to go beyond the market?</h2>
+  <p>$2,499 a year, everything included, with a 15-day money-back guarantee.</p>
+  <a href="https://www.5iresearch.ca/my-account/subscription" target="_top" class="isj-btn">Join Investor Suite &rarr;</a>
+</div></section>
+
+</div>
+<script>
+(function () {
+  // When embedded in an iframe on 5iresearch.ca, report height so the parent can size the frame.
+  function send() { try { parent.postMessage({ isjoinHeight: document.documentElement.scrollHeight }, "*"); } catch (e) {} }
+  window.addEventListener("load", send); window.addEventListener("resize", send);
+  if (window.ResizeObserver) new ResizeObserver(send).observe(document.body);
+})();
+</script>
+
+</body>
+</html>
