@@ -63,6 +63,9 @@ EXCHANGE_SLUGS = {
     "NMS": "nasdaq", "NGM": "nasdaq", "NCM": "nasdaq", "NAS": "nasdaq",
     "TOR": "tsx", "TSX": "tsx", "VAN": "tsxv", "CNQ": "cse", "NEO": "neo",
 }
+# Yahoo suffix for Canadian listings. Set a ticker to "tsx" in exchanges.json when a
+# US ticker shares the symbol (e.g. Telus T vs AT&T T).
+YF_SUFFIX = {"tsx": ".TO", "tsxv": ".V", "cse": ".CN", "neo": ".NE"}
 
 
 # --------------------------------------------------------------------------- email
@@ -429,7 +432,10 @@ def main():
         e["href"] = f"{SITE_BASE}/company/{slug}/{e['ticker']}" if slug else ""
         name = f"{e['ticker']}_institutional.png"
         out_path = os.path.join(folder, name)
-        move, err = render_chart(e["ticker"], out_path, logo_img, when)
+        yf_sym = e["ticker"]
+        if slug in YF_SUFFIX:  # Canadian listing: chart the TSX/TSXV line, not a US namesake
+            yf_sym = e["ticker"].replace(".", "-") + YF_SUFFIX[slug]
+        move, err = render_chart(yf_sym, out_path, logo_img, when)
         if err:
             warnings.append(err)
             e["image"] = None
