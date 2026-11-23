@@ -1,0 +1,32 @@
+{
+  "as_of": "2026-11-19",
+  "blog_title": "Benchmark Beaters Weekly: 154 Stocks Beating Their Benchmarks (November 19, 2026)",
+  "email_subject": "Benchmark Beaters: DRX & CDW lead 154 stocks beating the market",
+  "preview_text": "54 Canadian and 100 U.S. names at six-month relative highs. Full table and charts inside.",
+  "intro": [
+    "The latest Benchmark Beaters screen (as of November 19, 2026) found 154 Canadian and U.S. stocks outperforming their benchmarks, each hitting a new six-month relative high in the last five trading days.",
+    "In Canada, 54 stocks made a fresh six-month high relative to the TSX Composite, 34 of them new to the list this week. ADF Group Inc. (DRX) leads with a +104% six-month return, and Financials is the most represented sector with 12 names.",
+    "In the U.S., 100 stocks made a fresh six-month high relative to the S&P 500, 61 of them new to the list this week. CDW Corporation (CDW) leads with a +56% six-month return, and Health Care is the most represented sector with 28 names."
+  ],
+  "total": 154,
+  "stats": {
+    "cdn": {
+      "count": 54,
+      "new": 34,
+      "streak": 3,
+      "top_sector": "Financials",
+      "top_sector_n": 12
+    },
+    "us": {
+      "count": 100,
+      "new": 61,
+      "streak": 14,
+      "top_sector": "Health Care",
+      "top_sector_n": 28
+    }
+  },
+  "workbook": "Benchmark_Beaters_2026-11-19.xlsx",
+  "image_url": "https://5iresearch.github.io/data-scripts/outputs/benchmark-beaters-weekly/2026-11-19/teaser.png",
+  "table_url": "{{TABLE_PDF_URL}}",
+  "charts_url": "{{CHARTS_PDF_URL}}"
+}
