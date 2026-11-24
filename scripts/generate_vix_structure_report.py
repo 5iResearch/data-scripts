@@ -366,17 +366,10 @@ def chart_bottom_signals(vix, spy):
 
     pc = None
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-        url = "https://cdn.cboe.com/api/global/us_indices/daily_prices/PC_History.csv"
-        resp = requests.get(url, headers=headers, timeout=15)
-        resp.raise_for_status()
-        pc_raw = pd.read_csv(StringIO(resp.text), skiprows=2, header=None)
-        pc_raw.columns = ["date", "pc_ratio"]
-        pc_raw["date"] = pd.to_datetime(pc_raw["date"], errors="coerce")
-        pc_raw = pc_raw.dropna(subset=["date"]).set_index("date").sort_index()
-        pc_raw.index = pc_raw.index.tz_localize(None)
-        pc_raw["pc_ratio"] = pd.to_numeric(pc_raw["pc_ratio"], errors="coerce")
-        pc = pc_raw["pc_ratio"].reindex(vix.index, method="ffill")
+        # Cboe EQUITY put/call ratio (the old PC_History.csv link returns 403). The 0.80 spike threshold
+        # below is calibrated to equity P/C: its 5d average is above 0.80 on ~6% of days since 2006.
+        from cboe_putcall import load_putcall
+        pc = load_putcall()["equity"].dropna().reindex(vix.index, method="ffill", limit=5)
     except Exception as e:
         print(f"P/C fetch failed (dashboard will omit that panel): {e}")
 
@@ -396,7 +389,7 @@ def chart_bottom_signals(vix, spy):
     n_panels = 6 if pc is not None else 5
     row_h = [0.24, 0.17, 0.15, 0.15, 0.15] + ([0.14] if pc is not None else [])
     titles = ["VIX (left) vs VVIX (right)", "VIX Premium (Implied - Realized Vol)", "Contango Ratio",
-              "Bottom Signal Composite", "SPY  [green star = high score]"] + (["Put/Call Ratio (5d MA)"] if pc is not None else [])
+              "Bottom Signal Composite", "SPY  [green star = high score]"] + (["Equity Put/Call Ratio (5d MA)"] if pc is not None else [])
     specs = [[{"secondary_y": True}]] + [[{"secondary_y": False}]] * (n_panels - 1)
 
     fig = make_subplots(rows=n_panels, cols=1, shared_xaxes=True, row_heights=row_h, vertical_spacing=0.03,
