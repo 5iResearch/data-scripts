@@ -68,7 +68,7 @@
 
   <div class="ended" id="ispv-ended" style="display:none">
     <h2>The Free Tools Preview has ended</h2>
-    <p>Thanks for trying Stock Lookup, the Regression Channel Screener, Index RSI and Offense vs Defense.
+    <p>Thanks for trying Stock Lookup, the Regression Channel Screener, Index RSI, Offense vs Defense and the VIX Report.
        They live in the Portfolio Risk Lab in Investor Suite. To keep using them, along with the rest of our charts, screeners and research, sign up for Investor Suite.</p>
     <a class="btn ispv-signup" href="#" target="_top">Sign up for Investor Suite</a>
   </div>
@@ -91,7 +91,11 @@
       how: "Use the timeframe buttons to zoom in or out." },
     { name: "Offense vs Defense", path: "offense-defense/Offense_Defense_Report.html",
       what: "Whether investors are leaning toward risk-on sectors (offense) or safer ones (defense), shown as a single oscillator.",
-      how: "Rising means investors are leaning into growth sectors; falling means they are hiding in staples, utilities and health care." }
+      how: "Rising means investors are leaning into growth sectors; falling means they are hiding in staples, utilities and health care." },
+    // Added Nov 25 2026 as a one-time extra: members kept asking about the VIX. Kept last so saved tab choices don't shift.
+    { name: "VIX Report", path: "vix/VIX_Report.html",
+      what: "The market's fear gauge, with calm, stressed and extreme zones marked, plus the VIX/VIX3M ratio from our October Chart of Interest.",
+      how: "Use the timeframe buttons, or drag across the chart to zoom in on a spike; double-click to zoom back out." }
   ];
 
   var end = new Date(END_DATE), now = new Date();
