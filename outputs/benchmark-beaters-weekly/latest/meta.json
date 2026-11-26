@@ -1,32 +1,32 @@
 {
-  "as_of": "2026-11-25",
-  "blog_title": "Benchmark Beaters Weekly: 217 Stocks Beating Their Benchmarks (November 25, 2026)",
-  "email_subject": "Benchmark Beaters: DRX & REGN lead 217 stocks beating the market",
-  "preview_text": "59 Canadian and 158 U.S. names at six-month relative highs. Full table and charts inside.",
+  "as_of": "2026-11-26",
+  "blog_title": "Benchmark Beaters Weekly: 214 Stocks Beating Their Benchmarks (November 26, 2026)",
+  "email_subject": "Benchmark Beaters: DRX & REGN lead 214 stocks beating the market",
+  "preview_text": "57 Canadian and 157 U.S. names at six-month relative highs. Full table and charts inside.",
   "intro": [
-    "The latest Benchmark Beaters screen (as of November 25, 2026) found 217 Canadian and U.S. stocks outperforming their benchmarks, each hitting a new six-month relative high in the last five trading days.",
-    "In Canada, 59 stocks made a fresh six-month high relative to the TSX Composite, 16 of them new to the list this week. ADF Group Inc. (DRX) leads with a +107% six-month return, and Financials is the most represented sector with 11 names.",
-    "In the U.S., 158 stocks made a fresh six-month high relative to the S&P 500, 72 of them new to the list this week. Regeneron Pharmaceuticals Inc. (REGN) leads with a +63% six-month return, and Health Care is the most represented sector with 31 names."
+    "The latest Benchmark Beaters screen (as of November 26, 2026) found 214 Canadian and U.S. stocks outperforming their benchmarks, each hitting a new six-month relative high in the last five trading days.",
+    "In Canada, 57 stocks made a fresh six-month high relative to the TSX Composite, 11 of them new to the list this week. ADF Group Inc. (DRX) leads with a +105% six-month return, and Financials is the most represented sector with 11 names.",
+    "In the U.S., 157 stocks made a fresh six-month high relative to the S&P 500, 57 of them new to the list this week. Regeneron Pharmaceuticals Inc. (REGN) leads with a +64% six-month return, and Health Care is the most represented sector with 31 names."
   ],
-  "total": 217,
+  "total": 214,
   "stats": {
     "cdn": {
-      "count": 59,
-      "new": 16,
-      "streak": 9,
+      "count": 57,
+      "new": 11,
+      "streak": 12,
       "top_sector": "Financials",
       "top_sector_n": 11
     },
     "us": {
-      "count": 158,
-      "new": 72,
-      "streak": 54,
+      "count": 157,
+      "new": 57,
+      "streak": 34,
       "top_sector": "Health Care",
       "top_sector_n": 31
     }
   },
-  "workbook": "Benchmark_Beaters_2026-11-25.xlsx",
-  "image_url": "https://5iresearch.github.io/data-scripts/outputs/benchmark-beaters-weekly/2026-11-25/teaser.png",
+  "workbook": "Benchmark_Beaters_2026-11-26.xlsx",
+  "image_url": "https://5iresearch.github.io/data-scripts/outputs/benchmark-beaters-weekly/2026-11-26/teaser.png",
   "table_url": "{{TABLE_PDF_URL}}",
   "charts_url": "{{CHARTS_PDF_URL}}"
 }
