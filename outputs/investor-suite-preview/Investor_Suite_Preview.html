@@ -41,6 +41,18 @@
   for (var i = 0; i < tabs.length; i++) tabs[i].addEventListener("click", function () { show(+this.getAttribute("data-i")); });
   root.querySelector(".ispv2-bar").style.display = "flex";
   var start = 0; try { var s = parseInt(localStorage.getItem("ispv2-tab"), 10); if (s >= 0 && s < panels.length) start = s; } catch (e) {}
+  var want = (location.search.match(/[?&]tab=([\w-]+)/) || [])[1];
+  // deep links: ?tab=musings / soi / coi open a research tab; any other value (vix, index-rsi...) opens that Risk Lab tool
+  var RESEARCH = { "musings": 1, "market-musings": 1, "soi": 2, "stock-of-interest": 2, "coi": 3, "chart-of-interest": 3 };
+  if (want) {
+    want = want.toLowerCase();
+    if (RESEARCH[want]) start = RESEARCH[want];
+    else {
+      start = 0;
+      var tf = panels[0].querySelector('iframe[src*="Risk_Lab_Trial"]');
+      if (tf) tf.src = "Risk_Lab_Trial.html?tab=" + encodeURIComponent(want);
+    }
+  }
   show(start);
   function post() { try { parent.postMessage({ ispvHeight: document.documentElement.scrollHeight }, "*"); } catch (e) {} }
   for (var k = 0; k < tabs.length; k++) tabs[k].addEventListener("click", function () { post(); setTimeout(post, 300); });
