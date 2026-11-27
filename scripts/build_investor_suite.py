@@ -589,7 +589,9 @@ def read_thesis(path):
     for para in docx.Document(path).paragraphs:
         for ln in paragraph_lines(para):
             text = BULLET.sub("", ln["text"]).strip()
-            if ln["bold"] and len(text) <= 40:
+            # Headings are bold in most months; some docs (e.g. Nov 2026) set them in plain capitals instead.
+            caps = text.isupper() and not BULLET.match(ln["text"].strip())
+            if (ln["bold"] or caps) and 0 < len(text) <= 40:
                 current = out.setdefault(text.title(), [])
             elif current is not None and text:
                 current.append(text)
@@ -905,6 +907,15 @@ def build_article(folder, kind, docs, open_kit, source="", teaser=True):
                 b["name"] = img_stem + b["name"][len("_draft"):]
         if typed and settings.get("folder images", "").lower() in ("yes", "true", "on"):     # opt-in, per article
             blocks = use_folder_images(folder, blocks, build_dir, img_stem, notes, warnings)
+    # "Leave Out Charts: 8" drops pictures by their kit number, e.g. an Investor Considerations box pasted
+    # into the draft as an image when post.txt's figures already build the styled box.
+    drop = {int(x) for x in re.findall(r"\d+", settings.get("leave out charts", ""))}
+    if drop:
+        imgs = [b for b in blocks if b["t"] == "img"]
+        gone = [b for n, b in enumerate(imgs, 1) if n in drop]
+        blocks = [b for b in blocks if not any(b is g for g in gone)]
+        notes.append(f"Left out chart{'s' if len(gone) > 1 else ''} "
+                     f"{', '.join(str(n) for n in sorted(drop))} (Leave Out Charts in post.txt).")
     if len(drafts) > 1 and not pinned and score is None:
         warnings.append("Several drafts and no PDF to compare against, so the most recently saved was used. "
                         'Set "Document:" in post.txt to pin the right one.')
